@@ -1,0 +1,29 @@
+<Ui xmlns="http://www.blizzard.com/wow/ui/" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://www.blizzard.com/wow/ui/
+..\FrameXML\UI.xsd">
+  <Script file="BuffReminder.lua"/>
+  <Frame name="BuffReminderFrame" parent="UIParent" frameStrata="DIALOG" toplevel="true" movable="true" enableMouse="false" userPlaced="true">
+    <Size>
+      <AbsDimension x="34" y="34"/>
+    </Size>
+    <Anchors>
+      <Anchor point="CENTER" relativePoint="CENTER">
+        <Offset>
+          <AbsDimension x="0" y="0"/>
+        </Offset>
+      </Anchor>
+    </Anchors>
+    <Layers>
+      <Layer level="TOOLTIP">
+        <Texture setAllPoints="true" name="brtexture">
+          <!--<Color r="1" g="0" b="0" a="0.5"/>-->
+        </Texture>
+      </Layer>
+    </Layers>
+    <Scripts>
+      <OnLoad>BuffReminder_OnLoad();</OnLoad>
+      <OnUpdate>BuffReminder_OnUpdate();</OnUpdate>
+      <OnDragStart>this:StartMoving();</OnDragStart>
+      <OnDragStop>this:StopMovingOrSizing();</OnDragStop>
+    </Scripts>
+  </Frame>
+</Ui>
