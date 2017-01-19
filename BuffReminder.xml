@@ -26,4 +26,11 @@
       <OnDragStop>this:StopMovingOrSizing();</OnDragStop>
     </Scripts>
   </Frame>
+   <GameTooltip name="MyScanningTooltip" inherits="GameTooltipTemplate">
+   <Scripts>
+     <Onload>
+       this:SetOwner(WorldFrame, "ANCHOR_NONE");
+     </Onload>
+   </Scripts>
+ </GameTooltip>
 </Ui>
