@@ -5,7 +5,6 @@ brDefaultOptions = {
     ["warnsound"] = nil,
     ["disabled"] = false,
     ["size"] = 30
-    ["firstrun"] = true
 }
 
 local lbrLastBuffList = {}
@@ -13,23 +12,9 @@ local lbrWarnIconFrames = {}
 local lbrUpdateTime = 0
 local lbrFirstRun = true
 local lbrButtonSpc = 2
-
--- local lOriginal_BuffButton_Update;
-
-
--- function BrOnUpdate()
--- 	lOriginal_BuffButton_Update();
-
--- 	local buffIndex, untilCancelled = GetPlayerBuff(this:GetID(), this.buffFilter);
---     local icon = getglobal(this:GetName().."Icon");
-
---     local foo = this:GetName().."Icon"
--- 	DEFAULT_CHAT_FRAME:AddMessage(foo)
--- end
-
 --------------------------------------------------------------------------------------------------
 function BuffReminder_OnLoad(Frame)
-
+    
     if brOptions.warntime == nil then brOptions = brDefaultOptions end
     this:RegisterForDrag("LeftButton")
     this:EnableMouse(false)
@@ -49,41 +34,35 @@ end
 function BuffReminder_OnUpdate(self)
     if GetTime() - lbrUpdateTime >= 1 then
         if brOptions.disabled then return end
-        if BrChkBuffsExist() then
-        lbrFirstRun = false
-            BrClearIcons()
-            if UnitIsDeadOrGhost("player") or UnitOnTaxi("player") then return end
-            
-            for i in brBuffGroups do
-                if brBuffGroups[i].show and brBuffGroups[i].enabled then
-                    BrMakeIcon(brBuffGroups[i].icon)
-                end
-            end
-            BrShowIcons()
+        if lbrFirstRun then
+            BrChkBuffsExist()
+            lbrFirstRun = false
+            BrDrawIcons()
+        elseif BrChkBuffsExist() then
+            BrDrawIcons()
         end
         lbrUpdateTime = GetTime()
     end
 end
 --------------------------------------------------------------------------------------------------
+function BrDrawIcons()
+    BrClearIcons()
+    if UnitIsDeadOrGhost("player") or UnitOnTaxi("player") then return end
+    
+    for i in brBuffGroups do
+        if brBuffGroups[i].show and brBuffGroups[i].enabled then
+            BrMakeIcon(brBuffGroups[i].icon)
+        end
+    end
+    BrShowIcons()
+end
+
 function GetPlayerBuffName(n)
     MyScanningTooltip:ClearLines()
     -- MyScanningTooltip:SetUnitBuff('player', n + 1)
     MyScanningTooltip:SetPlayerBuff(n)
     return MyScanningTooltipTextLeft1:GetText()
 end
-
-
-function BrTest()
-    for i = 0, 3 do
-    BuffButton0IconTooltip:ClearLines()
-    MyScanningTooltip:ClearLines()
-    MyScanningTooltip:SetUnitBuff('player', i + 1)
-    local txt = MyScanningTooltipTextLeft1:GetText()
-    local bd = MyScanningTooltipTextLeft1:GetBackdrop()
-        DEFAULT_CHAT_FRAME:AddMessage(tostring(txt))
-    end
-end
-
 
 function BrGetPlayerBuffs()
     local blist = {}
@@ -120,7 +99,7 @@ function BrChkBuffsExist()
             iconChanged = true
         end
     end
-    return iconChanged or lbrFirstRun
+    return iconChanged
 end
 
 function BrMakeIcon(icon)
