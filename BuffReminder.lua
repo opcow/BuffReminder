@@ -2,11 +2,13 @@ brBuffGroups = {}
 brOptions = {}
 brDefaultOptions = {
     ["conditions"] = {
-        ["resting"] = true,
-        ["taxi"] = true,
+        ["always"] = false,
         ["dead"] = true,
         ["instance"] = false,
-        ["group"] = false,
+        ["party"] = false,
+        ["raid"] = false,
+        ["resting"] = true,
+        ["taxi"] = true,
     },
     ["disabled"] = false,
     ["warnsound"] = nil,
@@ -20,10 +22,15 @@ local lbrWarnIconFrames = {}
 local lbrUpdateTime = 0
 local lbrForceUpdate = true
 local lbrButtonSpc = 2
-local lbrPlayerDead = false
-local lbrPlayerOnTaxi = false
-local lbrPlayerResting = false
-local lbrPlayerInInstance = false
+
+lbrPlayerStatus = {
+    ["dead"] = false,
+    ["instance"] = false,
+    ["party"] = false,
+    ["raid"] = false,
+    ["resting"] = true,
+    ["taxi"] = true,
+}
 --------------------------------------------------------------------------------------------------
 function BuffReminder_OnLoad(Frame)
     
@@ -40,6 +47,8 @@ function BuffReminder_OnLoad(Frame)
     this:RegisterEvent("UNIT_FLAGS")
     this:RegisterEvent("PLAYER_UPDATE_RESTING")
     this:RegisterEvent("PLAYER_ENTERING_WORLD")
+    this:RegisterEvent("PARTY_MEMBERS_CHANGED")
+    this:RegisterEvent("RAID_ROSTER_UPDATE")
     --    this:RegisterAllEvents()
     -- tooltip frame for getting spell name
     lbrTooltipFrame = CreateFrame('GameTooltip', 'BrTooltip', UIParent, 'GameTooltipTemplate')
@@ -69,22 +78,28 @@ end
 function BuffReminder_OnEvent(event, arg1)
     if event == "UNIT_FLAGS" and arg1 == "player" then
         if UnitOnTaxi("player") == 1 then
-            lbrPlayerOnTaxi = true
+            lbrPlayerStatus.taxi = true
         else
-            lbrPlayerOnTaxi = false
+            lbrPlayerStatus.taxi = false
         end
+    elseif event == "PARTY_MEMBERS_CHANGED" then
+        lbrPlayerStatus.party = (GetNumPartyMembers() > 0)
+    elseif event == "RAID_ROSTER_UPDATE" then
+        lbrPlayerStatus.raid = (GetNumRaidMembers() > 0)
     elseif event == "PLAYER_DEAD" then
-        lbrPlayerDead = true
+        lbrPlayerStatus.dead = true
     elseif event == "PLAYER_UNGHOST" then
-        lbrPlayerDead = false
+        lbrPlayerStatus.dead = false
     elseif event == "PLAYER_UPDATE_RESTING" then
-        lbrPlayerResting = IsResting()
+        lbrPlayerStatus.resting = IsResting()
     elseif event == "PLAYER_ENTERING_WORLD" then
-        lbrPlayerResting = IsResting()
-        lbrPlayerDead = UnitIsDeadOrGhost("player")
-        lbrPlayerOnTaxi = UnitOnTaxi("player") == 1
+        lbrPlayerStatus.resting = IsResting()
+        lbrPlayerStatus.dead = UnitIsDeadOrGhost("player")
+        lbrPlayerStatus.taxi = (UnitOnTaxi("player") == 1)
+        lbrPlayerStatus.party = (GetNumPartyMembers() > 0)
+        lbrPlayerStatus.raid = (GetNumRaidMembers() > 0)
         local isInstance, instanceType = IsInInstance()
-        lbrPlayerInInstance = isInstance
+        lbrPlayerStatus.instance = isInstance
     end
     
     
@@ -100,15 +115,26 @@ end
 
 function BrDrawIcons()
     BrClearIcons()
-
+    
     --if UnitIsDeadOrGhost("player") or UnitOnTaxi("player") then return end
+    local skipIcon = false
     for i in brBuffGroups do
-        if (brBuffGroups[i].show and brBuffGroups[i].enabled) and not 
-        (lbrPlayerResting and brBuffGroups[i].conditions.resting) and not
-        (lbrPlayerInInstance and brBuffGroups[i].conditions.instance) and not
-        (lbrPlayerOnTaxi and brBuffGroups[i].conditions.taxi) then
+        for j in lbrPlayerStatus do
+            if lbrPlayerStatus[j] and brBuffGroups[i].conditions[j] then
+                skipIcon = true
+                break
+            end
+        end
+        if not skipIcon and not brBuffGroups[i].conditions.always and brBuffGroups[i].show then
             BrMakeIcon(brBuffGroups[i].icon)
         end
+    
+    -- if (brBuffGroups[i].show and brBuffGroups[i].enabled) and not
+    -- (lbrPlayerStatus.resting and brBuffGroups[i].conditions.resting) and not
+    -- (lbrPlayerStatus.instance and brBuffGroups[i].conditions.instance) and not
+    -- (lbrPlayerStatus.taxi and brBuffGroups[i].conditions.taxi) then
+    --     BrMakeIcon(brBuffGroups[i].icon)
+    -- end
     end
     BrShowIcons()
 end
@@ -164,10 +190,10 @@ function BrMakeIcon(icon)
     lbrWarnIconFrames[icon]:SetHeight(brOptions.size)
     local tex = lbrWarnIconFrames[icon]:CreateTexture(nil, "BACKGROUND")
     tex:SetTexture(icon)
-    -- if lbrPlayerDead or lbrPlayerOnTaxi or lbrPlayerResting then
+    -- if lbrPlayerStatus.dead or lbrPlayerStatus.taxi or lbrPlayerStatus.resting then
     --     tex:SetAlpha(1.0)
     -- else
-        tex:SetAlpha(brOptions.alpha)
+    tex:SetAlpha(brOptions.alpha)
     -- end
     tex:SetAllPoints(lbrWarnIconFrames[icon])
     lbrWarnIconFrames[icon].texture = tex
@@ -224,7 +250,22 @@ function BrAddBuffToGroup(name, grp)
         brBuffGroups[grp] = {["conditions"] = brOptions.conditions, ["warntime"] = brOptions.warntime, ["icon"] = "Interface\\Icons\\INV_Misc_QuestionMark", ["enabled"] = true, ["show"] = false, ["buffs"] = {}}
     end
     brBuffGroups[grp].buffs[name] = {}
-    DEFAULT_CHAT_FRAME:AddMessage('Added "' .. name .. '" to "' .. grp .. '."')
+    BrPrintGroup(grp)
+end
+
+function BrGroupExists(group)
+    if brBuffGroups[group] == nil then
+        DEFAULT_CHAT_FRAME:AddMessage('Group "' .. tostring(group) .. '" does not exist.')
+        return false
+    end
+    return true
+end
+
+function BrPrintGroup(group)
+    DEFAULT_CHAT_FRAME:AddMessage('Group: ' .. tostring(group))
+    for i in brBuffGroups[group].conditions do
+        DEFAULT_CHAT_FRAME:AddMessage("  hide condition " .. i .. ": " .. tostring(brBuffGroups[group].conditions[i]))
+    end
 end
 
 function BrShowHelp()
@@ -278,15 +319,15 @@ function SlashCmdList.BuffReminder(msg, editbox)-- we put the slash commands to 
         end -- argc == 1
     elseif argc == 2 then
         if string.lower(args[1]) == "disable" then
-            if brBuffGroups[args[2]] ~= nil then
-                brBuffGroups[args[2]].enabled = false
-                handled = true
-            end
+            if not BrGroupExists(args[2]) then return end
+            brBuffGroups[args[2]].conditions.always = true
+            BrPrintGroup(args[2])
+            handled = true
         elseif string.lower(args[1]) == "enable" then
-            if brBuffGroups[args[2]] ~= nil then
-                brBuffGroups[args[2]].enabled = true
-                handled = true
-            end
+            if not BrGroupExists(args[2]) then return end
+            brBuffGroups[args[2]].conditions.always = false
+            BrPrintGroup(args[2])
+            handled = true
         elseif string.lower(args[1]) == "sound" then
             brOptions.warnsound = args[2]
             PlaySound(tostring(brOptions.warnsound), "master")
@@ -327,11 +368,15 @@ function SlashCmdList.BuffReminder(msg, editbox)-- we put the slash commands to 
                 end
                 handled = true
             end
-        elseif string.lower(args[1]) == "gtime" then
-            if brBuffGroups[args[2]] == nil then
-                DEFAULT_CHAT_FRAME:AddMessage('Group "' .. tostring(args[2]) .. '" does not exist.')
-                return
+        elseif string.lower(args[1]) == "group" then
+            if not BrGroupExists(args[2]) then return end
+            if brBuffGroups[args[2]].conditions[args[3]] ~= nil then
+                brBuffGroups[args[2]].conditions[args[3]] = not brBuffGroups[args[2]].conditions[args[3]]
+                handled = true
+                BrPrintGroup(args[2])
             end
+        elseif string.lower(args[1]) == "gtime" then
+            if not BrGroupExists(brBuffGroups[args[2]]) then return end
             local n = brtonum(args[3])
             if n ~= nil then
                 brBuffGroups[args[2]].warntime = n
