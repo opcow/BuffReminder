@@ -1,6 +1,7 @@
 ## Interface: 11200
 ## Title: BuffReminder
-## Notes: Adds mini buff timers under the top right buff icons.
+## Version: 0.8
+## Notes: Adds icons to remind you when important buffs are missing.
 ## SavedVariablesPerCharacter: brBuffGroups brOptions
 BuffReminder.lua
 BuffReminder.xml
