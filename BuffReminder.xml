@@ -21,12 +21,13 @@
     </Layers>
     <Scripts>
       <OnLoad>BuffReminder_OnLoad();</OnLoad>
+      <OnEvent>BuffReminder_OnEvent(event, arg1);</OnEvent>
       <OnUpdate>BuffReminder_OnUpdate();</OnUpdate>
       <OnDragStart>this:StartMoving();</OnDragStart>
       <OnDragStop>this:StopMovingOrSizing();</OnDragStop>
     </Scripts>
   </Frame>
-   <GameTooltip name="MyScanningTooltip" inherits="GameTooltipTemplate">
+   <GameTooltip name="TooltipScanner" inherits="GameTooltipTemplate">
    <Scripts>
      <Onload>
        this:SetOwner(WorldFrame, "ANCHOR_NONE");
