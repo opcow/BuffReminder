@@ -209,18 +209,6 @@ function BrShowIcons()
     end
 end
 
-function BrListGroups()
-    DEFAULT_CHAT_FRAME:AddMessage("\124cffafe7e9\124h** buff groups **")
-    for i in brBuffGroups do
-        DEFAULT_CHAT_FRAME:AddMessage("\124cffafe7e9\124h" .. i)
-        local t = brBuffGroups[i].buffs
-        for j in t do
-            --            DEFAULT_CHAT_FRAME:AddMessage("\124cffafe7e9\124h  [" .. n .. "] " .. t[j].name)
-            end
-    end
-    DEFAULT_CHAT_FRAME:AddMessage("\124cffafe7e9\124h** end of buff groups **")
-end
-
 function BrGetArgs(m)
     
     local _, count = string.gsub(m, [["]], "")
@@ -255,140 +243,195 @@ end
 
 function BrGroupExists(group)
     if brBuffGroups[group] == nil then
-        DEFAULT_CHAT_FRAME:AddMessage('Group "' .. tostring(group) .. '" does not exist.')
+        DEFAULT_CHAT_FRAME:AddMessage('\124cffffff00\124hGroup "' .. tostring(group) .. '" does not exist.')
+        DEFAULT_CHAT_FRAME:AddMessage('\124cffffff00\124hYour groups are:')
+        for i in brBuffGroups do
+            DEFAULT_CHAT_FRAME:AddMessage('\124cffffff00\124h  ' .. i)
+        end
         return false
     end
     return true
 end
 
-function BrPrintGroup(group)
-    DEFAULT_CHAT_FRAME:AddMessage('Group: ' .. tostring(group))
-    for i in brBuffGroups[group].conditions do
-        DEFAULT_CHAT_FRAME:AddMessage("  hide condition " .. i .. ": " .. tostring(brBuffGroups[group].conditions[i]))
+function BrFindBuff(buff)
+    for i in brBuffGroups do
+        if brBuffGroups[i].buffs[buff] ~= nil then return i end
+    end
+    return nil
+end
+
+function BrPrintBuffs()
+    for i in brBuffGroups do
+        DEFAULT_CHAT_FRAME:AddMessage('\124cffffff00\124hGroup: ' .. tostring(i))
+        for j in brBuffGroups[i].buffs do
+            DEFAULT_CHAT_FRAME:AddMessage("\124cffffff00\124h  " .. j)
+        end
     end
 end
 
-function BrShowHelp()
-    DEFAULT_CHAT_FRAME:AddMessage("\124cffafe7e9\124h ***** BuffReminder Help ***** ")
-    DEFAULT_CHAT_FRAME:AddMessage("\124cffafe7e9\124hBuffs you want to monitor must be added to buff groups.")
-    DEFAULT_CHAT_FRAME:AddMessage("\124cffafe7e9\124hMutually exclusive buffs should go into common groups.")
-    DEFAULT_CHAT_FRAME:AddMessage("\124cffbfb56f\124h/br add <buff> <group> \124cffafe7e9\- adds a buff to a group.")
-    DEFAULT_CHAT_FRAME:AddMessage("\124cffbfb56f\124h/br alpha <number> \124cffafe7e9\- change the icon transparency (min 0.0, max 1.0).")
-    DEFAULT_CHAT_FRAME:AddMessage("\124cffbfb56f\124h/br disable <group> \124cffafe7e9\- temporarily disable a buff group.")
-    DEFAULT_CHAT_FRAME:AddMessage("\124cffbfb56f\124h/br enable <group> \124cffafe7e9\- enable a previously disabled group.")
-    DEFAULT_CHAT_FRAME:AddMessage("\124cffbfb56f\124h/br list \124cffafe7e9\- shows your configured groups and watched buffs.")
-    DEFAULT_CHAT_FRAME:AddMessage("\124cffbfb56f\124h/br [lock|unlock] \124cffafe7e9\- locks or unlocks the icon frame for user placement.")
-    DEFAULT_CHAT_FRAME:AddMessage("\124cffbfb56f\124h/br NUKE \124cffafe7e9\- clears all of your settings.")
-    DEFAULT_CHAT_FRAME:AddMessage("\124cffbfb56f\124h/br remove buff <buff> \124cffafe7e9\- removes a buff from being watched.")
-    DEFAULT_CHAT_FRAME:AddMessage("\124cffbfb56f\124h/br remove group <group> \124cffafe7e9\- removes a buff group.")
-    DEFAULT_CHAT_FRAME:AddMessage("\124cffbfb56f\124h/br size <number> \124cffafe7e9\- change the icon size (min 10, max 400).")
-    DEFAULT_CHAT_FRAME:AddMessage("\124cffbfb56f\124h/br sound [sound name]\124cffafe7e9\- sets the warning sound or turns it off if no name given. ex: /br sound RaidWarning")
-    DEFAULT_CHAT_FRAME:AddMessage("\124cffafe7e9\124h ***** End of BuffReminder Help *****\124h\124r")
+function BrPrintAllGroups()
+    DEFAULT_CHAT_FRAME:AddMessage("\124cffcbeb1c\124h** buff groups **")
+    for i in brBuffGroups do
+        DEFAULT_CHAT_FRAME:AddMessage("\124cffcbeb1c\124h   " .. i)
+        local t = brBuffGroups[i].buffs
+    end
+    DEFAULT_CHAT_FRAME:AddMessage("\124cffcbeb1c\124h** end of buff groups **")
 end
 
-SLASH_BuffReminder1 = "/br" -- we add the slash commands
-function SlashCmdList.BuffReminder(msg, editbox)-- we put the slash commands to work
+function BrPrintGroup(group)
+    DEFAULT_CHAT_FRAME:AddMessage('\124cffffff00\124hGroup: ' .. tostring(group))
+    for i in brBuffGroups[group].buffs do
+        DEFAULT_CHAT_FRAME:AddMessage("\124cffffff00\124h  " .. i)
+    end
+    DEFAULT_CHAT_FRAME:AddMessage("\124cffffff00\124h  ---")
+    for i in brBuffGroups[group].conditions do
+        DEFAULT_CHAT_FRAME:AddMessage("\124cffffff00\124h  hide condition " .. i .. ": \124cff80ff00\124h" .. tostring(brBuffGroups[group].conditions[i]))
+    end
+    DEFAULT_CHAT_FRAME:AddMessage("\124cffffff00\124h  early warning time: \124cff80ff00\124h" .. tostring(brBuffGroups[group].warntime))
+end
+
+function BrShowHelp()
+    DEFAULT_CHAT_FRAME:AddMessage("\124cfff4f9a7\124h ***** BuffReminder Help ***** ")
+    DEFAULT_CHAT_FRAME:AddMessage("\124cfff4f9a7\124hBuffs you want to monitor must be added to buff groups.")
+    DEFAULT_CHAT_FRAME:AddMessage("\124cfff4f9a7\124hMutually exclusive buffs should go into common groups.")
+    
+    DEFAULT_CHAT_FRAME:AddMessage("\124cfff4f9a7\124hGroup commands:")
+    DEFAULT_CHAT_FRAME:AddMessage("\124cffcbeb1c\124h  /br group <groupname> add <buffname>")
+    DEFAULT_CHAT_FRAME:AddMessage("\124cffabb7ff\124h    Adds a buff to a group. If the group doesn't exist it will be created.")
+    DEFAULT_CHAT_FRAME:AddMessage("\124cffcbeb1c\124h  /br group <groupname> remove")
+    DEFAULT_CHAT_FRAME:AddMessage("\124cffabb7ff\124h    Removes the buff group.")
+    DEFAULT_CHAT_FRAME:AddMessage("\124cffcbeb1c\124h  /br group <groupname> disable")
+    DEFAULT_CHAT_FRAME:AddMessage("\124cffabb7ff\124h    Prevents the group's icon from being displayed when one of it's buffs are missing.")
+    DEFAULT_CHAT_FRAME:AddMessage("\124cffcbeb1c\124h  /br group <groupname> enable")
+    DEFAULT_CHAT_FRAME:AddMessage("\124cffabb7ff\124h    Allows the group's icon to be displayed when one of it's buffs are missing.")
+    DEFAULT_CHAT_FRAME:AddMessage("\124cffcbeb1c\124h  /br group <number>")
+    DEFAULT_CHAT_FRAME:AddMessage("\124cffabb7ff\124h    Sets the early warning timer for the group.")
+    DEFAULT_CHAT_FRAME:AddMessage("\124cffcbeb1c\124h  /br group")
+    DEFAULT_CHAT_FRAME:AddMessage("\124cffabb7ff\124h    Prints a listing of your buff groups.")
+
+    DEFAULT_CHAT_FRAME:AddMessage("\124cfff4f9a7\124hBuff commands:")
+    DEFAULT_CHAT_FRAME:AddMessage("\124cffcbeb1c\124h  /br buff <buffname> remove")
+    DEFAULT_CHAT_FRAME:AddMessage("\124cffabb7ff\124h    Removes a buff from being monitored.")
+    DEFAULT_CHAT_FRAME:AddMessage("\124cffcbeb1c\124h  /br buff <buffname>")
+    DEFAULT_CHAT_FRAME:AddMessage("\124cffabb7ff\124h    Prints the group info of the group a buff belongs to.")
+    DEFAULT_CHAT_FRAME:AddMessage("\124cffcbeb1c\124h  /br buff")
+    DEFAULT_CHAT_FRAME:AddMessage("\124cffabb7ff\124h    Prints a list of your watched buffs.")
+
+    DEFAULT_CHAT_FRAME:AddMessage("\124cfff4f9a7\124hGeneral options:")
+    DEFAULT_CHAT_FRAME:AddMessage("\124cffcbeb1c\124h/br alpha <number> \124cffabb7ff\- changes the icon transparency (min 0.0, max 1.0).")
+    DEFAULT_CHAT_FRAME:AddMessage("\124cffcbeb1c\124h/br list \124cffabb7ff\- shows your configured groups and watched buffs.")
+    DEFAULT_CHAT_FRAME:AddMessage("\124cffcbeb1c\124h/br [lock|unlock] \124cffabb7ff\- locks or unlocks the icon frame for user placement.")
+    DEFAULT_CHAT_FRAME:AddMessage("\124cffcbeb1c\124h/br NUKE \124cffabb7ff\- clears all of your settings.")
+    DEFAULT_CHAT_FRAME:AddMessage("\124cffcbeb1c\124h/br remove buff <buff> \124cffabb7ff\- removes a buff from being watched.")
+    DEFAULT_CHAT_FRAME:AddMessage("\124cffcbeb1c\124h/br remove group <group> \124cffabb7ff\- removes a buff group.")
+    DEFAULT_CHAT_FRAME:AddMessage("\124cffcbeb1c\124h/br size <number> \124cffabb7ff\- changes the icon size (min 10, max 400).")
+    DEFAULT_CHAT_FRAME:AddMessage("\124cffcbeb1c\124h/br sound [sound name]\124cffabb7ff\- sets the warning sound or turns it off if no name given. ex: /br sound RaidWarning")
+    DEFAULT_CHAT_FRAME:AddMessage("\124cffcbeb1c\124h/br time <number> \124cffabb7ff\- sets the default early warning time setting for new buff groups.")
+    DEFAULT_CHAT_FRAME:AddMessage("\124cffabb7ff\124h ***** End of BuffReminder Help *****\124h\124r")
+end
+
+SLASH_BuffReminder1 = "/br"
+SLASH_BuffReminder2 = "/buffreminder"
+function SlashCmdList.BuffReminder(msg)-- we put the slash commands to work
     local handled = false
     local args, argc = BrGetArgs(msg)
     
-    if argc == 1 then
-        if args[1] == "test" then
-            BrTest()
-            handled = true
-        elseif string.lower(args[1]) == "unlock" then
-            BuffReminderFrame:EnableMouse(true)
-            brtexture:SetTexture("Interface\\AddOns\\BuffReminder\\Media\\cross")
-            handled = true
-        elseif string.lower(args[1]) == "lock" then
-            BuffReminderFrame:EnableMouse(false)
-            brtexture:SetTexture(nil)
-            handled = true
-        elseif args[1] == "NUKE" then
-            brBuffGroups = {}
-            brOptions = brDefaultOptions
-            handled = true
-        elseif string.lower(args[1]) == "sound" then
+    if argc == 0 then
+        BrShowHelp()
+        return
+    end
+    -- group command and subcommands
+    if string.lower(args[1]) == "group" then
+        if argc == 1 then
+            BrPrintAllGroups()
+        else
+            if not BrGroupExists(args[2]) then return end
+            if argc >= 3 then
+                if string.lower(args[3]) == "disable" then
+                    brBuffGroups[args[2]].conditions.always = true
+                elseif string.lower(args[3]) == "enable" then
+                    brBuffGroups[args[2]].conditions.always = false
+                elseif brBuffGroups[args[2]].conditions[args[3]] ~= nil then
+                    brBuffGroups[args[2]].conditions[args[3]] = not brBuffGroups[args[2]].conditions[args[3]]
+                elseif string.lower(args[3]) == "add" then
+                    BrAddBuffToGroup(args[4], args[2])-- fixme args < 4 just add group
+                elseif string.lower(args[3]) == "remove" then
+                    brBuffGroups[args[2]] = nil
+                else
+                    local n = brtonum(args[3])
+                    if n ~= nil then
+                        brBuffGroups[args[2]].warntime = n
+                    end
+                end
+            end
+            BrPrintGroup(args[2])
+        end
+        handled = true
+    -- buff command and subcommands
+    elseif string.lower(args[1]) == "buff" then
+        if argc == 1 then
+            BrPrintBuffs()
+        elseif argc == 2 then
+            local g = BrFindBuff(args[2])
+            if g == nil then
+                DEFAULT_CHAT_FRAME:AddMessage("\124cffabb7ff\124hBuff " .. args[2] .. " does not exist in any buff groups.")
+            else
+                BrPrintGroup(g)
+            end
+        elseif string.lower(args[3]) == "remove" then
+            for i in brBuffGroups do
+                brBuffGroups[i].buffs[args[2]] = nil
+            end
+            DEFAULT_CHAT_FRAME:AddMessage("\124cffabb7ff\124hRemoved " .. args[2] .. " from all buff groups.")
+        end
+        handled = true
+    elseif string.lower(args[1]) == "unlock" then
+        BuffReminderFrame:EnableMouse(true)
+        brtexture:SetTexture("Interface\\AddOns\\BuffReminder\\Media\\cross")
+        handled = true
+    elseif string.lower(args[1]) == "lock" then
+        BuffReminderFrame:EnableMouse(false)
+        brtexture:SetTexture(nil)
+        handled = true
+    elseif args[1] == "NUKE" then
+        brBuffGroups = {}
+        brOptions = brDefaultOptions
+        handled = true
+    elseif string.lower(args[1]) == "sound" then
+        if argc == 1 then
             brOptions.warnsound = nil
-            handled = true
-        elseif string.lower(args[1]) == "list" then
-            BrListGroups()
-            handled = true
-        elseif string.lower(args[1]) == "help" then
-            BrShowHelp()
-            handled = true
-        end -- argc == 1
-    elseif argc == 2 then
-        if string.lower(args[1]) == "disable" then
-            if not BrGroupExists(args[2]) then return end
-            brBuffGroups[args[2]].conditions.always = true
-            BrPrintGroup(args[2])
-            handled = true
-        elseif string.lower(args[1]) == "enable" then
-            if not BrGroupExists(args[2]) then return end
-            brBuffGroups[args[2]].conditions.always = false
-            BrPrintGroup(args[2])
-            handled = true
-        elseif string.lower(args[1]) == "sound" then
+        else
             brOptions.warnsound = args[2]
             PlaySound(tostring(brOptions.warnsound), "master")
+        end
+        handled = true
+    elseif string.lower(args[1]) == "size" then
+        local n = brtonum(args[2])
+        if n ~= nil and (n >= 10 and n <= 400) then
+            brOptions.size = n
             handled = true
-        elseif string.lower(args[1]) == "size" then
-            local n = brtonum(args[2])
-            if n ~= nil and (n >= 10 and n <= 400) then
-                brOptions.size = n
-                handled = true
-            end
-        elseif string.lower(args[1]) == "alpha" then
-            local n = brtonum(args[2])
-            if n ~= nil and (n >= 0 and n <= 1.0) then
-                brOptions.alpha = n
-                handled = true
-            end
-        elseif string.lower(args[1]) == "time" then
-            local n = brtonum(args[2])
-            if n ~= nil then
-                brOptions.warntime = n
-                handled = true
-            end
-        end -- argc == 2
-    elseif argc == 3 then
-        if string.lower(args[1]) == "add" then
-            --            local n = brtonum(args[2])
-            --            if n ~= nil then
-            BrAddBuffToGroup(args[2], args[3])
+        end
+    elseif string.lower(args[1]) == "alpha" then
+        local n = brtonum(args[2])
+        if n ~= nil and (n >= 0 and n <= 1.0) then
+            brOptions.alpha = n
             handled = true
-        --            end
-        elseif string.lower(args[1]) == "remove" then
-            if string.lower(args[2]) == "group" then
-                brBuffGroups[args[3]] = nil
-                handled = true
-            elseif string.lower(args[2] == "buff") then
-                for i in brBuffGroups do
-                    brBuffGroups[i].buffs[args[3]] = nil
-                end
-                handled = true
-            end
-        elseif string.lower(args[1]) == "group" then
-            if not BrGroupExists(args[2]) then return end
-            if brBuffGroups[args[2]].conditions[args[3]] ~= nil then
-                brBuffGroups[args[2]].conditions[args[3]] = not brBuffGroups[args[2]].conditions[args[3]]
-                handled = true
-                BrPrintGroup(args[2])
-            end
-        elseif string.lower(args[1]) == "gtime" then
-            if not BrGroupExists(brBuffGroups[args[2]]) then return end
-            local n = brtonum(args[3])
-            if n ~= nil then
-                brBuffGroups[args[2]].warntime = n
-                handled = true
-            end
-        end -- argc == 3
+        end
+    elseif string.lower(args[1]) == "time" then
+        local n = brtonum(args[2])
+        if n ~= nil then
+            brOptions.warntime = n
+            handled = true
+        end
+    elseif string.lower(args[1]) == "help" then
+        BrShowHelp()
+        handled = true
     end
     
     lbrForceUpdate = true
     
     if not handled then
-        DEFAULT_CHAT_FRAME:AddMessage("\124cffbfb56f\124hBuffReminder command error. Try /br help.")
+        DEFAULT_CHAT_FRAME:AddMessage("\124cffcbeb1c\124hBuffReminder command error. Try /br help.")
     end
 end
 
