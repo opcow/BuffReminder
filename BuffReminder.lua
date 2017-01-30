@@ -239,6 +239,8 @@ local function ShowHelp()
     DEFAULT_CHAT_FRAME:AddMessage("\124cffabb7ff\124h    Allows the group's icon to be displayed when one of it's buffs are missing.")
     DEFAULT_CHAT_FRAME:AddMessage("\124cffcbeb1c\124h  /br group <number>")
     DEFAULT_CHAT_FRAME:AddMessage("\124cffabb7ff\124h    Sets the early warning timer for the group.")
+    DEFAULT_CHAT_FRAME:AddMessage("\124cffcbeb1c\124h  /br group [dead|instance|party|raid|resting|taxi]")
+    DEFAULT_CHAT_FRAME:AddMessage("\124cffabb7ff\124h    Toggles the given conditional for the group.")
     DEFAULT_CHAT_FRAME:AddMessage("\124cffcbeb1c\124h  /br group")
     DEFAULT_CHAT_FRAME:AddMessage("\124cffabb7ff\124h    Prints a listing of your buff groups.")
     
