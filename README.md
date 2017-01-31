@@ -9,6 +9,7 @@ Mutually exclusive buffs should go into common groups.
 
 Until a buff is seen by the addon it will have a '?' icon.
 
+Enclose names with spaces in quotes.
 
 Group commands:
 
