@@ -92,7 +92,6 @@ function GroupLayout_EnableChecks()
     GConditionsInstanceCheck:Enable()
 end
 
-
 function BrSaveGroup()
     if brBuffGroups[curGroupSel] ~= nil then
         brBuffGroups[curGroupSel].conditions.always = (GConditionsAlwaysCheck:GetChecked() == 1)
@@ -102,11 +101,10 @@ function BrSaveGroup()
         brBuffGroups[curGroupSel].conditions.party = (GConditionsPartyCheck:GetChecked() == 1)
         brBuffGroups[curGroupSel].conditions.raid = (GConditionsRaidCheck:GetChecked() == 1)
         brBuffGroups[curGroupSel].conditions.instance = (GConditionsInstanceCheck:GetChecked() == 1)
-        brBuffGroups[curGroupSel].conditions.warntime = tonumber(BrTimeEdit:GetText())
+        brBuffGroups[curGroupSel].warntime = tonumber(BrTimeEdit:GetText())
         brForceUpdate = true
     end
 end
-
 
 -- Buff Section --
 function BrBuffCfg_OnLoad()

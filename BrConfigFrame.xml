@@ -451,7 +451,23 @@
       <OnLoad>BrGroupsConfigFrame_OnLoad();</OnLoad>
       <OnShow>BrGroupsConfigFrame_OnShow();</OnShow>
     </Scripts>
+    <Layers>
+      <Layer level="ARTWORK">
+        <Texture>
+          <Color r="0" g="0" b="0" a="0.75"/>
+          <Anchors>
+            <Anchor point="TOPLEFT">
+              <Offset x="14" y="-14"/>
+            </Anchor>
+            <Anchor point="BOTTOMRIGHT">
+              <Offset x="-14" y="14"/>
+            </Anchor>
+          </Anchors>
+        </Texture>
+      </Layer>
+    </Layers>
   </Frame>
+  <!--Floating Config Button-->
   <Button name="BrGroupsConfigButton" parent="UIParent" frameStrata="LOW" toplevel="true" movable="true" enableMouse="true">
     <Size>
       <AbsDimension x="24" y="24"/>
