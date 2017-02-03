@@ -455,7 +455,8 @@
         </Scripts>
       </Button>
     </Frames>
-    <Backdrop bgFile="Interface\DialogFrame\UI-DialogBox-Background" edgeFile="Interface\DialogFrame\UI-DialogBox-Border" tile="true">
+    <!--bgFile="Interface\DialogFrame\UI-DialogBox-Background"-->
+    <Backdrop edgeFile="Interface\DialogFrame\UI-DialogBox-Border" tile="true">
       <BackgroundInsets>
         <AbsInset left="11" right="12" top="12" bottom="11"/>
       </BackgroundInsets>
@@ -470,15 +471,15 @@
       <OnShow>BrGroupsConfigFrame_OnShow();</OnShow>
     </Scripts>
     <Layers>
-      <Layer level="ARTWORK">
+      <Layer level="BACKGROUND">
         <Texture>
-          <Color r="0" g="0" b="0" a="0.75"/>
+          <Color r="0" g="0" b="0" a="0.9"/>
           <Anchors>
             <Anchor point="TOPLEFT">
-              <Offset x="14" y="-14"/>
+              <Offset x="6" y="-6"/>
             </Anchor>
             <Anchor point="BOTTOMRIGHT">
-              <Offset x="-14" y="14"/>
+              <Offset x="-6" y="6"/>
             </Anchor>
           </Anchors>
         </Texture>
