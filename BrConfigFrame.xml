@@ -432,12 +432,12 @@
           </Button>
           <Slider name="$parentSizeSlider" inherits="OptionsSliderTemplate" minValue="10" maxValue="400" valuestep="2">
             <Size>
-              <AbsDimension x="240" y="16"/>
+              <AbsDimension x="220" y="16"/>
             </Size>
             <Anchors>
-              <Anchor point="BOTTOM">
+              <Anchor point="BOTTOMLEFT">
                 <Offset>
-                  <AbsDimension x="0" y="-64" />
+                  <AbsDimension x="2" y="-64" />
                 </Offset>
               </Anchor>
             </Anchors>
@@ -447,6 +447,27 @@
               <OnValueChanged>brOptions.size = this:GetValue(); BuffReminder_DrawIcons();</OnValueChanged>
             </Scripts>
           </Slider>
+
+          <Slider name="$parentAlphaSlider" inherits="OptionsSliderTemplate" minValue="0" maxValue="1" valuestep=".1">
+            <Size>
+              <AbsDimension x="100" y="16"/>
+            </Size>
+            <Anchors>
+              <Anchor point="BOTTOMLEFT">
+                <Offset>
+                  <AbsDimension x="234" y="-64" />
+                </Offset>
+              </Anchor>
+            </Anchors>
+            <Scripts>
+              <OnShow>this:SetValue(brOptions.alpha)</OnShow>
+              <OnLoad>getglobal(this:GetName() .. 'Low'):SetText('0');getglobal(this:GetName() .. 'High'):SetText('1');getglobal(this:GetName() .. 'Text'):SetText('Icon Transparency');</OnLoad>
+              <OnValueChanged>brOptions.alpha = this:GetValue(); BuffReminder_DrawIcons();</OnValueChanged>
+            </Scripts>
+          </Slider>
+
+
+
         </Frames>
         <Size>
           <AbsDimension x="340" y="100"/>
