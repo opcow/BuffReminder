@@ -3,10 +3,6 @@
 local curGroupSel
 local curBuffSel
 
-function BrGroupsConfigFrame_OnLoad()
---DEFAULT_CHAT_FRAME:AddMessage("BuffReminder Config Loaded")
-end
-
 function BrGroupsConfigFrame_OnShow()
     DefConditionsAlwaysCheck:SetChecked(brOptions.conditions["always"])
     DefConditionsRestingCheck:SetChecked(brOptions.conditions["resting"])
@@ -26,7 +22,6 @@ end
 function BrGroupCfg_OnLoad()
     GroupLayoutAddBtn:SetScript("OnClick", AddGroupClicked)
     GroupLayoutDelBtn:SetScript("OnClick", DelGroupClicked)
-    UIDropDownMenu_Initialize(GroupLayoutDrop, GroupDropInit)
 end
 
 function AddGroupClicked()
@@ -42,9 +37,12 @@ function DelGroupClicked()
         brBuffGroups[curGroupSel] = nil
     end
     GroupSaveBtn:Disable()
+    UIDropDownMenu_SetSelectedID(GroupLayoutDrop, 1)
+    DEFAULT_CHAT_FRAME:AddMessage(curGroupSel)
 end
 
-function GroupDropInit(dropDown, level, menuList)
+function GroupDropInit(level)
+    DEFAULT_CHAT_FRAME:AddMessage("-----+++++------")
     local info = UIDropDownMenu_CreateInfo()
     for i in brBuffGroups do
         info.text, info.checked, info.notCheckable, info.keepShownOnClick, info.arg1, info.func = i, false, false, false, i, GroupLayoutDrop_OnClick
@@ -110,7 +108,6 @@ end
 function BrBuffCfg_OnLoad()
     BuffLayoutAddBtn:SetScript("OnClick", AddBuffClicked)
     BuffLayoutDelBtn:SetScript("OnClick", DelBuffClicked)
-    UIDropDownMenu_Initialize(BuffLayoutDrop, BuffDropInit)
 end
 
 function AddBuffClicked()
@@ -127,7 +124,7 @@ function DelBuffClicked()
     end
 end
 
-function BuffDropInit(dropDown, level, menuList)
+function BuffDropInit(level)
     local info = UIDropDownMenu_CreateInfo()
     if brBuffGroups[curGroupSel] ~= nil then
         for i in brBuffGroups[curGroupSel].buffs do

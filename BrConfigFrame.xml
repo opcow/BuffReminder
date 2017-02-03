@@ -69,9 +69,6 @@
             </Offset>
           </Anchor>
         </Anchors>
-        <Scripts>
-          <OnClick>Test_OnClick(self);</OnClick>
-        </Scripts>
       </Button>
       <Button name="$parentDelBtn" inherits="BrButtonTemplate" text="Del">
         <Anchors>
@@ -91,18 +88,6 @@
           </Anchor>
         </Anchors>
       </EditBox>
-      <Button name="$parentDrop" inherits="BrDropTemplate">
-        <Anchors>
-          <Anchor point="TOPLEFT">
-            <Offset>
-              <AbsDimension x="66" y="-40"/>
-            </Offset>
-          </Anchor>
-        </Anchors>
-        <Scripts>
-          <OnLoad>UIDropDownMenu_SetWidth(200);</OnLoad>
-        </Scripts>
-      </Button>
     </Frames>
   </Frame>
   <!--END TEMPLATES-->
@@ -127,6 +112,23 @@
     <Frames>
       <!--BEGIN GROUP SECTION-->
       <Frame name="GroupLayout" inherits="BrLayoutTemplate">
+        <Frames>
+          <Button name="$parentDrop" inherits="UIDropDownMenuTemplate">
+            <Size>
+              <AbsDimension x="200" y="30"/>
+            </Size>
+            <Anchors>
+              <Anchor point="TOPLEFT">
+                <Offset>
+                  <AbsDimension x="66" y="-40"/>
+                </Offset>
+              </Anchor>
+            </Anchors>
+            <Scripts>
+              <OnLoad>                UIDropDownMenu_SetWidth(200);                UIDropDownMenu_Initialize(this, GroupDropInit)              </OnLoad>
+            </Scripts>
+          </Button>
+        </Frames>
         <Anchors>
           <Anchor point="TOP">
             <Offset x="0" y="-24"/>
@@ -143,6 +145,23 @@
       </Frame>
       <!--BEGIN BUFF SECTION-->
       <Frame name="BuffLayout" inherits="BrLayoutTemplate" value="Buff">
+        <Frames>
+          <Button name="$parentDrop" inherits="UIDropDownMenuTemplate">
+            <Size>
+              <AbsDimension x="200" y="30"/>
+            </Size>
+            <Anchors>
+              <Anchor point="TOPLEFT">
+                <Offset>
+                  <AbsDimension x="66" y="-40"/>
+                </Offset>
+              </Anchor>
+            </Anchors>
+            <Scripts>
+              <OnLoad>              UIDropDownMenu_SetWidth(200);              UIDropDownMenu_Initialize(this, BuffDropInit);              </OnLoad>
+            </Scripts>
+          </Button>
+        </Frames>
         <Anchors>
           <Anchor point="TOP">
             <Offset x="0" y="-102"/>
@@ -448,7 +467,6 @@
       </EdgeSize>
     </Backdrop>
     <Scripts>
-      <OnLoad>BrGroupsConfigFrame_OnLoad();</OnLoad>
       <OnShow>BrGroupsConfigFrame_OnShow();</OnShow>
     </Scripts>
     <Layers>
