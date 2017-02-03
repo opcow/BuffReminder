@@ -16,6 +16,9 @@ function BrGroupsConfigFrame_OnShow()
     else
         BrDefTimeEdit:SetText(brOptions.warntime)
     end
+    if brOptions.warnsound ~= nil then
+        BrSoundEdit:SetText(brOptions.warnsound)
+    end
 end
 
 -- Group Section --
@@ -38,6 +41,8 @@ function DelGroupClicked()
     end
     GroupSaveBtn:Disable()
     UIDropDownMenu_SetSelectedID(GroupLayoutDrop, 1)
+    local n = UIDropDownMenu_GetSelectedName(GroupLayoutDrop)
+--    DEFAULT_CHAT_FRAME:AddMessage(tostring(n))
 end
 
 function GroupDropInit(level)
@@ -152,6 +157,7 @@ function BrSaveDefaults()
     brOptions.conditions.party = DefConditionsPartyCheck:GetChecked()
     brOptions.conditions.raid = DefConditionsRaidCheck:GetChecked()
     brOptions.conditions.instance = DefConditionsInstanceCheck:GetChecked()
+    brOptions.warnsound = BrSoundEdit:GetText()
     brOptions.warntime = tonumber(BrDefTimeEdit:GetText())
 end
 

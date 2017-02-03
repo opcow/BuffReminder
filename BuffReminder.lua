@@ -94,7 +94,7 @@ local function ClearIcons()
 end
 
 local function MakeIcon(icon)
-    lbrWarnIconFrames[icon] = CreateFrame("Frame", nil, this)
+    lbrWarnIconFrames[icon] = CreateFrame("Frame", nil, BuffReminderFrame)
     lbrWarnIconFrames[icon]:SetFrameStrata("BACKGROUND")
     lbrWarnIconFrames[icon]:SetWidth(brOptions.size)
     lbrWarnIconFrames[icon]:SetHeight(brOptions.size)
@@ -105,9 +105,8 @@ local function MakeIcon(icon)
     lbrWarnIconFrames[icon].texture = tex
 end
 
-local function DrawIcons()
+function BuffReminder_DrawIcons()
     ClearIcons()
-    
     --if UnitIsDeadOrGhost("player") or UnitOnTaxi("player") then return end
     local skipIcon = false
     for i in brBuffGroups do
@@ -412,9 +411,9 @@ function BuffReminder_OnUpdate(self)
         if brForceUpdate then
             ChkBuffsExist()
             brForceUpdate = false
-            DrawIcons()
+            BuffReminder_DrawIcons()
         elseif ChkBuffsExist() then
-            DrawIcons()
+            BuffReminder_DrawIcons()
         end
         lbrUpdateTime = GetTime()
     end
