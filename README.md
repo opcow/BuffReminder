@@ -1,6 +1,8 @@
-BuffReminder is a World of Warcraft 1.12 (Vanilla WoW) addon that displays icons on your screen when buffs have expired.
 
-https://github.com/opcow/BuffReminder
+#BuffReminder
+A World of Warcraft 1.12 (Vanilla WoW) addon that displays icons on your screen when buffs have expired.
+
+![example icon image]({{site.baseurl}}/http://i.imgur.com/yGQt273.png)
 
 
 Buffs you want to monitor must be added to buff groups.
