@@ -13,7 +13,7 @@ A World of Warcraft 1.12 (Vanilla WoW) addon that displays user placable icons o
 - The icon frame lock can be toggled by shift-clicking the BR icon.
 
 ## Config Dialog
-![config dialog image](http://i.imgur.com/p67QODg.png)
+![config dialog image](http://i.imgur.com/3UFbLvf.png)
 
 
 ##Command Line Configuration
