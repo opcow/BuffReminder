@@ -107,9 +107,9 @@ end
 
 function BuffReminder_DrawIcons()
     ClearIcons()
-    --if UnitIsDeadOrGhost("player") or UnitOnTaxi("player") then return end
-    local skipIcon = false
+    local skipIcon
     for i in brBuffGroups do
+    skipIcon = false
         for j in lbrPlayerStatus do
             if lbrPlayerStatus[j] and brBuffGroups[i].conditions[j] then
                 skipIcon = true
