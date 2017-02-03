@@ -38,6 +38,7 @@ Buff commands:
 General options:
 
 	/br alpha <number> - changes the icon transparency (min 0.0, max 1.0)
+	/br config - opens the config dialog
 	/br <lock|unlock> - locks or unlocks the icon frame for user placement
 	/br NUKE - clears all of your settings
     /br size <number> - changes the icon size (min 10, max 400)
