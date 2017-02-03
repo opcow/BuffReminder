@@ -32,6 +32,8 @@ function AddGroupClicked()
     if txt ~= nil and txt ~= "" then
         BuffReminder.AddBuffToGroup(txt, nil)
         GroupLayoutEdit:SetText("")
+        UIDropDownMenu_ClearAll(GroupLayoutDrop)
+        GroupLayout_DisableChecks()
     end
 end
 
@@ -42,11 +44,12 @@ function DelGroupClicked()
     GroupSaveBtn:Disable()
     UIDropDownMenu_SetSelectedID(GroupLayoutDrop, 1)
     local n = UIDropDownMenu_GetSelectedName(GroupLayoutDrop)
---    DEFAULT_CHAT_FRAME:AddMessage(tostring(n))
+    UIDropDownMenu_ClearAll(GroupLayoutDrop)
+    GroupLayout_DisableChecks()
 end
 
 function GroupDropInit(level)
-    local info = UIDropDownMenu_CreateInfo()
+    local info = {}
     for i in brBuffGroups do
         info.text, info.checked, info.notCheckable, info.keepShownOnClick, info.arg1, info.func = i, false, false, false, i, GroupLayoutDrop_OnClick
         UIDropDownMenu_AddButton(info)
@@ -118,17 +121,19 @@ function AddBuffClicked()
     if txt ~= nil and txt ~= "" then
         BuffReminder.AddBuffToGroup(curGroupSel, txt)
         BuffLayoutEdit:SetText("")
+        UIDropDownMenu_ClearAll(BuffLayoutDrop)
     end
 end
 
 function DelBuffClicked()
     if curBuffSel ~= nil then
         brBuffGroups[curGroupSel].buffs[curBuffSel] = nil
+        UIDropDownMenu_ClearAll(BuffLayoutDrop)
     end
 end
 
 function BuffDropInit(level)
-    local info = UIDropDownMenu_CreateInfo()
+    local info = {}
     if brBuffGroups[curGroupSel] ~= nil then
         for i in brBuffGroups[curGroupSel].buffs do
             info.text, info.checked, info.notCheckable, info.keepShownOnClick, info.arg1, info.func = i, false, false, false, i, BuffLayoutDrop_OnClick
