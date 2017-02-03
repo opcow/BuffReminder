@@ -1,7 +1,7 @@
 <Ui xmlns="http://www.blizzard.com/wow/ui/" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://www.blizzard.com/wow/ui/
 ..\FrameXML\UI.xsd">
   <Script file="BuffReminder.lua"/>
-  <Frame name="BuffReminderFrame" parent="UIParent" frameStrata="DIALOG" toplevel="true" movable="true" enableMouse="false" userPlaced="true">
+  <Frame name="BuffReminderFrame" parent="UIParent" frameStrata="LOW" toplevel="true" movable="true" enableMouse="false" userPlaced="true">
     <Size>
       <AbsDimension x="34" y="34"/>
     </Size>

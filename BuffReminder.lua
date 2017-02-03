@@ -1,3 +1,5 @@
+BuffReminder = {}
+
 brBuffGroups = {}
 brOptions = {}
 brDefaultOptions = {
@@ -17,11 +19,14 @@ brDefaultOptions = {
     ["alpha"] = 1.0,
 }
 
-local lbrLastBuffList = {}
+brShowIcons = {}
+brForceUpdate = true
+
 local lbrWarnIconFrames = {}
 local lbrUpdateTime = 0
-local lbrForceUpdate = true
 local lbrButtonSpc = 2
+local lbrBuffList = {}
+
 
 lbrPlayerStatus = {
     ["dead"] = false,
@@ -71,7 +76,7 @@ local function toNum(n)
     return n
 end
 ---
-local function ShowIcons()
+function BuffReminder.ShowIcons()
     local pitch = brOptions.size + lbrButtonSpc * 2
     local c = (pitch * (tableLen(lbrWarnIconFrames) - 1)) / 2
     for i in lbrWarnIconFrames do
@@ -112,11 +117,11 @@ local function DrawIcons()
                 break
             end
         end
-        if not skipIcon and not brBuffGroups[i].conditions.always and brBuffGroups[i].show then
+        if not skipIcon and not brBuffGroups[i].conditions.always and brShowIcons[i] then
             MakeIcon(brBuffGroups[i].icon)
         end
     end
-    ShowIcons()
+    BuffReminder.ShowIcons()
 end
 
 local function GetPlayerBuffName(n)
@@ -126,36 +131,37 @@ local function GetPlayerBuffName(n)
 end
 
 local function GetPlayerBuffs()
-    local blist = {}
+    lbrBuffList = {}
     for i = 0, 15 do
         local buffIndex, untilCancelled = GetPlayerBuff(i, "HELPFUL")
         if buffIndex == -1 then break end
         local tex = GetPlayerBuffTexture(i)
         local name = GetPlayerBuffName(i)
         local time = GetPlayerBuffTimeLeft(i)
-        blist[i] = {["icon"] = tex, ["name"] = name, ["time"] = time}
+        lbrBuffList[i] = {["icon"] = tex, ["name"] = name, ["time"] = time}
     
     end
-    return blist
+    return lbrBuffList
 end
 
 local function ChkBuffsExist()
     local iconChanged = false
-    blist = GetPlayerBuffs()
+    lbrBuffList = GetPlayerBuffs()
     for i in brBuffGroups do
-        local shown = brBuffGroups[i].show -- save previous state for sound logic
-        brBuffGroups[i].show = true
-        for j in blist do
-            if brBuffGroups[i].buffs[blist[j].name] ~= nil then
-                brBuffGroups[i].icon = blist[j].icon
-                if blist[j].time > brBuffGroups[i].warntime then
-                    brBuffGroups[i].show = false
+--        if brShowIcons[i] == nil then brShowIcons[i] = true false end
+        local shown = brShowIcons[i] -- save previous state for sound logic
+        brShowIcons[i] = true
+        for j in lbrBuffList do
+            if brBuffGroups[i].buffs[lbrBuffList[j].name] ~= nil then
+                brBuffGroups[i].icon = lbrBuffList[j].icon
+                if lbrBuffList[j].time > brBuffGroups[i].warntime then
+                    brShowIcons[i] = false
                     if shown then iconChanged = true end
                     break
                 end
             end
         end
-        if brBuffGroups[i].show and not shown then
+        if brShowIcons[i] and not shown then
             if brOptions.warnsound ~= nil then PlaySound(tostring(brOptions.warnsound), "master") end
             iconChanged = true
         end
@@ -212,14 +218,15 @@ local function PrintGroup(group)
     DEFAULT_CHAT_FRAME:AddMessage("\124cffffff00\124h  early warning time: \124cff80ff00\124h" .. tostring(brBuffGroups[group].warntime))
 end
 
-local function AddBuffToGroup(name, grp)
+function BuffReminder.AddBuffToGroup(grp, name, print)
     if brBuffGroups[grp] == nil then
-        brBuffGroups[grp] = {["conditions"] = brOptions.conditions, ["warntime"] = brOptions.warntime, ["icon"] = "Interface\\Icons\\INV_Misc_QuestionMark", ["enabled"] = true, ["show"] = false, ["buffs"] = {}}
+        brBuffGroups[grp] = {["conditions"] = brOptions.conditions, ["warntime"] = brOptions.warntime, ["icon"] = "Interface\\Icons\\INV_Misc_QuestionMark", ["buffs"] = {}}
     end
     if name ~= nil then
         brBuffGroups[grp].buffs[name] = {}
     end
-    PrintGroup(grp)
+    if print then PrintGroup(grp) end
+    brForceUpdate = true
 end
 
 local function ShowHelp()
@@ -278,7 +285,7 @@ function SlashCmdList.BuffReminder(msg)-- we put the slash commands to work
             PrintAllGroups()
         else
             if largs[3] == "add" then
-                AddBuffToGroup(args[4], args[2])
+                BuffReminder.AddBuffToGroup(args[2], args[4], true)
             else
                 if not GroupExists(args[2]) then return end
                 if argc >= 3 then
@@ -361,7 +368,7 @@ function SlashCmdList.BuffReminder(msg)-- we put the slash commands to work
         end
     end
     
-    lbrForceUpdate = true
+    brForceUpdate = true
     
     if not handled then
         DEFAULT_CHAT_FRAME:AddMessage("\124cffcbeb1c\124hBuffReminder command error. Try /br help.")
@@ -401,9 +408,9 @@ end
 function BuffReminder_OnUpdate(self)
     if GetTime() - lbrUpdateTime >= 1 then
         if brOptions.disabled then return end
-        if lbrForceUpdate then
+        if brForceUpdate then
             ChkBuffsExist()
-            lbrForceUpdate = false
+            brForceUpdate = false
             DrawIcons()
         elseif ChkBuffsExist() then
             DrawIcons()
@@ -428,18 +435,18 @@ function BuffReminder_OnEvent(event, arg1)
     elseif event == "PLAYER_UNGHOST" then
         lbrPlayerStatus.dead = false
     elseif event == "PLAYER_UPDATE_RESTING" then
-        lbrPlayerStatus.resting = IsResting()
+        lbrPlayerStatus.resting = (IsResting() == 1)
     elseif event == "PLAYER_ENTERING_WORLD" then
-        lbrPlayerStatus.resting = IsResting()
-        lbrPlayerStatus.dead = UnitIsDeadOrGhost("player")
+        lbrPlayerStatus.resting = (IsResting() == 1)
+        lbrPlayerStatus.dead = (UnitIsDeadOrGhost("player") == 1)
         lbrPlayerStatus.taxi = (UnitOnTaxi("player") == 1)
         lbrPlayerStatus.party = (GetNumPartyMembers() > 0)
         lbrPlayerStatus.raid = (GetNumRaidMembers() > 0)
-        local isInstance, instanceType = IsInInstance()
+        local isInstance, instanceType = (IsInInstance() == 1)
         lbrPlayerStatus.instance = isInstance
     end
     
     
-    lbrForceUpdate = true -- force icon update
+    brForceUpdate = true -- force icon update
 end
 --------------------------------------------------------------------------------------------------

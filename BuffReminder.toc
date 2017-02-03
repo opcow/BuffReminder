@@ -5,3 +5,5 @@
 ## SavedVariablesPerCharacter: brBuffGroups brOptions
 BuffReminder.lua
 BuffReminder.xml
+BrConfigFrame.lua
+BrConfigFrame.xml
