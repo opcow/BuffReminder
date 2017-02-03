@@ -38,7 +38,6 @@ function DelGroupClicked()
     end
     GroupSaveBtn:Disable()
     UIDropDownMenu_SetSelectedID(GroupLayoutDrop, 1)
-    DEFAULT_CHAT_FRAME:AddMessage(curGroupSel)
 end
 
 function GroupDropInit(level)

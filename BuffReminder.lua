@@ -138,6 +138,7 @@ local function GetPlayerBuffs()
         local tex = GetPlayerBuffTexture(i)
         local name = GetPlayerBuffName(i)
         local time = GetPlayerBuffTimeLeft(i)
+        if time == 0 then time = 86401 end
         lbrBuffList[i] = {["icon"] = tex, ["name"] = name, ["time"] = time}
     
     end
