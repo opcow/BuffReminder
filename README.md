@@ -11,6 +11,7 @@ A World of Warcraft 1.12 (Vanilla WoW) addon that displays user placable icons o
 - Until a buff is seen by the addon it will have a '?' icon.
 - Enclose names with spaces in quotes when using the command line.
 - The icon frame lock can be toggled by shift-clicking the BR icon.
+- If you've used a previous version and you get errors then you may need to NUKE your config (see gen opts)
 
 ## Config Dialog
 ![config dialog image](http://i.imgur.com/3UFbLvf.png)
