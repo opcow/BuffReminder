@@ -1,17 +1,15 @@
 
 #BuffReminder
-A World of Warcraft 1.12 (Vanilla WoW) addon that displays icons on your screen when buffs have expired.
+A World of Warcraft 1.12 (Vanilla WoW) addon that displays user placable icons on your screen when buffs have expired.
 
 ![example icon image](http://i.imgur.com/vbC52QZ.png)
 
 
-Buffs you want to monitor must be added to buff groups.
-
-Mutually exclusive buffs should go into common groups.
-
-Until a buff is seen by the addon it will have a '?' icon.
-
-Enclose names with spaces in quotes.
+#### Notes
+- Buffs you want to monitor must be added to buff groups.
+- Mutually exclusive buffs should go into common groups.
+- Until a buff is seen by the addon it will have a '?' icon.
+- Enclose names with spaces in quotes.
 
 Group commands:
 
