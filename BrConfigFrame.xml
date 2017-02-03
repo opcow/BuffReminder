@@ -522,7 +522,7 @@
 						<Anchors>
 							<Anchor point="BOTTOMLEFT">
 								<Offset>
-									<AbsDimension x="2" y="-64" />
+									<AbsDimension x="2" y="-68" />
 								</Offset>
 							</Anchor>
 						</Anchors>
@@ -531,7 +531,7 @@
 								this:SetValue(brOptions.size)
 							</OnShow>
 							<OnLoad>
-								getglobal(this:GetName() .. 'Low'):SetText('10');getglobal(this:GetName() .. 'High'):SetText('400');getglobal(this:GetName() .. 'Text'):SetText('Icon Size');
+								getglobal(this:GetName() .. 'Low'):SetText('');getglobal(this:GetName() .. 'High'):SetText('');getglobal(this:GetName() .. 'Text'):SetText('Icon Size');
 							</OnLoad>
 							<OnValueChanged>
 								brOptions.size = this:GetValue(); BuffReminder_DrawIcons();
@@ -545,7 +545,7 @@
 						<Anchors>
 							<Anchor point="BOTTOMLEFT">
 								<Offset>
-									<AbsDimension x="234" y="-64" />
+									<AbsDimension x="234" y="-68" />
 								</Offset>
 							</Anchor>
 						</Anchors>
@@ -554,7 +554,7 @@
 								this:SetValue(brOptions.alpha)
 							</OnShow>
 							<OnLoad>
-								getglobal(this:GetName() .. 'Low'):SetText('0');getglobal(this:GetName() .. 'High'):SetText('1');getglobal(this:GetName() .. 'Text'):SetText('Icon Transparency');
+								getglobal(this:GetName() .. 'Low'):SetText('');getglobal(this:GetName() .. 'High'):SetText('');getglobal(this:GetName() .. 'Text'):SetText('Icon Transparency');
 							</OnLoad>
 							<OnValueChanged>
 								brOptions.alpha = this:GetValue(); BuffReminder_DrawIcons();
