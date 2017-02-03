@@ -4,7 +4,7 @@ local curGroupSel
 local curBuffSel
 
 function BrGroupsConfigFrame_OnLoad()
-    --DEFAULT_CHAT_FRAME:AddMessage("BuffReminder Config Loaded")
+--DEFAULT_CHAT_FRAME:AddMessage("BuffReminder Config Loaded")
 end
 
 function BrGroupsConfigFrame_OnShow()
@@ -38,7 +38,9 @@ function AddGroupClicked()
 end
 
 function DelGroupClicked()
-    brBuffGroups[curGroupSel] = nil
+    if curGroupSel ~= nill then
+        brBuffGroups[curGroupSel] = nil
+    end
     GroupSaveBtn:Disable()
 end
 
@@ -122,7 +124,9 @@ function AddBuffClicked()
 end
 
 function DelBuffClicked()
-    brBuffGroups[curGroupSel].buffs[curBuffSel] = nil
+    if curBuffSel ~= nil then
+        brBuffGroups[curGroupSel].buffs[curBuffSel] = nil
+    end
 end
 
 function BuffDropInit(dropDown, level, menuList)
