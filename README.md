@@ -4,13 +4,19 @@ A World of Warcraft 1.12 (Vanilla WoW) addon that displays user placable icons o
 
 ![example icon image](http://i.imgur.com/vbC52QZ.png)
 
-
 #### Notes
+- The config dialog is opened by left-clicking the BR icon.
 - Buffs you want to monitor must be added to buff groups.
 - Mutually exclusive buffs should go into common groups.
 - Until a buff is seen by the addon it will have a '?' icon.
-- Enclose names with spaces in quotes.
+- Enclose names with spaces in quotes when using the command line.
+- The icon frame lock can be toggled by shift-clicking the BR icon.
 
+## Config Dialog
+![config dialog image](http://i.imgur.com/p67QODg.png)
+
+
+##Command line configuration
 Group commands:
 
 	/br group <groupname> add <buffname> - Adds a buff to a group. If the group doesn't exist it will be created.
