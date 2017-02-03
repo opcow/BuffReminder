@@ -253,14 +253,15 @@ local function ShowHelp()
     
     DEFAULT_CHAT_FRAME:AddMessage("\124cfff4f9a7\124hBuff commands:")
     DEFAULT_CHAT_FRAME:AddMessage("\124cffcbeb1c\124h  /br buff <buffname> remove")
-    DEFAULT_CHAT_FRAME:AddMessage("\124cffabb7ff\124h    Removes a buff from being monitored.")
+    DEFAULT_CHAT_FRAME:AddMessage("\124cffabb7ff\124h    removes a buff from being monitored.")
     DEFAULT_CHAT_FRAME:AddMessage("\124cffcbeb1c\124h  /br buff <buffname>")
-    DEFAULT_CHAT_FRAME:AddMessage("\124cffabb7ff\124h    Prints the group info of the group a buff belongs to.")
+    DEFAULT_CHAT_FRAME:AddMessage("\124cffabb7ff\124h    prints the group info of the group a buff belongs to.")
     DEFAULT_CHAT_FRAME:AddMessage("\124cffcbeb1c\124h  /br buff")
-    DEFAULT_CHAT_FRAME:AddMessage("\124cffabb7ff\124h    Prints a list of your watched buffs.")
+    DEFAULT_CHAT_FRAME:AddMessage("\124cffabb7ff\124h    prints a list of your watched buffs.")
     
     DEFAULT_CHAT_FRAME:AddMessage("\124cfff4f9a7\124hGeneral options:")
     DEFAULT_CHAT_FRAME:AddMessage("\124cffcbeb1c\124h/br alpha <number> \124cffabb7ff\- changes the icon transparency (min 0.0, max 1.0).")
+    DEFAULT_CHAT_FRAME:AddMessage("\124cffcbeb1c\124h/br config \124cffabb7ff\- opens the configuration dialog.")
     DEFAULT_CHAT_FRAME:AddMessage("\124cffcbeb1c\124h/br [lock|unlock] \124cffabb7ff\- locks or unlocks the icon frame for user placement.")
     DEFAULT_CHAT_FRAME:AddMessage("\124cffcbeb1c\124h/br NUKE \124cffabb7ff\- clears all of your settings.")
     DEFAULT_CHAT_FRAME:AddMessage("\124cffcbeb1c\124h/br size <number> \124cffabb7ff\- changes the icon size (min 10, max 400).")
@@ -365,6 +366,8 @@ function SlashCmdList.BuffReminder(msg)-- we put the slash commands to work
                 brOptions.warntime = n
                 handled = true
             end
+        elseif largs[1] == "config" then
+            BrGroupsConfigFrame:Show()
         end
     end
     

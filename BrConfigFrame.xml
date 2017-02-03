@@ -1,576 +1,685 @@
-﻿<Ui 
-  xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" 
-  xmlns:xsd="http://www.w3.org/2001/XMLSchema" 
-  xmlns="http://www.blizzard.com/wow/ui/">
-  <Script file="BrConfigFrame.lua"/>
-  <EditBox name="BrEditTemplate" inherits="InputBoxTemplate" letters="80" virtual="true">
-    <Size>
-      <AbsDimension x="228" y="32"/>
-    </Size>
-    <Scripts>
-      <OnLoad>this:SetAutoFocus(false);        this:SetTextInsets(0, 8, 0, 0);</OnLoad>
-      <OnEnterPressed>this:ClearFocus();</OnEnterPressed>
-    </Scripts>
-  </EditBox>
-  <FontString name="BrHeaderFontStringTemplate" font="Fonts\FRIZQT__.TTF" justifyH="CENTER" justifyV="TOP" virtual="true">
-    <Color r="1" g="1" b="1" a="1"/>
-    <FontHeight val="12"/>
-    <Shadow>
-      <Offset x="1" y="1"/>
-      <Color r="0" g="0" b="0"/>
-    </Shadow>
-    <Anchors>
-      <Anchor point="TOP">
-        <Offset>
-          <AbsDimension x="0" y="0"/>
-        </Offset>
-      </Anchor>
-    </Anchors>
-  </FontString>
-  <FontString name="BrFontStringTemplate" font="Fonts\FRIZQT__.TTF" justifyH="CENTER" justifyV="TOP" virtual="true">
-    <Color r="1" g="1" b="0" a="1"/>
-    <FontHeight val="12"/>
-    <Shadow>
-      <Offset x="1" y="1"/>
-      <Color r="0" g="0" b="0"/>
-    </Shadow>
-  </FontString>
-  <Button name="BrButtonTemplate" inherits="GameMenuButtonTemplate" text="Button" virtual="true">
-    <Size>
-      <AbsDimension x="50" y="20"/>
-    </Size>
-  </Button>
-  <Button name="BrDropTemplate" inherits="UIDropDownMenuTemplate" virtual="true">
-    <Size>
-      <AbsDimension x="200" y="30"/>
-    </Size>
-    <Size>
-      <AbsDimension x="200" y="30"/>
-    </Size>
-    <Anchors>
-      <Anchor point="TOPLEFT">
-        <Offset>
-          <AbsDimension x="70" y="-60"/>
-        </Offset>
-      </Anchor>
-    </Anchors>
-  </Button>
-  <!--LAYOUT TEMPLATE-->
-  <Frame name="BrLayoutTemplate" virtual="true">
-    <Size>
-      <AbsDimension x="400" y="200"/>
-    </Size>
-    <Frames>
-      <Button name="$parentAddBtn" inherits="BrButtonTemplate" text="Add">
-        <Anchors>
-          <Anchor point="TOPLEFT">
-            <Offset>
-              <AbsDimension x="26" y="-16"/>
-            </Offset>
-          </Anchor>
-        </Anchors>
-      </Button>
-      <Button name="$parentDelBtn" inherits="BrButtonTemplate" text="Del">
-        <Anchors>
-          <Anchor point="TOPLEFT">
-            <Offset>
-              <AbsDimension x="26" y="-44"/>
-            </Offset>
-          </Anchor>
-        </Anchors>
-      </Button>
-      <EditBox name="$parentEdit" inherits="BrEditTemplate">
-        <Anchors>
-          <Anchor point="TOPLEFT">
-            <Offset>
-              <AbsDimension x="90" y="-10"/>
-            </Offset>
-          </Anchor>
-        </Anchors>
-      </EditBox>
-    </Frames>
-  </Frame>
-  <!--END TEMPLATES-->
-  <Frame name="BrGroupsConfigFrame" parent="UIParent" toplevel="true" enableMouse="true" hidden="true">
-    <Size>
-      <AbsDimension x="400" y="520"/>
-    </Size>
-    <Anchors>
-      <Anchor point="CENTER">
-        <Offset x="0" y="0"/>
-      </Anchor>
-    </Anchors>
-    <TitleRegion setAllPoints="true">
-      <Size>
-        <AbsDimension x="0" y="0"/>
-      </Size>
-      <Anchors>
-        <Anchor point="TOPLEFT"/>
-        <Anchor point="BOTTOMRIGHT"/>
-      </Anchors>
-    </TitleRegion>
-    <Frames>
-      <!--BEGIN GROUP SECTION-->
-      <Frame name="GroupLayout" inherits="BrLayoutTemplate">
-        <Frames>
-          <Button name="$parentDrop" inherits="UIDropDownMenuTemplate">
-            <Size>
-              <AbsDimension x="200" y="30"/>
-            </Size>
-            <Anchors>
-              <Anchor point="TOPLEFT">
-                <Offset>
-                  <AbsDimension x="66" y="-40"/>
-                </Offset>
-              </Anchor>
-            </Anchors>
-            <Scripts>
-              <OnLoad>UIDropDownMenu_SetWidth(200);                UIDropDownMenu_Initialize(this, GroupDropInit)</OnLoad>
-            </Scripts>
-          </Button>
-        </Frames>
-        <Anchors>
-          <Anchor point="TOP">
-            <Offset x="0" y="-24"/>
-          </Anchor>
-        </Anchors>
-        <Layers>
-          <Layer>
-            <FontString name="$parentHeaderString" text="Groups" inherits="BrHeaderFontStringTemplate"/>
-          </Layer>
-        </Layers>
-        <Scripts>
-          <OnLoad>BrGroupCfg_OnLoad();</OnLoad>
-        </Scripts>
-      </Frame>
-      <!--BEGIN BUFF SECTION-->
-      <Frame name="BuffLayout" inherits="BrLayoutTemplate" value="Buff">
-        <Frames>
-          <Button name="$parentDrop" inherits="UIDropDownMenuTemplate">
-            <Size>
-              <AbsDimension x="200" y="30"/>
-            </Size>
-            <Anchors>
-              <Anchor point="TOPLEFT">
-                <Offset>
-                  <AbsDimension x="66" y="-40"/>
-                </Offset>
-              </Anchor>
-            </Anchors>
-            <Scripts>
-              <OnLoad>UIDropDownMenu_SetWidth(200);              UIDropDownMenu_Initialize(this, BuffDropInit);</OnLoad>
-            </Scripts>
-          </Button>
-        </Frames>
-        <Anchors>
-          <Anchor point="TOP">
-            <Offset x="0" y="-102"/>
-          </Anchor>
-        </Anchors>
-        <Layers>
-          <Layer>
-            <FontString name="$parentHeaderString" text="Buffs" inherits="BrHeaderFontStringTemplate"/>
-          </Layer>
-        </Layers>
-        <Scripts>
-          <OnLoad>BrBuffCfg_OnLoad();</OnLoad>
-        </Scripts>
-      </Frame>
-      <!--END BUFF SECTION-->
-      <Frame name="GConditions" inherits="BasicFrameTemplate">
-        <Frames>
-          <CheckButton name="$parentAlwaysCheck" inherits="UICheckButtonTemplate" checked="false" disabled="true" text="always">
-            <Anchors>
-              <Anchor point="TOPLEFT">
-                <Offset x="0" y="-16"/>
-              </Anchor>
-            </Anchors>
-            <Scripts>
-              <OnLoad>getglobal(this:GetName().."Text"):SetText("Always");</OnLoad>
-              <OnClick>BrCheck_Clicked();</OnClick>
-            </Scripts>
-          </CheckButton>
-          <CheckButton name="$parentRestingCheck" inherits="UICheckButtonTemplate" checked="false" text="resting">
-            <Anchors>
-              <Anchor point="TOPLEFT">
-                <Offset x="80" y="-16"/>
-              </Anchor>
-            </Anchors>
-            <Scripts>
-              <OnLoad>getglobal(this:GetName().."Text"):SetText("Resting");</OnLoad>
-              <OnClick>BrCheck_Clicked();</OnClick>
-            </Scripts>
-          </CheckButton>
-          <CheckButton name="$parentTaxiCheck" inherits="UICheckButtonTemplate" checked="false" text="taxi">
-            <Anchors>
-              <Anchor point="TOPLEFT">
-                <Offset x="160" y="-16"/>
-              </Anchor>
-            </Anchors>
-            <Scripts>
-              <OnLoad>getglobal(this:GetName().."Text"):SetText("On Taxi");</OnLoad>
-              <OnClick>BrCheck_Clicked();</OnClick>
-            </Scripts>
-          </CheckButton>
-          <CheckButton name="$parentDeadCheck" inherits="UICheckButtonTemplate" checked="false" text="dead">
-            <Anchors>
-              <Anchor point="TOPLEFT">
-                <Offset x="240" y="-16"/>
-              </Anchor>
-            </Anchors>
-            <Scripts>
-              <OnLoad>getglobal(this:GetName().."Text"):SetText("Dead");</OnLoad>
-              <OnClick>BrCheck_Clicked();</OnClick>
-            </Scripts>
-          </CheckButton>
-          <CheckButton name="$parentPartyCheck" inherits="UICheckButtonTemplate" checked="false" text="party">
-            <Anchors>
-              <Anchor point="TOPLEFT">
-                <Offset x="0" y="-46"/>
-              </Anchor>
-            </Anchors>
-            <Scripts>
-              <OnLoad>getglobal(this:GetName().."Text"):SetText("In Party");</OnLoad>
-              <OnClick>BrCheck_Clicked();</OnClick>
-            </Scripts>
-          </CheckButton>
-          <CheckButton name="$parentRaidCheck" inherits="UICheckButtonTemplate" checked="false" text="raid">
-            <Anchors>
-              <Anchor point="TOPLEFT">
-                <Offset x="80" y="-46"/>
-              </Anchor>
-            </Anchors>
-            <Scripts>
-              <OnLoad>getglobal(this:GetName().."Text"):SetText("In Raid");</OnLoad>
-              <OnClick>BrCheck_Clicked();</OnClick>
-            </Scripts>
-          </CheckButton>
-          <CheckButton name="$parentInstanceCheck" inherits="UICheckButtonTemplate" checked="false" text="instance">
-            <Anchors>
-              <Anchor point="TOPLEFT">
-                <Offset x="160" y="-46"/>
-              </Anchor>
-            </Anchors>
-            <Scripts>
-              <OnLoad>getglobal(this:GetName().."Text"):SetText("In Instance");</OnLoad>
-              <OnClick>BrCheck_Clicked();</OnClick>
-            </Scripts>
-          </CheckButton>
-          <EditBox name="BrTimeEdit" inherits="InputBoxTemplate" letters="6" numeric="true">
-            <Size>
-              <AbsDimension x="60" y="32"/>
-            </Size>
-            <Anchors>
-              <Anchor point="TOPLEFT">
-                <Offset x="140" y="-74"/>
-              </Anchor>
-            </Anchors>
-            <Scripts>
-              <OnLoad>this:SetAutoFocus(false);                this:SetTextInsets(0, 8, 0, 0);</OnLoad>
-              <OnEnterPressed>this:ClearFocus();</OnEnterPressed>
-            </Scripts>
-          </EditBox>
-          <Button name="GroupSaveBtn" inherits="BrButtonTemplate" text="Save Options">
-            <Size>
-              <AbsDimension x="100" y="20"/>
-            </Size>
-            <Anchors>
-              <Anchor point="TOPLEFT">
-                <Offset x="212" y="-80"/>
-              </Anchor>
-            </Anchors>
-            <Scripts>
-              <OnLoad>this:Disable()</OnLoad>
-              <OnClick>BrSaveGroup();</OnClick>
-            </Scripts>
-          </Button>
-        </Frames>
-        <Size>
-          <AbsDimension x="340" y="100"/>
-        </Size>
-        <Anchors>
-          <Anchor point="TOP">
-            <Offset x="0" y="-182"/>
-          </Anchor>
-        </Anchors>
-        <Scripts>
-          <OnLoad>GroupLayout_DisableChecks();</OnLoad>
-        </Scripts>
-        <Layers>
-          <Layer>
-            <FontString name="$parentHeaderString" text="Hide Icons Conditions" inherits="BrHeaderFontStringTemplate"/>
-            <FontString name="$parentTimeString" text="Early Warning Time:" inherits="BrFontStringTemplate">
-              <Anchors>
-                <Anchor point="TOPLEFT">
-                  <Offset x="8" y="-84"/>
-                </Anchor>
-              </Anchors>
-            </FontString>
-          </Layer>
-        </Layers>
-      </Frame>
-      <!--Defaults-->
-      <Frame name="DefConditions" inherits="BasicFrameTemplate">
-        <Frames>
-          <CheckButton name="$parentAlwaysCheck" inherits="UICheckButtonTemplate" checked="false" text="always">
-            <Anchors>
-              <Anchor point="TOPLEFT">
-                <Offset x="0" y="-16"/>
-              </Anchor>
-            </Anchors>
-            <Scripts>
-              <OnLoad>getglobal(this:GetName().."Text"):SetText("Always");</OnLoad>
-              <OnClick>BrCheck_Clicked();</OnClick>
-            </Scripts>
-          </CheckButton>
-          <CheckButton name="$parentRestingCheck" inherits="UICheckButtonTemplate" checked="false" text="resting">
-            <Anchors>
-              <Anchor point="TOPLEFT">
-                <Offset x="80" y="-16"/>
-              </Anchor>
-            </Anchors>
-            <Scripts>
-              <OnLoad>getglobal(this:GetName().."Text"):SetText("Resting");</OnLoad>
-              <OnClick>BrCheck_Clicked();</OnClick>
-            </Scripts>
-          </CheckButton>
-          <CheckButton name="$parentTaxiCheck" inherits="UICheckButtonTemplate" checked="false" text="taxi">
-            <Anchors>
-              <Anchor point="TOPLEFT">
-                <Offset x="160" y="-16"/>
-              </Anchor>
-            </Anchors>
-            <Scripts>
-              <OnLoad>getglobal(this:GetName().."Text"):SetText("On Taxi");</OnLoad>
-              <OnClick>BrCheck_Clicked();</OnClick>
-            </Scripts>
-          </CheckButton>
-          <CheckButton name="$parentDeadCheck" inherits="UICheckButtonTemplate" checked="false" text="dead">
-            <Anchors>
-              <Anchor point="TOPLEFT">
-                <Offset x="240" y="-16"/>
-              </Anchor>
-            </Anchors>
-            <Scripts>
-              <OnLoad>getglobal(this:GetName().."Text"):SetText("Dead");</OnLoad>
-              <OnClick>BrCheck_Clicked();</OnClick>
-            </Scripts>
-          </CheckButton>
-          <CheckButton name="$parentPartyCheck" inherits="UICheckButtonTemplate" checked="false" text="party">
-            <Anchors>
-              <Anchor point="TOPLEFT">
-                <Offset x="0" y="-46"/>
-              </Anchor>
-            </Anchors>
-            <Scripts>
-              <OnLoad>getglobal(this:GetName().."Text"):SetText("In Party");</OnLoad>
-              <OnClick>BrCheck_Clicked();</OnClick>
-            </Scripts>
-          </CheckButton>
-          <CheckButton name="$parentRaidCheck" inherits="UICheckButtonTemplate" checked="false" text="raid">
-            <Anchors>
-              <Anchor point="TOPLEFT">
-                <Offset x="80" y="-46"/>
-              </Anchor>
-            </Anchors>
-            <Scripts>
-              <OnLoad>getglobal(this:GetName().."Text"):SetText("In Raid");</OnLoad>
-              <OnClick>BrCheck_Clicked();</OnClick>
-            </Scripts>
-          </CheckButton>
-          <CheckButton name="$parentInstanceCheck" inherits="UICheckButtonTemplate" checked="false" text="instance">
-            <Anchors>
-              <Anchor point="TOPLEFT">
-                <Offset x="160" y="-46"/>
-              </Anchor>
-            </Anchors>
-            <Scripts>
-              <OnLoad>getglobal(this:GetName().."Text"):SetText("In Instance");</OnLoad>
-              <OnClick>BrCheck_Clicked();</OnClick>
-            </Scripts>
-          </CheckButton>
-          <EditBox name="BrSoundEdit" inherits="InputBoxTemplate" letters="80" numeric="false">
-            <Size>
-              <AbsDimension x="180" y="32"/>
-            </Size>
-            <Anchors>
-              <Anchor point="TOPLEFT">
-                <Offset x="112" y="-75"/>
-              </Anchor>
-            </Anchors>
-            <Scripts>
-              <OnLoad>this:SetAutoFocus(false);this:SetTextInsets(0, 8, 0, 0);</OnLoad>
-              <OnEnterPressed>this:ClearFocus();</OnEnterPressed>
-            </Scripts>
-          </EditBox>
-          <EditBox name="BrDefTimeEdit" inherits="InputBoxTemplate" letters="6" numeric="true">
-            <Size>
-              <AbsDimension x="60" y="32"/>
-            </Size>
-            <Anchors>
-              <Anchor point="TOPLEFT">
-                <Offset x="140" y="-100"/>
-              </Anchor>
-            </Anchors>
-            <Scripts>
-              <OnLoad>this:SetAutoFocus(false);this:SetTextInsets(0, 8, 0, 0);</OnLoad>
-              <OnEnterPressed>this:ClearFocus();</OnEnterPressed>
-            </Scripts>
-          </EditBox>
-          <Button name="DefaultSaveBtn" inherits="BrButtonTemplate" text="Save Defaults">
-            <Size>
-              <AbsDimension x="100" y="20"/>
-            </Size>
-            <Anchors>
-              <Anchor point="TOPLEFT">
-                <Offset x="212" y="-107"/>
-              </Anchor>
-            </Anchors>
-            <Scripts>
-              <OnClick>BrSaveDefaults();</OnClick>
-            </Scripts>
-          </Button>
-          <Slider name="$parentSizeSlider" inherits="OptionsSliderTemplate" minValue="10" maxValue="400" valuestep="2">
-            <Size>
-              <AbsDimension x="220" y="16"/>
-            </Size>
-            <Anchors>
-              <Anchor point="BOTTOMLEFT">
-                <Offset>
-                  <AbsDimension x="2" y="-64" />
-                </Offset>
-              </Anchor>
-            </Anchors>
-            <Scripts>
-              <OnShow>this:SetValue(brOptions.size)</OnShow>
-              <OnLoad>getglobal(this:GetName() .. 'Low'):SetText('10');getglobal(this:GetName() .. 'High'):SetText('400');getglobal(this:GetName() .. 'Text'):SetText('Icon Size');</OnLoad>
-              <OnValueChanged>brOptions.size = this:GetValue(); BuffReminder_DrawIcons();</OnValueChanged>
-            </Scripts>
-          </Slider>
-
-          <Slider name="$parentAlphaSlider" inherits="OptionsSliderTemplate" minValue="0" maxValue="1" valuestep=".1">
-            <Size>
-              <AbsDimension x="100" y="16"/>
-            </Size>
-            <Anchors>
-              <Anchor point="BOTTOMLEFT">
-                <Offset>
-                  <AbsDimension x="234" y="-64" />
-                </Offset>
-              </Anchor>
-            </Anchors>
-            <Scripts>
-              <OnShow>this:SetValue(brOptions.alpha)</OnShow>
-              <OnLoad>getglobal(this:GetName() .. 'Low'):SetText('0');getglobal(this:GetName() .. 'High'):SetText('1');getglobal(this:GetName() .. 'Text'):SetText('Icon Transparency');</OnLoad>
-              <OnValueChanged>brOptions.alpha = this:GetValue(); BuffReminder_DrawIcons();</OnValueChanged>
-            </Scripts>
-          </Slider>
-
-
-
-        </Frames>
-        <Size>
-          <AbsDimension x="340" y="100"/>
-        </Size>
-        <Anchors>
-          <Anchor point="TOP">
-            <Offset x="0" y="-300"/>
-          </Anchor>
-        </Anchors>
-        <Layers>
-          <Layer>
-            <FontString name="$parentHeaderString" text="Defaults" inherits="BrHeaderFontStringTemplate"/>
-            <FontString name="$parentTimeString" text="Early Warning Time:" inherits="BrFontStringTemplate">
-              <Anchors>
-                <Anchor point="TOPLEFT">
-                  <Offset x="8" y="-110"/>
-                </Anchor>
-              </Anchors>
-            </FontString>
-            <FontString name="$parentSoundString" text="Warning Sound:" inherits="BrFontStringTemplate">
-              <Anchors>
-                <Anchor point="TOPLEFT">
-                  <Offset x="8" y="-85"/>
-                </Anchor>
-              </Anchors>
-            </FontString>
-          </Layer>
-        </Layers>
-      </Frame>
-      <!--End Defaults-->
-      <Button name="$parentDoneButton" inherits="GameMenuButtonTemplate" text="Done">
-        <Size>
-          <AbsDimension x="90" y="24"/>
-        </Size>
-        <Anchors>
-          <Anchor point="BOTTOM">
-            <Offset>
-              <AbsDimension x="0" y="20"/>
-            </Offset>
-          </Anchor>
-        </Anchors>
-        <Scripts>
-          <OnClick>BrGroupsConfigFrame:Hide();</OnClick>
-        </Scripts>
-      </Button>
-    </Frames>
-    <!--bgFile="Interface\DialogFrame\UI-DialogBox-Background"-->
-    <Backdrop edgeFile="Interface\DialogFrame\UI-DialogBox-Border" tile="true">
-      <BackgroundInsets>
-        <AbsInset left="11" right="12" top="12" bottom="11"/>
-      </BackgroundInsets>
-      <TileSize>
-        <AbsValue val="32"/>
-      </TileSize>
-      <EdgeSize>
-        <AbsValue val="32"/>
-      </EdgeSize>
-    </Backdrop>
-    <Scripts>
-      <OnShow>BrGroupsConfigFrame_OnShow();</OnShow>
-    </Scripts>
-    <Layers>
-      <Layer level="BACKGROUND">
-        <Texture>
-          <Color r="0" g="0" b="0" a="0.9"/>
-          <Anchors>
-            <Anchor point="TOPLEFT">
-              <Offset x="6" y="-6"/>
-            </Anchor>
-            <Anchor point="BOTTOMRIGHT">
-              <Offset x="-6" y="6"/>
-            </Anchor>
-          </Anchors>
-        </Texture>
-      </Layer>
-    </Layers>
-  </Frame>
-  <!--Floating Config Button-->
-  <Button name="BrGroupsConfigButton" parent="UIParent" frameStrata="LOW" toplevel="true" movable="true" enableMouse="true">
-    <Size>
-      <AbsDimension x="24" y="24"/>
-    </Size>
-    <Anchors>
-      <Anchor point="CENTER">
-        <Offset>
-          <AbsDimension x="0" y="0"/>
-        </Offset>
-      </Anchor>
-    </Anchors>
-    <Layers>
-      <Layer level="ARTWORK">
-        <Texture name="CButtonTex" setAllPoints="true" file="Interface\AddOns\BuffReminder\Media\cbutton">
-          <!--<Color r="1" g="0" b="1" a="0.5"/>-->
-        </Texture>
-      </Layer>
-    </Layers>
-    <Scripts>
-      <OnDragStart>this:StartMoving();</OnDragStart>
-      <OnDragStop>this:StopMovingOrSizing();</OnDragStop>
-      <OnLoad>this:RegisterForDrag("LeftButton");this:EnableMouse(true);</OnLoad>
-      <OnClick>BrGroupsConfigFrame_Toggle();</OnClick>
-      <OnEnter>BrGroupsConfigFrame_OnEnter();</OnEnter>
-      <OnLeave>BrGroupsConfigFrame_OnLeave();</OnLeave>
-    </Scripts>
-  </Button>
+﻿<Ui xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns:xsd="http://www.w3.org/2001/XMLSchema" xmlns="http://www.blizzard.com/wow/ui/">
+	<Script file="BrConfigFrame.lua" />
+	<EditBox name="BrEditTemplate" inherits="InputBoxTemplate" letters="80" virtual="true">
+		<Size>
+			<AbsDimension x="228" y="32" />
+		</Size>
+		<Scripts>
+			<OnLoad>
+				this:SetAutoFocus(false);        this:SetTextInsets(0, 8, 0, 0);
+			</OnLoad>
+			<OnEnterPressed>
+				this:ClearFocus();
+			</OnEnterPressed>
+		</Scripts>
+	</EditBox>
+	<FontString name="BrHeaderFontStringTemplate" font="Fonts\FRIZQT__.TTF" justifyH="CENTER" justifyV="TOP" virtual="true">
+		<Color r="1" g="1" b="1" a="1" />
+		<FontHeight val="12" />
+		<Shadow>
+			<Offset x="1" y="1" />
+			<Color r="0" g="0" b="0" />
+		</Shadow>
+		<Anchors>
+			<Anchor point="TOP">
+				<Offset>
+					<AbsDimension x="0" y="0" />
+				</Offset>
+			</Anchor>
+		</Anchors>
+	</FontString>
+	<FontString name="BrFontStringTemplate" font="Fonts\FRIZQT__.TTF" justifyH="CENTER" justifyV="TOP" virtual="true">
+		<Color r="1" g="1" b="0" a="1" />
+		<FontHeight val="12" />
+		<Shadow>
+			<Offset x="1" y="1" />
+			<Color r="0" g="0" b="0" />
+		</Shadow>
+	</FontString>
+	<Button name="BrButtonTemplate" inherits="GameMenuButtonTemplate" text="Button" virtual="true">
+		<Size>
+			<AbsDimension x="50" y="20" />
+		</Size>
+	</Button>
+	<Button name="BrDropTemplate" inherits="UIDropDownMenuTemplate" virtual="true">
+		<Size>
+			<AbsDimension x="200" y="30" />
+		</Size>
+		<Size>
+			<AbsDimension x="200" y="30" />
+		</Size>
+		<Anchors>
+			<Anchor point="TOPLEFT">
+				<Offset>
+					<AbsDimension x="70" y="-60" />
+				</Offset>
+			</Anchor>
+		</Anchors>
+	</Button>
+	<!-- LAYOUT TEMPLATE -->
+	<Frame name="BrLayoutTemplate" virtual="true">
+		<Size>
+			<AbsDimension x="400" y="200" />
+		</Size>
+		<Frames>
+			<Button name="$parentAddBtn" inherits="BrButtonTemplate" text="Add">
+				<Anchors>
+					<Anchor point="TOPLEFT">
+						<Offset>
+							<AbsDimension x="26" y="-16" />
+						</Offset>
+					</Anchor>
+				</Anchors>
+			</Button>
+			<Button name="$parentDelBtn" inherits="BrButtonTemplate" text="Del">
+				<Anchors>
+					<Anchor point="TOPLEFT">
+						<Offset>
+							<AbsDimension x="26" y="-44" />
+						</Offset>
+					</Anchor>
+				</Anchors>
+			</Button>
+			<EditBox name="$parentEdit" inherits="BrEditTemplate">
+				<Anchors>
+					<Anchor point="TOPLEFT">
+						<Offset>
+							<AbsDimension x="90" y="-10" />
+						</Offset>
+					</Anchor>
+				</Anchors>
+			</EditBox>
+		</Frames>
+	</Frame>
+	<!-- END TEMPLATES -->
+	<Frame name="BrGroupsConfigFrame" parent="UIParent" toplevel="true" enableMouse="true" hidden="true">
+		<Size>
+			<AbsDimension x="400" y="520" />
+		</Size>
+		<Anchors>
+			<Anchor point="CENTER">
+				<Offset x="0" y="0" />
+			</Anchor>
+		</Anchors>
+		<TitleRegion setAllPoints="true">
+			<Size>
+				<AbsDimension x="0" y="0" />
+			</Size>
+			<Anchors>
+				<Anchor point="TOPLEFT" />
+				<Anchor point="BOTTOMRIGHT" />
+			</Anchors>
+		</TitleRegion>
+		<Frames>
+			<!-- BEGIN GROUP SECTION -->
+			<Frame name="GroupLayout" inherits="BrLayoutTemplate">
+				<Frames>
+					<Button name="$parentDrop" inherits="UIDropDownMenuTemplate">
+						<Size>
+							<AbsDimension x="200" y="30" />
+						</Size>
+						<Anchors>
+							<Anchor point="TOPLEFT">
+								<Offset>
+									<AbsDimension x="66" y="-40" />
+								</Offset>
+							</Anchor>
+						</Anchors>
+						<Scripts>
+							<OnLoad>
+								UIDropDownMenu_SetWidth(200);                UIDropDownMenu_Initialize(this, GroupDropInit)
+							</OnLoad>
+						</Scripts>
+					</Button>
+				</Frames>
+				<Anchors>
+					<Anchor point="TOP">
+						<Offset x="0" y="-24" />
+					</Anchor>
+				</Anchors>
+				<Layers>
+					<Layer>
+						<FontString name="$parentHeaderString" text="Groups" inherits="BrHeaderFontStringTemplate" />
+					</Layer>
+				</Layers>
+				<Scripts>
+					<OnLoad>
+						BrGroupCfg_OnLoad();
+					</OnLoad>
+				</Scripts>
+			</Frame>
+			<!-- BEGIN BUFF SECTION -->
+			<Frame name="BuffLayout" inherits="BrLayoutTemplate" value="Buff">
+				<Frames>
+					<Button name="$parentDrop" inherits="UIDropDownMenuTemplate">
+						<Size>
+							<AbsDimension x="200" y="30" />
+						</Size>
+						<Anchors>
+							<Anchor point="TOPLEFT">
+								<Offset>
+									<AbsDimension x="66" y="-40" />
+								</Offset>
+							</Anchor>
+						</Anchors>
+						<Scripts>
+							<OnLoad>
+								UIDropDownMenu_SetWidth(200);              UIDropDownMenu_Initialize(this, BuffDropInit);
+							</OnLoad>
+						</Scripts>
+					</Button>
+				</Frames>
+				<Anchors>
+					<Anchor point="TOP">
+						<Offset x="0" y="-102" />
+					</Anchor>
+				</Anchors>
+				<Layers>
+					<Layer>
+						<FontString name="$parentHeaderString" text="Buffs" inherits="BrHeaderFontStringTemplate" />
+					</Layer>
+				</Layers>
+				<Scripts>
+					<OnLoad>
+						BrBuffCfg_OnLoad();
+					</OnLoad>
+				</Scripts>
+			</Frame>
+			<!-- END BUFF SECTION -->
+			<Frame name="GConditions" inherits="BasicFrameTemplate">
+				<Frames>
+					<CheckButton name="$parentAlwaysCheck" inherits="UICheckButtonTemplate" checked="false" disabled="true" text="always">
+						<Anchors>
+							<Anchor point="TOPLEFT">
+								<Offset x="0" y="-16" />
+							</Anchor>
+						</Anchors>
+						<Scripts>
+							<OnLoad>
+								getglobal(this:GetName().."Text"):SetText("Always");
+							</OnLoad>
+							<OnClick>
+								BrCheck_Clicked();
+							</OnClick>
+						</Scripts>
+					</CheckButton>
+					<CheckButton name="$parentRestingCheck" inherits="UICheckButtonTemplate" checked="false" text="resting">
+						<Anchors>
+							<Anchor point="TOPLEFT">
+								<Offset x="80" y="-16" />
+							</Anchor>
+						</Anchors>
+						<Scripts>
+							<OnLoad>
+								getglobal(this:GetName().."Text"):SetText("Resting");
+							</OnLoad>
+							<OnClick>
+								BrCheck_Clicked();
+							</OnClick>
+						</Scripts>
+					</CheckButton>
+					<CheckButton name="$parentTaxiCheck" inherits="UICheckButtonTemplate" checked="false" text="taxi">
+						<Anchors>
+							<Anchor point="TOPLEFT">
+								<Offset x="160" y="-16" />
+							</Anchor>
+						</Anchors>
+						<Scripts>
+							<OnLoad>
+								getglobal(this:GetName().."Text"):SetText("On Taxi");
+							</OnLoad>
+							<OnClick>
+								BrCheck_Clicked();
+							</OnClick>
+						</Scripts>
+					</CheckButton>
+					<CheckButton name="$parentDeadCheck" inherits="UICheckButtonTemplate" checked="false" text="dead">
+						<Anchors>
+							<Anchor point="TOPLEFT">
+								<Offset x="240" y="-16" />
+							</Anchor>
+						</Anchors>
+						<Scripts>
+							<OnLoad>
+								getglobal(this:GetName().."Text"):SetText("Dead");
+							</OnLoad>
+							<OnClick>
+								BrCheck_Clicked();
+							</OnClick>
+						</Scripts>
+					</CheckButton>
+					<CheckButton name="$parentPartyCheck" inherits="UICheckButtonTemplate" checked="false" text="party">
+						<Anchors>
+							<Anchor point="TOPLEFT">
+								<Offset x="0" y="-46" />
+							</Anchor>
+						</Anchors>
+						<Scripts>
+							<OnLoad>
+								getglobal(this:GetName().."Text"):SetText("In Party");
+							</OnLoad>
+							<OnClick>
+								BrCheck_Clicked();
+							</OnClick>
+						</Scripts>
+					</CheckButton>
+					<CheckButton name="$parentRaidCheck" inherits="UICheckButtonTemplate" checked="false" text="raid">
+						<Anchors>
+							<Anchor point="TOPLEFT">
+								<Offset x="80" y="-46" />
+							</Anchor>
+						</Anchors>
+						<Scripts>
+							<OnLoad>
+								getglobal(this:GetName().."Text"):SetText("In Raid");
+							</OnLoad>
+							<OnClick>
+								BrCheck_Clicked();
+							</OnClick>
+						</Scripts>
+					</CheckButton>
+					<CheckButton name="$parentInstanceCheck" inherits="UICheckButtonTemplate" checked="false" text="instance">
+						<Anchors>
+							<Anchor point="TOPLEFT">
+								<Offset x="160" y="-46" />
+							</Anchor>
+						</Anchors>
+						<Scripts>
+							<OnLoad>
+								getglobal(this:GetName().."Text"):SetText("In Instance");
+							</OnLoad>
+							<OnClick>
+								BrCheck_Clicked();
+							</OnClick>
+						</Scripts>
+					</CheckButton>
+					<EditBox name="BrTimeEdit" inherits="InputBoxTemplate" letters="6" numeric="true">
+						<Size>
+							<AbsDimension x="60" y="32" />
+						</Size>
+						<Anchors>
+							<Anchor point="TOPLEFT">
+								<Offset x="140" y="-74" />
+							</Anchor>
+						</Anchors>
+						<Scripts>
+							<OnLoad>
+								this:SetAutoFocus(false);                this:SetTextInsets(0, 8, 0, 0);
+							</OnLoad>
+							<OnEnterPressed>
+								this:ClearFocus();
+							</OnEnterPressed>
+						</Scripts>
+					</EditBox>
+					<Button name="GroupSaveBtn" inherits="BrButtonTemplate" text="Save Options">
+						<Size>
+							<AbsDimension x="100" y="20" />
+						</Size>
+						<Anchors>
+							<Anchor point="TOPLEFT">
+								<Offset x="212" y="-80" />
+							</Anchor>
+						</Anchors>
+						<Scripts>
+							<OnLoad>
+								this:Disable()
+							</OnLoad>
+							<OnClick>
+								BrSaveGroup();
+							</OnClick>
+						</Scripts>
+					</Button>
+				</Frames>
+				<Size>
+					<AbsDimension x="340" y="100" />
+				</Size>
+				<Anchors>
+					<Anchor point="TOP">
+						<Offset x="0" y="-182" />
+					</Anchor>
+				</Anchors>
+				<Scripts>
+					<OnLoad>
+						GroupLayout_DisableChecks();
+					</OnLoad>
+				</Scripts>
+				<Layers>
+					<Layer>
+						<FontString name="$parentHeaderString" text="Hide Icons Conditions" inherits="BrHeaderFontStringTemplate" />
+						<FontString name="$parentTimeString" text="Early Warning Time:" inherits="BrFontStringTemplate">
+							<Anchors>
+								<Anchor point="TOPLEFT">
+									<Offset x="8" y="-84" />
+								</Anchor>
+							</Anchors>
+						</FontString>
+					</Layer>
+				</Layers>
+			</Frame>
+			<!-- Defaults -->
+			<Frame name="DefConditions" inherits="BasicFrameTemplate">
+				<Frames>
+					<CheckButton name="$parentAlwaysCheck" inherits="UICheckButtonTemplate" checked="false" text="always">
+						<Anchors>
+							<Anchor point="TOPLEFT">
+								<Offset x="0" y="-16" />
+							</Anchor>
+						</Anchors>
+						<Scripts>
+							<OnLoad>
+								getglobal(this:GetName().."Text"):SetText("Always");
+							</OnLoad>
+							<OnClick>
+								BrCheck_Clicked();
+							</OnClick>
+						</Scripts>
+					</CheckButton>
+					<CheckButton name="$parentRestingCheck" inherits="UICheckButtonTemplate" checked="false" text="resting">
+						<Anchors>
+							<Anchor point="TOPLEFT">
+								<Offset x="80" y="-16" />
+							</Anchor>
+						</Anchors>
+						<Scripts>
+							<OnLoad>
+								getglobal(this:GetName().."Text"):SetText("Resting");
+							</OnLoad>
+							<OnClick>
+								BrCheck_Clicked();
+							</OnClick>
+						</Scripts>
+					</CheckButton>
+					<CheckButton name="$parentTaxiCheck" inherits="UICheckButtonTemplate" checked="false" text="taxi">
+						<Anchors>
+							<Anchor point="TOPLEFT">
+								<Offset x="160" y="-16" />
+							</Anchor>
+						</Anchors>
+						<Scripts>
+							<OnLoad>
+								getglobal(this:GetName().."Text"):SetText("On Taxi");
+							</OnLoad>
+							<OnClick>
+								BrCheck_Clicked();
+							</OnClick>
+						</Scripts>
+					</CheckButton>
+					<CheckButton name="$parentDeadCheck" inherits="UICheckButtonTemplate" checked="false" text="dead">
+						<Anchors>
+							<Anchor point="TOPLEFT">
+								<Offset x="240" y="-16" />
+							</Anchor>
+						</Anchors>
+						<Scripts>
+							<OnLoad>
+								getglobal(this:GetName().."Text"):SetText("Dead");
+							</OnLoad>
+							<OnClick>
+								BrCheck_Clicked();
+							</OnClick>
+						</Scripts>
+					</CheckButton>
+					<CheckButton name="$parentPartyCheck" inherits="UICheckButtonTemplate" checked="false" text="party">
+						<Anchors>
+							<Anchor point="TOPLEFT">
+								<Offset x="0" y="-46" />
+							</Anchor>
+						</Anchors>
+						<Scripts>
+							<OnLoad>
+								getglobal(this:GetName().."Text"):SetText("In Party");
+							</OnLoad>
+							<OnClick>
+								BrCheck_Clicked();
+							</OnClick>
+						</Scripts>
+					</CheckButton>
+					<CheckButton name="$parentRaidCheck" inherits="UICheckButtonTemplate" checked="false" text="raid">
+						<Anchors>
+							<Anchor point="TOPLEFT">
+								<Offset x="80" y="-46" />
+							</Anchor>
+						</Anchors>
+						<Scripts>
+							<OnLoad>
+								getglobal(this:GetName().."Text"):SetText("In Raid");
+							</OnLoad>
+							<OnClick>
+								BrCheck_Clicked();
+							</OnClick>
+						</Scripts>
+					</CheckButton>
+					<CheckButton name="$parentInstanceCheck" inherits="UICheckButtonTemplate" checked="false" text="instance">
+						<Anchors>
+							<Anchor point="TOPLEFT">
+								<Offset x="160" y="-46" />
+							</Anchor>
+						</Anchors>
+						<Scripts>
+							<OnLoad>
+								getglobal(this:GetName().."Text"):SetText("In Instance");
+							</OnLoad>
+							<OnClick>
+								BrCheck_Clicked();
+							</OnClick>
+						</Scripts>
+					</CheckButton>
+					<EditBox name="BrSoundEdit" inherits="InputBoxTemplate" letters="80" numeric="false">
+						<Size>
+							<AbsDimension x="180" y="32" />
+						</Size>
+						<Anchors>
+							<Anchor point="TOPLEFT">
+								<Offset x="112" y="-75" />
+							</Anchor>
+						</Anchors>
+						<Scripts>
+							<OnLoad>
+								this:SetAutoFocus(false);this:SetTextInsets(0, 8, 0, 0);
+							</OnLoad>
+							<OnEnterPressed>
+								this:ClearFocus();
+							</OnEnterPressed>
+						</Scripts>
+					</EditBox>
+					<EditBox name="BrDefTimeEdit" inherits="InputBoxTemplate" letters="6" numeric="true">
+						<Size>
+							<AbsDimension x="60" y="32" />
+						</Size>
+						<Anchors>
+							<Anchor point="TOPLEFT">
+								<Offset x="140" y="-100" />
+							</Anchor>
+						</Anchors>
+						<Scripts>
+							<OnLoad>
+								this:SetAutoFocus(false);this:SetTextInsets(0, 8, 0, 0);
+							</OnLoad>
+							<OnEnterPressed>
+								this:ClearFocus();
+							</OnEnterPressed>
+						</Scripts>
+					</EditBox>
+					<Button name="DefaultSaveBtn" inherits="BrButtonTemplate" text="Save Defaults">
+						<Size>
+							<AbsDimension x="100" y="20" />
+						</Size>
+						<Anchors>
+							<Anchor point="TOPLEFT">
+								<Offset x="212" y="-107" />
+							</Anchor>
+						</Anchors>
+						<Scripts>
+							<OnClick>
+								BrSaveDefaults();
+							</OnClick>
+						</Scripts>
+					</Button>
+					<Slider name="$parentSizeSlider" inherits="OptionsSliderTemplate" minValue="10" maxValue="400" valuestep="2">
+						<Size>
+							<AbsDimension x="220" y="16" />
+						</Size>
+						<Anchors>
+							<Anchor point="BOTTOMLEFT">
+								<Offset>
+									<AbsDimension x="2" y="-64" />
+								</Offset>
+							</Anchor>
+						</Anchors>
+						<Scripts>
+							<OnShow>
+								this:SetValue(brOptions.size)
+							</OnShow>
+							<OnLoad>
+								getglobal(this:GetName() .. 'Low'):SetText('10');getglobal(this:GetName() .. 'High'):SetText('400');getglobal(this:GetName() .. 'Text'):SetText('Icon Size');
+							</OnLoad>
+							<OnValueChanged>
+								brOptions.size = this:GetValue(); BuffReminder_DrawIcons();
+							</OnValueChanged>
+						</Scripts>
+					</Slider>
+					<Slider name="$parentAlphaSlider" inherits="OptionsSliderTemplate" minValue="0" maxValue="1" valuestep=".1">
+						<Size>
+							<AbsDimension x="100" y="16" />
+						</Size>
+						<Anchors>
+							<Anchor point="BOTTOMLEFT">
+								<Offset>
+									<AbsDimension x="234" y="-64" />
+								</Offset>
+							</Anchor>
+						</Anchors>
+						<Scripts>
+							<OnShow>
+								this:SetValue(brOptions.alpha)
+							</OnShow>
+							<OnLoad>
+								getglobal(this:GetName() .. 'Low'):SetText('0');getglobal(this:GetName() .. 'High'):SetText('1');getglobal(this:GetName() .. 'Text'):SetText('Icon Transparency');
+							</OnLoad>
+							<OnValueChanged>
+								brOptions.alpha = this:GetValue(); BuffReminder_DrawIcons();
+							</OnValueChanged>
+						</Scripts>
+					</Slider>
+				</Frames>
+				<Size>
+					<AbsDimension x="340" y="100" />
+				</Size>
+				<Anchors>
+					<Anchor point="TOP">
+						<Offset x="0" y="-300" />
+					</Anchor>
+				</Anchors>
+				<Layers>
+					<Layer>
+						<FontString name="$parentHeaderString" text="Defaults" inherits="BrHeaderFontStringTemplate" />
+						<FontString name="$parentTimeString" text="Early Warning Time:" inherits="BrFontStringTemplate">
+							<Anchors>
+								<Anchor point="TOPLEFT">
+									<Offset x="8" y="-110" />
+								</Anchor>
+							</Anchors>
+						</FontString>
+						<FontString name="$parentSoundString" text="Warning Sound:" inherits="BrFontStringTemplate">
+							<Anchors>
+								<Anchor point="TOPLEFT">
+									<Offset x="8" y="-85" />
+								</Anchor>
+							</Anchors>
+						</FontString>
+					</Layer>
+				</Layers>
+			</Frame>
+			<!-- End Defaults -->
+			<Button name="$parentDoneButton" inherits="GameMenuButtonTemplate" text="Done">
+				<Size>
+					<AbsDimension x="90" y="24" />
+				</Size>
+				<Anchors>
+					<Anchor point="BOTTOM">
+						<Offset>
+							<AbsDimension x="0" y="20" />
+						</Offset>
+					</Anchor>
+				</Anchors>
+				<Scripts>
+					<OnClick>
+						BrGroupsConfigFrame:Hide();
+					</OnClick>
+				</Scripts>
+			</Button>
+		</Frames>
+		<!-- bgFile="Interface\DialogFrame\UI-DialogBox-Background" -->
+		<Backdrop edgeFile="Interface\DialogFrame\UI-DialogBox-Border" tile="true">
+			<BackgroundInsets>
+				<AbsInset left="11" right="12" top="12" bottom="11" />
+			</BackgroundInsets>
+			<TileSize>
+				<AbsValue val="32" />
+			</TileSize>
+			<EdgeSize>
+				<AbsValue val="32" />
+			</EdgeSize>
+		</Backdrop>
+		<Scripts>
+			<OnShow>
+				BrGroupsConfigFrame_OnShow();
+			</OnShow>
+		</Scripts>
+		<Layers>
+			<Layer level="BACKGROUND">
+				<Texture>
+					<Color r="0" g="0" b="0" a="0.9" />
+					<Anchors>
+						<Anchor point="TOPLEFT">
+							<Offset x="6" y="-6" />
+						</Anchor>
+						<Anchor point="BOTTOMRIGHT">
+							<Offset x="-6" y="6" />
+						</Anchor>
+					</Anchors>
+				</Texture>
+			</Layer>
+		</Layers>
+	</Frame>
+	<!-- Floating Config Button -->
+	<Button name="BrGroupsConfigButton" parent="UIParent" frameStrata="LOW" toplevel="true" movable="true" enableMouse="true">
+		<Size>
+			<AbsDimension x="24" y="24" />
+		</Size>
+		<Anchors>
+			<Anchor point="CENTER">
+				<Offset>
+					<AbsDimension x="0" y="0" />
+				</Offset>
+			</Anchor>
+		</Anchors>
+		<Layers>
+			<Layer level="ARTWORK">
+				<Texture name="CButtonTex" setAllPoints="true" file="Interface\AddOns\BuffReminder\Media\cbutton">
+					<!-- <Color r="1" g="0" b="1" a="0.5"/> -->
+				</Texture>
+			</Layer>
+		</Layers>
+		<Scripts>
+			<OnDragStart>
+				this:StartMoving();
+			</OnDragStart>
+			<OnDragStop>
+				this:StopMovingOrSizing();
+			</OnDragStop>
+			<OnLoad>
+				this:RegisterForDrag("LeftButton");this:EnableMouse(true);
+			</OnLoad>
+			<OnClick>
+				BrGroupsConfigFrame_Toggle();
+			</OnClick>
+			<OnEnter>
+				BrGroupsConfigFrame_OnEnter();
+			</OnEnter>
+			<OnLeave>
+				BrGroupsConfigFrame_OnLeave();
+			</OnLeave>
+		</Scripts>
+	</Button>
 </Ui>
