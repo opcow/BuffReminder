@@ -16,7 +16,6 @@ A World of Warcraft 1.12 (Vanilla WoW) addon that displays user placable icons o
 ## Config Dialog
 ![config dialog image](http://i.imgur.com/rGkEs38.png)
 
-
 ##Command Line Configuration
 Group commands:
 
