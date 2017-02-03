@@ -42,7 +42,6 @@ function DelGroupClicked()
 end
 
 function GroupDropInit(level)
-    DEFAULT_CHAT_FRAME:AddMessage("-----+++++------")
     local info = UIDropDownMenu_CreateInfo()
     for i in brBuffGroups do
         info.text, info.checked, info.notCheckable, info.keepShownOnClick, info.arg1, info.func = i, false, false, false, i, GroupLayoutDrop_OnClick
