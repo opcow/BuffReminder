@@ -430,10 +430,15 @@
 								this:SetValue(brOptions.size)
 							</OnShow>
 							<OnLoad>
-								getglobal(this:GetName() .. 'Low'):SetText('');getglobal(this:GetName() .. 'High'):SetText('');getglobal(this:GetName() .. 'Text'):SetText('Icon Size');
+								getglobal(this:GetName() .. 'Low'):SetText('');
+								getglobal(this:GetName() .. 'High'):SetText('');
+								getglobal(this:GetName() .. 'Text'):SetText('Icon Size');
 							</OnLoad>
 							<OnValueChanged>
-								brOptions.size = this:GetValue(); BuffReminder_DrawIcons();
+								brOptions.size = this:GetValue();
+								BuffReminderFrame:SetWidth(brOptions.size)
+					            BuffReminderFrame:SetHeight(brOptions.size)
+								BuffReminder.DrawIcons();
 							</OnValueChanged>
 						</Scripts>
 					</Slider>
@@ -456,7 +461,7 @@
 								getglobal(this:GetName() .. 'Low'):SetText('');getglobal(this:GetName() .. 'High'):SetText('');getglobal(this:GetName() .. 'Text'):SetText('Icon Transparency');
 							</OnLoad>
 							<OnValueChanged>
-								brOptions.alpha = this:GetValue(); BuffReminder_DrawIcons();
+								brOptions.alpha = this:GetValue(); BuffReminder.DrawIcons();
 							</OnValueChanged>
 						</Scripts>
 					</Slider>

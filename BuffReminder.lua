@@ -45,7 +45,6 @@ local function getArgs(m)
         return nil, 0
     end
     
-    
     for i in string.gfind(m, '(".-")') do
         m = string.gsub(m, i, string.gsub(string.gsub(i, "%s", "%%%%space%%%%"), '"', ""))
     end
@@ -99,14 +98,14 @@ local function MakeIcon(icon)
     lbrWarnIconFrames[icon]:SetWidth(brOptions.size)
     lbrWarnIconFrames[icon]:SetHeight(brOptions.size)
 
-    local tex = lbrWarnIconFrames[icon]:CreateTexture(nil, "BACKGROUND")
+    local tex = lbrWarnIconFrames[icon]:CreateTexture(nil, "ARTWORK")
     tex:SetTexture(icon)
     tex:SetAlpha(brOptions.alpha)
     tex:SetAllPoints(lbrWarnIconFrames[icon])
     lbrWarnIconFrames[icon].texture = tex
 end
 
-function BuffReminder_DrawIcons()
+function BuffReminder.DrawIcons()
     ClearIcons()
     local skipIcon
     for i in brBuffGroups do
@@ -198,7 +197,7 @@ local function PrintBuffs()
     end
 end
 
-local function PrintAllGroups()
+function BuffReminder.PrintAllGroups()
     DEFAULT_CHAT_FRAME:AddMessage("\124cffcbeb1c\124h** buff groups **")
     for i in brBuffGroups do
         DEFAULT_CHAT_FRAME:AddMessage("\124cffcbeb1c\124h   " .. i)
@@ -207,7 +206,7 @@ local function PrintAllGroups()
     DEFAULT_CHAT_FRAME:AddMessage("\124cffcbeb1c\124h** end of buff groups **")
 end
 
-local function PrintGroup(group)
+function BuffReminder.PrintGroup(group)
     DEFAULT_CHAT_FRAME:AddMessage('\124cffffff00\124hGroup: ' .. tostring(group))
     for i in brBuffGroups[group].buffs do
         DEFAULT_CHAT_FRAME:AddMessage("\124cffffff00\124h  " .. i)
@@ -226,7 +225,7 @@ function BuffReminder.AddBuffToGroup(grp, name, print)
     if name ~= nil then
         brBuffGroups[grp].buffs[name] = {}
     end
-    if print then PrintGroup(grp) end
+    if print then BuffReminder.PrintGroup(grp) end
     brForceUpdate = true
 end
 
@@ -284,7 +283,7 @@ function SlashCmdList.BuffReminder(msg)-- we put the slash commands to work
     -- group command and subcommands
     if largs[1] == "group" then
         if argc == 1 then
-            PrintAllGroups()
+            BuffReminder.PrintAllGroups()
         else
             if largs[3] == "add" then
                 BuffReminder.AddBuffToGroup(args[2], args[4], true)
@@ -307,7 +306,7 @@ function SlashCmdList.BuffReminder(msg)-- we put the slash commands to work
                     end
                 end
             end
-            PrintGroup(args[2])
+            BuffReminder.PrintGroup(args[2])
         end
         handled = true
     -- buff command and subcommands
@@ -319,7 +318,7 @@ function SlashCmdList.BuffReminder(msg)-- we put the slash commands to work
             if g == nil then
                 DEFAULT_CHAT_FRAME:AddMessage("\124cffabb7ff\124hBuff " .. args[2] .. " does not exist in any buff groups.")
             else
-                PrintGroup(g)
+                BuffReminder.PrintGroup(g)
             end
         elseif largs[3] == "remove" then
             for i in brBuffGroups do
@@ -416,9 +415,9 @@ function BuffReminder_OnUpdate(self)
         if brForceUpdate then
             ChkBuffsExist()
             brForceUpdate = false
-            BuffReminder_DrawIcons()
+            BuffReminder.DrawIcons()
         elseif ChkBuffsExist() then
-            BuffReminder_DrawIcons()
+            BuffReminder.DrawIcons()
         end
         lbrUpdateTime = GetTime()
     end
@@ -452,6 +451,8 @@ function BuffReminder_OnEvent(event, arg1)
     elseif event == "ADDON_LOADED" then
     -- fix old config for tristate conditions or other issues
         if arg1 == "BuffReminder" then
+            BuffReminderFrame:SetWidth(brOptions.size)
+            BuffReminderFrame:SetHeight(brOptions.size)
             if brOptions.version == nil then brOptions.version = "1.0" end
             if brOptions.conditions == nil then
                 brOptions.conditions = brDefaultOptions.conditions

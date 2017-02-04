@@ -13,7 +13,7 @@
       </Anchor>
     </Anchors>
     <Layers>
-      <Layer level="TOOLTIP">
+      <Layer level="BACKGROUND">
         <Texture setAllPoints="true" name="brtexture">
           <!--<Color r="1" g="0" b="0" a="0.5"/>-->
         </Texture>
