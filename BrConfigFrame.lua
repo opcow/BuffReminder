@@ -4,13 +4,13 @@ local curGroupSel
 local curBuffSel
 
 function BrGroupsConfigFrame_OnShow()
-    DefConditionsAlwaysCheck:SetChecked(brOptions.conditions["always"])
-    DefConditionsRestingCheck:SetChecked(brOptions.conditions["resting"])
-    DefConditionsTaxiCheck:SetChecked(brOptions.conditions["taxi"])
-    DefConditionsDeadCheck:SetChecked(brOptions.conditions["dead"])
-    DefConditionsPartyCheck:SetChecked(brOptions.conditions["party"])
-    DefConditionsRaidCheck:SetChecked(brOptions.conditions["raid"])
-    DefConditionsInstanceCheck:SetChecked(brOptions.conditions["instance"])
+    BrCheck_SetState(DefConditionsAlwaysCheck, brOptions.conditions["always"])
+    BrCheck_SetState(DefConditionsRestingCheck, brOptions.conditions["resting"])
+    BrCheck_SetState(DefConditionsTaxiCheck, brOptions.conditions["taxi"])
+    BrCheck_SetState(DefConditionsDeadCheck, brOptions.conditions["dead"])
+    BrCheck_SetState(DefConditionsPartyCheck, brOptions.conditions["party"])
+    BrCheck_SetState(DefConditionsRaidCheck, brOptions.conditions["raid"])
+    BrCheck_SetState(DefConditionsInstanceCheck, brOptions.conditions["instance"])
     if brOptions.warntime == nil then
         BrDefTimeEdit:SetText("60")
     else
@@ -61,13 +61,13 @@ function GroupLayoutDrop_OnClick(arg1)
     UIDropDownMenu_SetSelectedID(GroupLayoutDrop, this:GetID())
     if brBuffGroups[arg1] ~= nil then
         GroupLayout_EnableChecks()
-        GConditionsAlwaysCheck:SetChecked(brBuffGroups[arg1].conditions["always"])
-        GConditionsRestingCheck:SetChecked(brBuffGroups[arg1].conditions["resting"])
-        GConditionsTaxiCheck:SetChecked(brBuffGroups[arg1].conditions["taxi"])
-        GConditionsDeadCheck:SetChecked(brBuffGroups[arg1].conditions["dead"])
-        GConditionsPartyCheck:SetChecked(brBuffGroups[arg1].conditions["party"])
-        GConditionsRaidCheck:SetChecked(brBuffGroups[arg1].conditions["raid"])
-        GConditionsInstanceCheck:SetChecked(brBuffGroups[arg1].conditions["instance"])
+        BrCheck_SetState(GConditionsAlwaysCheck, brBuffGroups[arg1].conditions["always"])
+        BrCheck_SetState(GConditionsRestingCheck, brBuffGroups[arg1].conditions["resting"])
+        BrCheck_SetState(GConditionsTaxiCheck, brBuffGroups[arg1].conditions["taxi"])
+        BrCheck_SetState(GConditionsDeadCheck, brBuffGroups[arg1].conditions["dead"])
+        BrCheck_SetState(GConditionsPartyCheck, brBuffGroups[arg1].conditions["party"])
+        BrCheck_SetState(GConditionsRaidCheck, brBuffGroups[arg1].conditions["raid"])
+        BrCheck_SetState(GConditionsInstanceCheck, brBuffGroups[arg1].conditions["instance"])
         BrTimeEdit:SetText(brBuffGroups[arg1].warntime)
         GroupSaveBtn:Enable()
     else
@@ -98,13 +98,14 @@ end
 
 function BrSaveGroup()
     if brBuffGroups[curGroupSel] ~= nil then
-        brBuffGroups[curGroupSel].conditions.always = (GConditionsAlwaysCheck:GetChecked() == 1)
-        brBuffGroups[curGroupSel].conditions.resting = (GConditionsRestingCheck:GetChecked() == 1)
-        brBuffGroups[curGroupSel].conditions.taxi = (GConditionsTaxiCheck:GetChecked() == 1)
-        brBuffGroups[curGroupSel].conditions.dead = (GConditionsDeadCheck:GetChecked() == 1)
-        brBuffGroups[curGroupSel].conditions.party = (GConditionsPartyCheck:GetChecked() == 1)
-        brBuffGroups[curGroupSel].conditions.raid = (GConditionsRaidCheck:GetChecked() == 1)
-        brBuffGroups[curGroupSel].conditions.instance = (GConditionsInstanceCheck:GetChecked() == 1)
+
+        brBuffGroups[curGroupSel].conditions.always = GConditionsAlwaysCheck.state
+        brBuffGroups[curGroupSel].conditions.resting = GConditionsRestingCheck.state
+        brBuffGroups[curGroupSel].conditions.taxi = GConditionsTaxiCheck.state
+        brBuffGroups[curGroupSel].conditions.dead = GConditionsDeadCheck.state
+        brBuffGroups[curGroupSel].conditions.party = GConditionsPartyCheck.state
+        brBuffGroups[curGroupSel].conditions.raid = GConditionsRaidCheck.state
+        brBuffGroups[curGroupSel].conditions.instance = GConditionsInstanceCheck.state
         brBuffGroups[curGroupSel].warntime = tonumber(BrTimeEdit:GetText())
         brForceUpdate = true
     end
@@ -148,20 +149,54 @@ function BuffLayoutDrop_OnClick(arg1)
 end
 
 -- Check Buttons --
+function BrCheck_OnLoad()
+    this.state = 0
+    --    DEFAULT_CHAT_FRAME:AddMessage("((((((((((((((((((()))))))))))))))))))")
+    getglobal(this:GetName() .. "Text"):SetText(this:GetText())
+    local cbtex = this:CreateTexture("inverted", "BACKGROUND")
+    cbtex:SetTexture(1, 0, 0, 1)
+    cbtex:SetAllPoints(this)
+    cbtex:SetPoint("TOPLEFT", 6, -7)
+    cbtex:SetPoint("BOTTOMRIGHT", -6, 8)
+    this.texture = cbtex
+    this.texture:SetAlpha(0)
+end
+
 function BrCheck_Clicked()
-    local n = string.lower(getglobal(this:GetName() .. "Text"):GetText())
-    n = string.lower(this:GetText())
+    if this.state == 2 then
+        BrCheck_SetState(this, 0)
+    else
+    DEFAULT_CHAT_FRAME:AddMessage(tostring(this.state))
+        BrCheck_SetState(this, this.state + 1)
+    end
+end
+
+function BrCheck_GetState(check)
+end
+
+function BrCheck_SetState(check, state)
+    check.state = state
+    if state == 0 then
+        check:SetChecked(false)
+        check.texture:SetAlpha(0)
+    elseif state == 1 then
+        check.texture:SetAlpha(0)
+        check:SetChecked(true)
+    else
+        check.texture:SetAlpha(1)
+        check:SetChecked(true)
+    end
 end
 
 -- Defauts Section --
 function BrSaveDefaults()
-    brOptions.conditions.always = DefConditionsAlwaysCheck:GetChecked()
-    brOptions.conditions.resting = DefConditionsRestingCheck:GetChecked()
-    brOptions.conditions.taxi = DefConditionsTaxiCheck:GetChecked()
-    brOptions.conditions.dead = DefConditionsDeadCheck:GetChecked()
-    brOptions.conditions.party = DefConditionsPartyCheck:GetChecked()
-    brOptions.conditions.raid = DefConditionsRaidCheck:GetChecked()
-    brOptions.conditions.instance = DefConditionsInstanceCheck:GetChecked()
+    brOptions.conditions.always = DefConditionsAlwaysCheck.state
+    brOptions.conditions.resting = DefConditionsRestingCheck.state
+    brOptions.conditions.taxi = DefConditionsTaxiCheck.state
+    brOptions.conditions.dead = DefConditionsDeadCheck.state
+    brOptions.conditions.party = DefConditionsPartyCheck.state
+    brOptions.conditions.raid = DefConditionsRaidCheck.state
+    brOptions.conditions.instance = DefConditionsInstanceCheck.state
     brOptions.warnsound = BrSoundEdit:GetText()
     brOptions.warntime = tonumber(BrDefTimeEdit:GetText())
 end

@@ -3,20 +3,20 @@ BuffReminder = {}
 brBuffGroups = {}
 brOptions = {}
 brDefaultOptions = {
-    ["conditions"] = {
-        ["always"] = false,
-        ["dead"] = true,
-        ["instance"] = false,
-        ["party"] = false,
-        ["raid"] = false,
-        ["resting"] = true,
-        ["taxi"] = true,
-    },
-    ["disabled"] = false,
+    ["version"] = "1.0",
     ["warnsound"] = nil,
     ["size"] = 30,
     ["warntime"] = 60,
     ["alpha"] = 1.0,
+    ["conditions"] = {
+        ["always"] = 0,
+        ["dead"] = 1,
+        ["instance"] = 0,
+        ["party"] = 0,
+        ["raid"] = 0,
+        ["resting"] = 1,
+        ["taxi"] = 1,
+    },
 }
 
 brShowIcons = {}
@@ -75,7 +75,7 @@ local function toNum(n)
     if n == nil then DEFAULT_CHAT_FRAME:AddMessage("Invalid number given.") end
     return n
 end
----
+
 function BuffReminder.ShowIcons()
     local pitch = brOptions.size + lbrButtonSpc * 2
     local c = (pitch * (tableLen(lbrWarnIconFrames) - 1)) / 2
@@ -98,6 +98,7 @@ local function MakeIcon(icon)
     lbrWarnIconFrames[icon]:SetFrameStrata("BACKGROUND")
     lbrWarnIconFrames[icon]:SetWidth(brOptions.size)
     lbrWarnIconFrames[icon]:SetHeight(brOptions.size)
+
     local tex = lbrWarnIconFrames[icon]:CreateTexture(nil, "BACKGROUND")
     tex:SetTexture(icon)
     tex:SetAlpha(brOptions.alpha)
@@ -111,12 +112,12 @@ function BuffReminder_DrawIcons()
     for i in brBuffGroups do
     skipIcon = false
         for j in lbrPlayerStatus do
-            if lbrPlayerStatus[j] and brBuffGroups[i].conditions[j] then
+            if (brBuffGroups[i].conditions.always ~= 2) and ((brBuffGroups[i].conditions.always == 1) or (lbrPlayerStatus[j] and (brBuffGroups[i].conditions[j] == 1)) or (not lbrPlayerStatus[j] and brBuffGroups[i].conditions[j] == 2)) then
                 skipIcon = true
                 break
             end
         end
-        if not skipIcon and not brBuffGroups[i].conditions.always and brShowIcons[i] then
+        if not skipIcon and brShowIcons[i] then
             MakeIcon(brBuffGroups[i].icon)
         end
     end
@@ -396,6 +397,7 @@ function BuffReminder_OnLoad(Frame)
     this:RegisterEvent("PLAYER_ENTERING_WORLD")
     this:RegisterEvent("PARTY_MEMBERS_CHANGED")
     this:RegisterEvent("RAID_ROSTER_UPDATE")
+    this:RegisterEvent("ADDON_LOADED")
     --    this:RegisterAllEvents()
     -- tooltip frame for getting spell name
     lbrTooltipFrame = CreateFrame('GameTooltip', 'BrTooltip', UIParent, 'GameTooltipTemplate')
@@ -447,8 +449,32 @@ function BuffReminder_OnEvent(event, arg1)
         lbrPlayerStatus.raid = (GetNumRaidMembers() > 0)
         local isInstance, instanceType = (IsInInstance() == 1)
         lbrPlayerStatus.instance = isInstance
+    elseif event == "ADDON_LOADED" then
+    -- fix old config for tristate conditions or other issues
+        if arg1 == "BuffReminder" then
+            if brOptions.version == nil then brOptions.version = "1.0" end
+            if brOptions.conditions == nil then
+                brOptions.conditions = brDefaultOptions.conditions
+            end
+            for i in brOptions.conditions do
+                if brOptions.conditions[i] == false then
+                    brOptions.conditions[i] = 0
+                elseif brOptions.conditions[i] == true then
+                    brOptions.conditions[i] = 1
+                end
+            end
+            for i in brBuffGroups do
+                DEFAULT_CHAT_FRAME:AddMessage(i)
+                for j in brBuffGroups[i].conditions do
+                    if brBuffGroups[i].conditions[j] == false then
+                        brBuffGroups[i].conditions[j] = 0
+                    elseif brBuffGroups[i].conditions[j] == true then
+                        brBuffGroups[i].conditions[j] = 1
+                    end
+                end
+            end
+        end
     end
-    
     
     brForceUpdate = true -- force icon update
 end

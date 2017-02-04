@@ -1,12 +1,23 @@
 ﻿<Ui xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns:xsd="http://www.w3.org/2001/XMLSchema" xmlns="http://www.blizzard.com/wow/ui/">
 	<Script file="BrConfigFrame.lua" />
+	<CheckButton name="BrTrisStateCheckTemplate" inherits="UICheckButtonTemplate" checked="false" virtual="true">
+		<Scripts>
+			<OnLoad>
+				BrCheck_OnLoad();
+			</OnLoad>
+			<OnClick>
+				BrCheck_Clicked();
+			</OnClick>
+		</Scripts>
+	</CheckButton>
 	<EditBox name="BrEditTemplate" inherits="InputBoxTemplate" letters="80" virtual="true">
 		<Size>
 			<AbsDimension x="228" y="32" />
 		</Size>
 		<Scripts>
 			<OnLoad>
-				this:SetAutoFocus(false);        this:SetTextInsets(0, 8, 0, 0);
+				this:SetAutoFocus(false);
+				this:SetTextInsets(0, 8, 0, 0);
 			</OnLoad>
 			<OnEnterPressed>
 				this:ClearFocus();
@@ -188,110 +199,54 @@
 			<!-- END BUFF SECTION -->
 			<Frame name="GConditions" inherits="BasicFrameTemplate">
 				<Frames>
-					<CheckButton name="$parentAlwaysCheck" inherits="UICheckButtonTemplate" checked="false" disabled="true" text="always">
+					<CheckButton name="$parentAlwaysCheck" inherits="BrTrisStateCheckTemplate" checked="false" disabled="true" text="Always">
 						<Anchors>
 							<Anchor point="TOPLEFT">
 								<Offset x="0" y="-16" />
 							</Anchor>
 						</Anchors>
-						<Scripts>
-							<OnLoad>
-								getglobal(this:GetName().."Text"):SetText("Always");
-							</OnLoad>
-							<OnClick>
-								BrCheck_Clicked();
-							</OnClick>
-						</Scripts>
 					</CheckButton>
-					<CheckButton name="$parentRestingCheck" inherits="UICheckButtonTemplate" checked="false" text="resting">
+					<CheckButton name="$parentRestingCheck" inherits="BrTrisStateCheckTemplate" checked="false" text="Resting">
 						<Anchors>
 							<Anchor point="TOPLEFT">
 								<Offset x="80" y="-16" />
 							</Anchor>
 						</Anchors>
-						<Scripts>
-							<OnLoad>
-								getglobal(this:GetName().."Text"):SetText("Resting");
-							</OnLoad>
-							<OnClick>
-								BrCheck_Clicked();
-							</OnClick>
-						</Scripts>
 					</CheckButton>
-					<CheckButton name="$parentTaxiCheck" inherits="UICheckButtonTemplate" checked="false" text="taxi">
+					<CheckButton name="$parentTaxiCheck" inherits="BrTrisStateCheckTemplate" checked="false" text="Taxi">
 						<Anchors>
 							<Anchor point="TOPLEFT">
 								<Offset x="160" y="-16" />
 							</Anchor>
 						</Anchors>
-						<Scripts>
-							<OnLoad>
-								getglobal(this:GetName().."Text"):SetText("On Taxi");
-							</OnLoad>
-							<OnClick>
-								BrCheck_Clicked();
-							</OnClick>
-						</Scripts>
 					</CheckButton>
-					<CheckButton name="$parentDeadCheck" inherits="UICheckButtonTemplate" checked="false" text="dead">
+					<CheckButton name="$parentDeadCheck" inherits="BrTrisStateCheckTemplate" checked="false" text="Dead">
 						<Anchors>
 							<Anchor point="TOPLEFT">
 								<Offset x="240" y="-16" />
 							</Anchor>
 						</Anchors>
-						<Scripts>
-							<OnLoad>
-								getglobal(this:GetName().."Text"):SetText("Dead");
-							</OnLoad>
-							<OnClick>
-								BrCheck_Clicked();
-							</OnClick>
-						</Scripts>
 					</CheckButton>
-					<CheckButton name="$parentPartyCheck" inherits="UICheckButtonTemplate" checked="false" text="party">
+					<CheckButton name="$parentPartyCheck" inherits="BrTrisStateCheckTemplate" checked="false" text="Party">
 						<Anchors>
 							<Anchor point="TOPLEFT">
 								<Offset x="0" y="-46" />
 							</Anchor>
 						</Anchors>
-						<Scripts>
-							<OnLoad>
-								getglobal(this:GetName().."Text"):SetText("In Party");
-							</OnLoad>
-							<OnClick>
-								BrCheck_Clicked();
-							</OnClick>
-						</Scripts>
 					</CheckButton>
-					<CheckButton name="$parentRaidCheck" inherits="UICheckButtonTemplate" checked="false" text="raid">
+					<CheckButton name="$parentRaidCheck" inherits="BrTrisStateCheckTemplate" checked="false" text="Raid">
 						<Anchors>
 							<Anchor point="TOPLEFT">
 								<Offset x="80" y="-46" />
 							</Anchor>
 						</Anchors>
-						<Scripts>
-							<OnLoad>
-								getglobal(this:GetName().."Text"):SetText("In Raid");
-							</OnLoad>
-							<OnClick>
-								BrCheck_Clicked();
-							</OnClick>
-						</Scripts>
 					</CheckButton>
-					<CheckButton name="$parentInstanceCheck" inherits="UICheckButtonTemplate" checked="false" text="instance">
+					<CheckButton name="$parentInstanceCheck" inherits="BrTrisStateCheckTemplate" checked="false" text="Instance">
 						<Anchors>
 							<Anchor point="TOPLEFT">
 								<Offset x="160" y="-46" />
 							</Anchor>
 						</Anchors>
-						<Scripts>
-							<OnLoad>
-								getglobal(this:GetName().."Text"):SetText("In Instance");
-							</OnLoad>
-							<OnClick>
-								BrCheck_Clicked();
-							</OnClick>
-						</Scripts>
 					</CheckButton>
 					<EditBox name="BrTimeEdit" inherits="InputBoxTemplate" letters="6" numeric="true">
 						<Size>
@@ -359,110 +314,54 @@
 			<!-- Defaults -->
 			<Frame name="DefConditions" inherits="BasicFrameTemplate">
 				<Frames>
-					<CheckButton name="$parentAlwaysCheck" inherits="UICheckButtonTemplate" checked="false" text="always">
+					<CheckButton name="$parentAlwaysCheck" inherits="BrTrisStateCheckTemplate" checked="false" text="Always">
 						<Anchors>
 							<Anchor point="TOPLEFT">
 								<Offset x="0" y="-16" />
 							</Anchor>
 						</Anchors>
-						<Scripts>
-							<OnLoad>
-								getglobal(this:GetName().."Text"):SetText("Always");
-							</OnLoad>
-							<OnClick>
-								BrCheck_Clicked();
-							</OnClick>
-						</Scripts>
 					</CheckButton>
-					<CheckButton name="$parentRestingCheck" inherits="UICheckButtonTemplate" checked="false" text="resting">
+					<CheckButton name="$parentRestingCheck" inherits="BrTrisStateCheckTemplate" checked="false" text="Resting">
 						<Anchors>
 							<Anchor point="TOPLEFT">
 								<Offset x="80" y="-16" />
 							</Anchor>
 						</Anchors>
-						<Scripts>
-							<OnLoad>
-								getglobal(this:GetName().."Text"):SetText("Resting");
-							</OnLoad>
-							<OnClick>
-								BrCheck_Clicked();
-							</OnClick>
-						</Scripts>
 					</CheckButton>
-					<CheckButton name="$parentTaxiCheck" inherits="UICheckButtonTemplate" checked="false" text="taxi">
+					<CheckButton name="$parentTaxiCheck" inherits="BrTrisStateCheckTemplate" checked="false" text="Taxi">
 						<Anchors>
 							<Anchor point="TOPLEFT">
 								<Offset x="160" y="-16" />
 							</Anchor>
 						</Anchors>
-						<Scripts>
-							<OnLoad>
-								getglobal(this:GetName().."Text"):SetText("On Taxi");
-							</OnLoad>
-							<OnClick>
-								BrCheck_Clicked();
-							</OnClick>
-						</Scripts>
 					</CheckButton>
-					<CheckButton name="$parentDeadCheck" inherits="UICheckButtonTemplate" checked="false" text="dead">
+					<CheckButton name="$parentDeadCheck" inherits="BrTrisStateCheckTemplate" checked="false" text="Dead">
 						<Anchors>
 							<Anchor point="TOPLEFT">
 								<Offset x="240" y="-16" />
 							</Anchor>
 						</Anchors>
-						<Scripts>
-							<OnLoad>
-								getglobal(this:GetName().."Text"):SetText("Dead");
-							</OnLoad>
-							<OnClick>
-								BrCheck_Clicked();
-							</OnClick>
-						</Scripts>
 					</CheckButton>
-					<CheckButton name="$parentPartyCheck" inherits="UICheckButtonTemplate" checked="false" text="party">
+					<CheckButton name="$parentPartyCheck" inherits="BrTrisStateCheckTemplate" checked="false" text="Party">
 						<Anchors>
 							<Anchor point="TOPLEFT">
 								<Offset x="0" y="-46" />
 							</Anchor>
 						</Anchors>
-						<Scripts>
-							<OnLoad>
-								getglobal(this:GetName().."Text"):SetText("In Party");
-							</OnLoad>
-							<OnClick>
-								BrCheck_Clicked();
-							</OnClick>
-						</Scripts>
 					</CheckButton>
-					<CheckButton name="$parentRaidCheck" inherits="UICheckButtonTemplate" checked="false" text="raid">
+					<CheckButton name="$parentRaidCheck" inherits="BrTrisStateCheckTemplate" checked="false" text="Raid">
 						<Anchors>
 							<Anchor point="TOPLEFT">
 								<Offset x="80" y="-46" />
 							</Anchor>
 						</Anchors>
-						<Scripts>
-							<OnLoad>
-								getglobal(this:GetName().."Text"):SetText("In Raid");
-							</OnLoad>
-							<OnClick>
-								BrCheck_Clicked();
-							</OnClick>
-						</Scripts>
 					</CheckButton>
-					<CheckButton name="$parentInstanceCheck" inherits="UICheckButtonTemplate" checked="false" text="instance">
+					<CheckButton name="$parentInstanceCheck" inherits="BrTrisStateCheckTemplate" checked="false" text="Instance">
 						<Anchors>
 							<Anchor point="TOPLEFT">
 								<Offset x="160" y="-46" />
 							</Anchor>
 						</Anchors>
-						<Scripts>
-							<OnLoad>
-								getglobal(this:GetName().."Text"):SetText("In Instance");
-							</OnLoad>
-							<OnClick>
-								BrCheck_Clicked();
-							</OnClick>
-						</Scripts>
 					</CheckButton>
 					<EditBox name="BrSoundEdit" inherits="InputBoxTemplate" letters="80" numeric="false">
 						<Size>
