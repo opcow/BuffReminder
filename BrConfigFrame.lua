@@ -96,21 +96,6 @@ function GroupLayout_EnableChecks()
     GConditionsInstanceCheck:Enable()
 end
 
-function BrSaveGroup()
-    if brBuffGroups[curGroupSel] ~= nil then
-
-        brBuffGroups[curGroupSel].conditions.always = GConditionsAlwaysCheck.state
-        brBuffGroups[curGroupSel].conditions.resting = GConditionsRestingCheck.state
-        brBuffGroups[curGroupSel].conditions.taxi = GConditionsTaxiCheck.state
-        brBuffGroups[curGroupSel].conditions.dead = GConditionsDeadCheck.state
-        brBuffGroups[curGroupSel].conditions.party = GConditionsPartyCheck.state
-        brBuffGroups[curGroupSel].conditions.raid = GConditionsRaidCheck.state
-        brBuffGroups[curGroupSel].conditions.instance = GConditionsInstanceCheck.state
-        brBuffGroups[curGroupSel].warntime = tonumber(BrTimeEdit:GetText())
-        brForceUpdate = true
-    end
-end
-
 -- Buff Section --
 function BrBuffCfg_OnLoad()
     BuffLayoutAddBtn:SetScript("OnClick", AddBuffClicked)
@@ -148,10 +133,13 @@ function BuffLayoutDrop_OnClick(arg1)
     UIDropDownMenu_SetSelectedID(BuffLayoutDrop, this:GetID())
 end
 
+function BrSetGroupWarnTime()
+    brBuffGroups[curGroupSel].warntime = tonumber(BrTimeEdit:GetText())
+end
+
 -- Check Buttons --
 function BrCheck_OnLoad()
     this.state = 0
-    --    DEFAULT_CHAT_FRAME:AddMessage("((((((((((((((((((()))))))))))))))))))")
     getglobal(this:GetName() .. "Text"):SetText(this:GetText())
     local cbtex = this:CreateTexture("inverted", "BACKGROUND")
     cbtex:SetTexture(1, 0, 0, 1)
@@ -166,9 +154,21 @@ function BrCheck_Clicked()
     if this.state == 2 then
         BrCheck_SetState(this, 0)
     else
-    DEFAULT_CHAT_FRAME:AddMessage(tostring(this.state))
         BrCheck_SetState(this, this.state + 1)
     end
+    brBuffGroups[curGroupSel].conditions[string.lower(this:GetText())] = this.state
+    brForceUpdate = true
+end
+
+function BrDefCheck_Clicked()
+    if this.state == 2 then
+        BrCheck_SetState(this, 0)
+    else
+        BrCheck_SetState(this, this.state + 1)
+    end
+    string.lower(this:GetText())
+
+    brOptions.conditions[string.lower(this:GetText())] = this.state
 end
 
 function BrCheck_GetState(check)
@@ -186,19 +186,6 @@ function BrCheck_SetState(check, state)
         check.texture:SetAlpha(1)
         check:SetChecked(true)
     end
-end
-
--- Defauts Section --
-function BrSaveDefaults()
-    brOptions.conditions.always = DefConditionsAlwaysCheck.state
-    brOptions.conditions.resting = DefConditionsRestingCheck.state
-    brOptions.conditions.taxi = DefConditionsTaxiCheck.state
-    brOptions.conditions.dead = DefConditionsDeadCheck.state
-    brOptions.conditions.party = DefConditionsPartyCheck.state
-    brOptions.conditions.raid = DefConditionsRaidCheck.state
-    brOptions.conditions.instance = DefConditionsInstanceCheck.state
-    brOptions.warnsound = BrSoundEdit:GetText()
-    brOptions.warntime = tonumber(BrDefTimeEdit:GetText())
 end
 
 -- Config Button Section --
@@ -221,7 +208,7 @@ end
 
 function BrGroupsConfigFrame_OnEnter()
     GameTooltip:SetOwner(this, "ANCHOR_CURSOR")
-    GameTooltip:SetText("BuffReminder")-- This sets the top line of text, in gold.
+    GameTooltip:SetText("BuffReminder")
     GameTooltip:AddLine("Click to configure.", 1, 1, 1)
     GameTooltip:AddLine("Shift-click to unlock the icon frame.", 1, 1, 1)
     GameTooltip:Show()

@@ -8,6 +8,10 @@ brDefaultOptions = {
     ["size"] = 30,
     ["warntime"] = 60,
     ["alpha"] = 1.0,
+    ["enchants"] = {
+        ["main"] = false,
+        ["off"] = false,
+    },
     ["conditions"] = {
         ["always"] = 0,
         ["dead"] = 1,
@@ -26,7 +30,7 @@ local lbrWarnIconFrames = {}
 local lbrUpdateTime = 0
 local lbrButtonSpc = 2
 local lbrBuffList = {}
-
+local lbrEnchants = {}
 
 lbrPlayerStatus = {
     ["dead"] = false,
@@ -74,7 +78,7 @@ local function toNum(n)
     if n == nil then DEFAULT_CHAT_FRAME:AddMessage("Invalid number given.") end
     return n
 end
-
+-------------------------------------------------------------------------------
 function BuffReminder.ShowIcons()
     local pitch = brOptions.size + lbrButtonSpc * 2
     local c = (pitch * (tableLen(lbrWarnIconFrames) - 1)) / 2
@@ -111,13 +115,36 @@ function BuffReminder.DrawIcons()
     for i in brBuffGroups do
     skipIcon = false
         for j in lbrPlayerStatus do
-            if (brBuffGroups[i].conditions.always ~= 2) and ((brBuffGroups[i].conditions.always == 1) or (lbrPlayerStatus[j] and (brBuffGroups[i].conditions[j] == 1)) or (not lbrPlayerStatus[j] and brBuffGroups[i].conditions[j] == 2)) then
+            if (brBuffGroups[i].conditions.always ~= 2) and ((brBuffGroups[i].conditions.always == 1) or (lbrPlayerStatus[j] and
+                (brBuffGroups[i].conditions[j] == 1)) or (not lbrPlayerStatus[j] and brBuffGroups[i].conditions[j] == 2)) then
                 skipIcon = true
                 break
             end
         end
         if not skipIcon and brShowIcons[i] then
             MakeIcon(brBuffGroups[i].icon)
+        end
+    end
+    -- weapon enchants icons
+    skipIcon = false
+    for i in lbrPlayerStatus do
+        if (brOptions.conditions.always ~= 2) and ((brOptions.conditions.always == 1) or (lbrPlayerStatus[i] and (brOptions.conditions[i] == 1)) or (not lbrPlayerStatus[i] and brOptions.conditions[i] == 2)) then
+            skipIcon = true
+            break
+        end
+    end
+    if not skipIcon then
+        if brOptions.enchants.main and (not lbrEnchants.main) then
+            local t = GetInventoryItemTexture("player", 16)
+            if t ~= nil then
+                MakeIcon(t)
+            end
+        end
+        if brOptions.enchants.off and (not lbrEnchants.off) then
+            local t = GetInventoryItemTexture("player", 17)
+            if t ~= nil then
+                MakeIcon(t)
+            end
         end
     end
     BuffReminder.ShowIcons()
@@ -137,18 +164,17 @@ local function GetPlayerBuffs()
         local tex = GetPlayerBuffTexture(i)
         local name = GetPlayerBuffName(i)
         local time = GetPlayerBuffTimeLeft(i)
-        if time == 0 then time = 86401 end
+        if time == 0 then time = 86401 end -- if zero this is probably non-expiring
         lbrBuffList[i] = {["icon"] = tex, ["name"] = name, ["time"] = time}
     
     end
     return lbrBuffList
 end
 
-local function ChkBuffsExist()
+local function CheckPlayerBuffs()
     local iconChanged = false
     lbrBuffList = GetPlayerBuffs()
     for i in brBuffGroups do
---        if brShowIcons[i] == nil then brShowIcons[i] = true false end
         local shown = brShowIcons[i] -- save previous state for sound logic
         brShowIcons[i] = true
         for j in lbrBuffList do
@@ -168,6 +194,20 @@ local function ChkBuffsExist()
     end
     return iconChanged
 end
+
+local function CheckWeaponEnchants()
+    local changed = false
+    if (brOptions.enchants.main == true) or (brOptions.enchants.off == true) then
+        local hasMainHandEnchant, mainHandExpiration, mainHandCharges, hasOffHandEnchant, offHandExpiration, offHandCharges = GetWeaponEnchantInfo();
+        if (lbrEnchants.main ~= hasMainHandEnchant) or (hasOffHandEnchant ~= lbrEnchants.off) then
+            changed = true
+        end
+        lbrEnchants.main = (hasMainHandEnchant == 1) and (mainHandExpiration > brOptions.warntime * 1000)
+        lbrEnchants.off = (hasOffHandEnchant == 1) and (offHandExpiration > brOptions.warntime * 1000)
+    end
+    return changed
+end
+
 -- slash command functions ------------------------------------------------------------------
 local function GroupExists(group)
     if brBuffGroups[group] == nil then
@@ -379,8 +419,7 @@ function SlashCmdList.BuffReminder(msg)-- we put the slash commands to work
 end
 
 --------------------------------------------------------------------------------------------------
-function BuffReminder_OnLoad(Frame)
-    
+function BuffReminder_OnLoad()
     if brOptions == nil then brOptions = brDefaultOptions end
     this:RegisterForDrag("LeftButton")
     this:EnableMouse(false)
@@ -388,8 +427,6 @@ function BuffReminder_OnLoad(Frame)
     this:RegisterEvent("PLAYER_DEAD")
     this:RegisterEvent("PLAYER_UNGHOST")
     this:RegisterEvent("PLAYER_AURAS_CHANGED")
-    -- this:RegisterEvent("PLAYER_CONTROL_LOST")
-    -- this:RegisterEvent("PLAYER_CONTROL_GAINED")
     this:RegisterEvent("PLAYER_ENTERING_WORLD")
     this:RegisterEvent("UNIT_FLAGS")
     this:RegisterEvent("PLAYER_UPDATE_RESTING")
@@ -397,7 +434,8 @@ function BuffReminder_OnLoad(Frame)
     this:RegisterEvent("PARTY_MEMBERS_CHANGED")
     this:RegisterEvent("RAID_ROSTER_UPDATE")
     this:RegisterEvent("ADDON_LOADED")
-    --    this:RegisterAllEvents()
+    this:RegisterEvent("UNIT_INVENTORY_CHANGED")
+    -- this:RegisterAllEvents()
     -- tooltip frame for getting spell name
     lbrTooltipFrame = CreateFrame('GameTooltip', 'BrTooltip', UIParent, 'GameTooltipTemplate')
     lbrTooltipFrame:SetOwner(UIParent, 'ANCHOR_NONE')
@@ -409,14 +447,15 @@ function BuffReminder_OnLoad(Frame)
 
 end
 --------------------------------------------------------------------------------------------------
-function BuffReminder_OnUpdate(self)
+function BuffReminder_OnUpdate()
     if GetTime() - lbrUpdateTime >= 1 then
         if brOptions.disabled then return end
         if brForceUpdate then
-            ChkBuffsExist()
+            CheckPlayerBuffs()
+            CheckWeaponEnchants()
             brForceUpdate = false
             BuffReminder.DrawIcons()
-        elseif ChkBuffsExist() then
+        elseif CheckPlayerBuffs() or CheckWeaponEnchants() then
             BuffReminder.DrawIcons()
         end
         lbrUpdateTime = GetTime()
@@ -451,6 +490,9 @@ function BuffReminder_OnEvent(event, arg1)
     elseif event == "ADDON_LOADED" then
     -- fix old config for tristate conditions or other issues
         if arg1 == "BuffReminder" then
+           if brOptions.enchants == nil then
+                brOptions.enchants = brDefaultOptions.enchants
+           end
             BuffReminderFrame:SetWidth(brOptions.size)
             BuffReminderFrame:SetHeight(brOptions.size)
             if brOptions.version == nil then brOptions.version = "1.0" end
@@ -476,7 +518,7 @@ function BuffReminder_OnEvent(event, arg1)
             end
         end
     end
-    
+    -- fix old config
     brForceUpdate = true -- force icon update
 end
 --------------------------------------------------------------------------------------------------

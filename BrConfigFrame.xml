@@ -10,6 +10,16 @@
 			</OnClick>
 		</Scripts>
 	</CheckButton>
+	<CheckButton name="BrDefTrisStateCheckTemplate" inherits="UICheckButtonTemplate" checked="false" virtual="true">
+		<Scripts>
+			<OnLoad>
+				BrCheck_OnLoad();
+			</OnLoad>
+			<OnClick>
+				BrDefCheck_Clicked();
+			</OnClick>
+		</Scripts>
+	</CheckButton>
 	<EditBox name="BrEditTemplate" inherits="InputBoxTemplate" letters="80" virtual="true">
 		<Size>
 			<AbsDimension x="228" y="32" />
@@ -105,7 +115,7 @@
 	<!-- END TEMPLATES -->
 	<Frame name="BrGroupsConfigFrame" parent="UIParent" toplevel="true" enableMouse="true" hidden="true">
 		<Size>
-			<AbsDimension x="400" y="520" />
+			<AbsDimension x="400" y="540" />
 		</Size>
 		<Anchors>
 			<Anchor point="CENTER">
@@ -263,27 +273,10 @@
 							</OnLoad>
 							<OnEnterPressed>
 								this:ClearFocus();
+								BrSetGroupWarnTime();
 							</OnEnterPressed>
 						</Scripts>
 					</EditBox>
-					<Button name="GroupSaveBtn" inherits="BrButtonTemplate" text="Save Options">
-						<Size>
-							<AbsDimension x="100" y="20" />
-						</Size>
-						<Anchors>
-							<Anchor point="TOPLEFT">
-								<Offset x="212" y="-80" />
-							</Anchor>
-						</Anchors>
-						<Scripts>
-							<OnLoad>
-								this:Disable()
-							</OnLoad>
-							<OnClick>
-								BrSaveGroup();
-							</OnClick>
-						</Scripts>
-					</Button>
 				</Frames>
 				<Size>
 					<AbsDimension x="340" y="100" />
@@ -314,49 +307,49 @@
 			<!-- Defaults -->
 			<Frame name="DefConditions" inherits="BasicFrameTemplate">
 				<Frames>
-					<CheckButton name="$parentAlwaysCheck" inherits="BrTrisStateCheckTemplate" checked="false" text="Always">
+					<CheckButton name="$parentAlwaysCheck" inherits="BrDefTrisStateCheckTemplate" checked="false" text="Always">
 						<Anchors>
 							<Anchor point="TOPLEFT">
 								<Offset x="0" y="-16" />
 							</Anchor>
 						</Anchors>
 					</CheckButton>
-					<CheckButton name="$parentRestingCheck" inherits="BrTrisStateCheckTemplate" checked="false" text="Resting">
+					<CheckButton name="$parentRestingCheck" inherits="BrDefTrisStateCheckTemplate" checked="false" text="Resting">
 						<Anchors>
 							<Anchor point="TOPLEFT">
 								<Offset x="80" y="-16" />
 							</Anchor>
 						</Anchors>
 					</CheckButton>
-					<CheckButton name="$parentTaxiCheck" inherits="BrTrisStateCheckTemplate" checked="false" text="Taxi">
+					<CheckButton name="$parentTaxiCheck" inherits="BrDefTrisStateCheckTemplate" checked="false" text="Taxi">
 						<Anchors>
 							<Anchor point="TOPLEFT">
 								<Offset x="160" y="-16" />
 							</Anchor>
 						</Anchors>
 					</CheckButton>
-					<CheckButton name="$parentDeadCheck" inherits="BrTrisStateCheckTemplate" checked="false" text="Dead">
+					<CheckButton name="$parentDeadCheck" inherits="BrDefTrisStateCheckTemplate" checked="false" text="Dead">
 						<Anchors>
 							<Anchor point="TOPLEFT">
 								<Offset x="240" y="-16" />
 							</Anchor>
 						</Anchors>
 					</CheckButton>
-					<CheckButton name="$parentPartyCheck" inherits="BrTrisStateCheckTemplate" checked="false" text="Party">
+					<CheckButton name="$parentPartyCheck" inherits="BrDefTrisStateCheckTemplate" checked="false" text="Party">
 						<Anchors>
 							<Anchor point="TOPLEFT">
 								<Offset x="0" y="-46" />
 							</Anchor>
 						</Anchors>
 					</CheckButton>
-					<CheckButton name="$parentRaidCheck" inherits="BrTrisStateCheckTemplate" checked="false" text="Raid">
+					<CheckButton name="$parentRaidCheck" inherits="BrDefTrisStateCheckTemplate" checked="false" text="Raid">
 						<Anchors>
 							<Anchor point="TOPLEFT">
 								<Offset x="80" y="-46" />
 							</Anchor>
 						</Anchors>
 					</CheckButton>
-					<CheckButton name="$parentInstanceCheck" inherits="BrTrisStateCheckTemplate" checked="false" text="Instance">
+					<CheckButton name="$parentInstanceCheck" inherits="BrDefTrisStateCheckTemplate" checked="false" text="Instance">
 						<Anchors>
 							<Anchor point="TOPLEFT">
 								<Offset x="160" y="-46" />
@@ -369,7 +362,7 @@
 						</Size>
 						<Anchors>
 							<Anchor point="TOPLEFT">
-								<Offset x="112" y="-75" />
+								<Offset x="112" y="-100" />
 							</Anchor>
 						</Anchors>
 						<Scripts>
@@ -378,6 +371,7 @@
 							</OnLoad>
 							<OnEnterPressed>
 								this:ClearFocus();
+								brOptions.warnsound = this:GetText()
 							</OnEnterPressed>
 						</Scripts>
 					</EditBox>
@@ -387,7 +381,7 @@
 						</Size>
 						<Anchors>
 							<Anchor point="TOPLEFT">
-								<Offset x="140" y="-100" />
+								<Offset x="140" y="-75" />
 							</Anchor>
 						</Anchors>
 						<Scripts>
@@ -396,24 +390,52 @@
 							</OnLoad>
 							<OnEnterPressed>
 								this:ClearFocus();
+								brOptions.warntime = tonumber(this:GetText())
 							</OnEnterPressed>
 						</Scripts>
 					</EditBox>
-					<Button name="DefaultSaveBtn" inherits="BrButtonTemplate" text="Save Defaults">
-						<Size>
-							<AbsDimension x="100" y="20" />
-						</Size>
-						<Anchors>
-							<Anchor point="TOPLEFT">
-								<Offset x="212" y="-107" />
-							</Anchor>
-						</Anchors>
+					<CheckButton name="BrMainEnchant" inherits="UICheckButtonTemplate" checked="false">
 						<Scripts>
+							<OnLoad>
+								getglobal(this:GetName() .. "Text"):SetText("Main Hand Enchant")
+							</OnLoad>
+							<OnShow>
+								this:SetChecked(brOptions.enchants.main)
+							</OnShow>
 							<OnClick>
-								BrSaveDefaults();
+								brOptions.enchants.main = (this:GetChecked() == 1)
+								brForceUpdate = true
 							</OnClick>
 						</Scripts>
-					</Button>
+						<Anchors>
+							<Anchor point="BOTTOMLEFT">
+								<Offset>
+									<AbsDimension x="2" y="-24" />
+								</Offset>
+							</Anchor>
+						</Anchors>
+					</CheckButton>
+					<CheckButton name="BrOffEnchant" inherits="UICheckButtonTemplate" checked="false">
+						<Scripts>
+							<OnLoad>
+								getglobal(this:GetName() .. "Text"):SetText("Off Hand Enchant")
+							</OnLoad>
+							<OnShow>
+								this:SetChecked(brOptions.enchants.off)
+							</OnShow>
+							<OnClick>
+								brOptions.enchants.off = (this:GetChecked() == 1)
+								brForceUpdate = true
+							</OnClick>
+						</Scripts>
+						<Anchors>
+							<Anchor point="BOTTOMLEFT">
+								<Offset>
+									<AbsDimension x="142" y="-24" />
+								</Offset>
+							</Anchor>
+						</Anchors>
+					</CheckButton>
 					<Slider name="$parentSizeSlider" inherits="OptionsSliderTemplate" minValue="10" maxValue="400" valuestep="2">
 						<Size>
 							<AbsDimension x="220" y="16" />
@@ -421,7 +443,7 @@
 						<Anchors>
 							<Anchor point="BOTTOMLEFT">
 								<Offset>
-									<AbsDimension x="2" y="-68" />
+									<AbsDimension x="2" y="-50" />
 								</Offset>
 							</Anchor>
 						</Anchors>
@@ -437,7 +459,7 @@
 							<OnValueChanged>
 								brOptions.size = this:GetValue();
 								BuffReminderFrame:SetWidth(brOptions.size)
-					            BuffReminderFrame:SetHeight(brOptions.size)
+								BuffReminderFrame:SetHeight(brOptions.size)
 								BuffReminder.DrawIcons();
 							</OnValueChanged>
 						</Scripts>
@@ -449,7 +471,7 @@
 						<Anchors>
 							<Anchor point="BOTTOMLEFT">
 								<Offset>
-									<AbsDimension x="234" y="-68" />
+									<AbsDimension x="234" y="-50" />
 								</Offset>
 							</Anchor>
 						</Anchors>
@@ -467,7 +489,7 @@
 					</Slider>
 				</Frames>
 				<Size>
-					<AbsDimension x="340" y="100" />
+					<AbsDimension x="340" y="140" />
 				</Size>
 				<Anchors>
 					<Anchor point="TOP">
@@ -480,14 +502,14 @@
 						<FontString name="$parentTimeString" text="Early Warning Time:" inherits="BrFontStringTemplate">
 							<Anchors>
 								<Anchor point="TOPLEFT">
-									<Offset x="8" y="-110" />
+									<Offset x="8" y="-85" />
 								</Anchor>
 							</Anchors>
 						</FontString>
 						<FontString name="$parentSoundString" text="Warning Sound:" inherits="BrFontStringTemplate">
 							<Anchors>
 								<Anchor point="TOPLEFT">
-									<Offset x="8" y="-85" />
+									<Offset x="8" y="-110" />
 								</Anchor>
 							</Anchors>
 						</FontString>
