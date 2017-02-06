@@ -21,7 +21,7 @@ function BrGroupsConfigFrame_OnShow()
     end
 end
 
--- Group Section --
+--- Group Section ---
 function BrGroupCfg_OnLoad()
     GroupLayoutAddBtn:SetScript("OnClick", AddGroupClicked)
     GroupLayoutDelBtn:SetScript("OnClick", DelGroupClicked)
