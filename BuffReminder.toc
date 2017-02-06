@@ -1,6 +1,6 @@
 ## Interface: 11200
 ## Title: BuffReminder
-## Version: 0.9
+## Version: 1.0
 ## Notes: Adds icons to remind you when important buffs are missing.
 ## SavedVariablesPerCharacter: brBuffGroups brOptions
 BuffReminder.lua
