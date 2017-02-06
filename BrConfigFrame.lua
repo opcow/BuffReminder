@@ -41,7 +41,6 @@ function DelGroupClicked()
     if curGroupSel ~= nill then
         brBuffGroups[curGroupSel] = nil
     end
-    GroupSaveBtn:Disable()
     UIDropDownMenu_SetSelectedID(GroupLayoutDrop, 1)
     local n = UIDropDownMenu_GetSelectedName(GroupLayoutDrop)
     UIDropDownMenu_ClearAll(GroupLayoutDrop)
@@ -69,10 +68,8 @@ function GroupLayoutDrop_OnClick(arg1)
         BrCheck_SetState(GConditionsRaidCheck, brBuffGroups[arg1].conditions["raid"])
         BrCheck_SetState(GConditionsInstanceCheck, brBuffGroups[arg1].conditions["instance"])
         BrTimeEdit:SetText(brBuffGroups[arg1].warntime)
-        GroupSaveBtn:Enable()
     else
         GroupLayout_DisableChecks()
-        GroupSaveBtn:Disable()
     end
 end
 
