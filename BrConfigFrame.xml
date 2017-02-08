@@ -596,9 +596,10 @@
 			</OnDragStop>
 			<OnLoad>
 				this:RegisterForDrag("LeftButton");this:EnableMouse(true);
+				this:RegisterForClicks("RightButtonUp", "LeftButtonUp");
 			</OnLoad>
 			<OnClick>
-				BrGroupsConfigFrame_Toggle();
+				BrGroupsConfigFrame_Toggle(arg1, arg2);
 			</OnClick>
 			<OnEnter>
 				BrGroupsConfigFrame_OnEnter();

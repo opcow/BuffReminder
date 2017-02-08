@@ -25,6 +25,7 @@ brDefaultOptions = {
 
 brShowIcons = {}
 brForceUpdate = true
+brHideAllIcons = false
 
 local lbrWarnIconFrames = {}
 local lbrUpdateTime = 0
@@ -89,7 +90,7 @@ function BuffReminder.ShowIcons()
     end
 end
 
-local function ClearIcons()
+function BuffReminder.ClearIcons()
     for i in lbrWarnIconFrames do
         lbrWarnIconFrames[i]:Hide()
     end
@@ -110,7 +111,7 @@ local function MakeIcon(icon)
 end
 
 function BuffReminder.DrawIcons()
-    ClearIcons()
+    BuffReminder.ClearIcons()
     local skipIcon
     for i in brBuffGroups do
     skipIcon = false
@@ -450,6 +451,7 @@ end
 function BuffReminder_OnUpdate(elapsed)
     lbrUpdateTime = lbrUpdateTime + elapsed
     if lbrUpdateTime >= 0.5 then
+        if brHideAllIcons then return end
         lbrUpdateTime = 0
         if brOptions.disabled then return end
         if brForceUpdate then

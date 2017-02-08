@@ -10,6 +10,7 @@ A World of Warcraft 1.12 (Vanilla WoW) addon that displays user placeable icons 
 - Mutually exclusive buffs should go into common groups.
 - Until a buff is seen by the addon it will have a '?' icon.
 - Temporary weapon enchants (shaman enchants, poisons, wizard oil, sharpening, etc) also supported.
+- Icons can be temporarily hidden by right-clicking the BR icon.
 - Enclose names with spaces in quotes when using the command line.
 - The icon frame lock can be toggled by shift-clicking the BR icon.
 - Checkboxes are tri-state. If the background is red then the icon will be hidden if the state is _not_ true.

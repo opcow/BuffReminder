@@ -181,7 +181,7 @@ function BrCheck_SetState(check, state)
 end
 
 -- Config Button --
-function BrGroupsConfigFrame_Toggle()
+function BrGroupsConfigFrame_Toggle(mouseButton)
     if IsShiftKeyDown() then
         if BuffReminderFrame:IsMouseEnabled() then
             BuffReminderFrame:EnableMouse(false)
@@ -190,17 +190,24 @@ function BrGroupsConfigFrame_Toggle()
             BuffReminderFrame:EnableMouse(true)
             brtexture:SetTexture("Interface\\AddOns\\BuffReminder\\Media\\cross")
         end
-    elseif BrGroupsConfigFrame:IsShown() then
-        BrGroupsConfigFrame:Hide();
+    elseif mouseButton == "LeftButton" then
+        if BrGroupsConfigFrame:IsShown() then
+            BrGroupsConfigFrame:Hide();
+        else
+            BrGroupsConfigFrame:Show();
+        end
     else
-        BrGroupsConfigFrame:Show();
+        brHideAllIcons = not brHideAllIcons
+        BuffReminder.ClearIcons()
+        brForceUpdate = true
     end
 end
 
 function BrGroupsConfigFrame_OnEnter()
     GameTooltip:SetOwner(this, "ANCHOR_CURSOR")
     GameTooltip:SetText("BuffReminder")
-    GameTooltip:AddLine("Click to configure.", 1, 1, 1)
+    GameTooltip:AddLine("Left-click to configure.", 1, 1, 1)
+    GameTooltip:AddLine("Right-click to temporarily hide the icons.", 1, 1, 1)
     GameTooltip:AddLine("Shift-click to unlock the icon frame.", 1, 1, 1)
     GameTooltip:Show()
 end
