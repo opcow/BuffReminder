@@ -12,7 +12,7 @@ A World of Warcraft 1.12 (Vanilla WoW) addon that displays user placeable icons 
 - Temporary weapon enchants (shaman enchants, poisons, wizard oil, sharpening, etc) also supported.
 - Enclose names with spaces in quotes when using the command line.
 - The icon frame lock can be toggled by shift-clicking the BR icon.
-- Checkboxes are tri-state. I the background is red then the icon will be hidden if the state is _not_ true.
+- Checkboxes are tri-state. If the background is red then the icon will be hidden if the state is _not_ true.
 - If you've used a previous version and you get errors then you may need to NUKE your config (see gen opts).
 
 ## Config Dialog

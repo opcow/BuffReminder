@@ -41,8 +41,6 @@ function DelGroupClicked()
     if curGroupSel ~= nill then
         brBuffGroups[curGroupSel] = nil
     end
-    UIDropDownMenu_SetSelectedID(GroupLayoutDrop, 1)
-    local n = UIDropDownMenu_GetSelectedName(GroupLayoutDrop)
     UIDropDownMenu_ClearAll(GroupLayoutDrop)
     GroupLayout_DisableChecks()
 end
@@ -168,9 +166,6 @@ function BrDefCheck_Clicked()
     brOptions.conditions[string.lower(this:GetText())] = this.state
 end
 
-function BrCheck_GetState(check)
-end
-
 function BrCheck_SetState(check, state)
     check.state = state
     if state == 0 then
@@ -185,9 +180,8 @@ function BrCheck_SetState(check, state)
     end
 end
 
--- Config Button Section --
+-- Config Button --
 function BrGroupsConfigFrame_Toggle()
-    
     if IsShiftKeyDown() then
         if BuffReminderFrame:IsMouseEnabled() then
             BuffReminderFrame:EnableMouse(false)

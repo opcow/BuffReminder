@@ -447,8 +447,10 @@ function BuffReminder_OnLoad()
 
 end
 --------------------------------------------------------------------------------------------------
-function BuffReminder_OnUpdate()
-    if GetTime() - lbrUpdateTime >= 1 then
+function BuffReminder_OnUpdate(elapsed)
+    lbrUpdateTime = lbrUpdateTime + elapsed
+    if lbrUpdateTime >= 0.5 then
+        lbrUpdateTime = 0
         if brOptions.disabled then return end
         if brForceUpdate then
             CheckPlayerBuffs()

@@ -22,7 +22,7 @@
     <Scripts>
       <OnLoad>BuffReminder_OnLoad();</OnLoad>
       <OnEvent>BuffReminder_OnEvent(event, arg1);</OnEvent>
-      <OnUpdate>BuffReminder_OnUpdate();</OnUpdate>
+      <OnUpdate>BuffReminder_OnUpdate(arg1);</OnUpdate>
       <OnDragStart>this:StartMoving();</OnDragStart>
       <OnDragStop>this:StopMovingOrSizing();</OnDragStop>
     </Scripts>
