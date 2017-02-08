@@ -200,6 +200,11 @@ function BrGroupsConfigFrame_Toggle(mouseButton)
         brHideAllIcons = not brHideAllIcons
         BuffReminder.ClearIcons()
         brForceUpdate = true
+        if brHideAllIcons then
+            DEFAULT_CHAT_FRAME:AddMessage("Buff reminder icons will not be shown.")
+        else
+            DEFAULT_CHAT_FRAME:AddMessage("Buff reminder icons will be shown.")
+        end
     end
 end
 
