@@ -1,4 +1,8 @@
-BuffReminder = {}
+BuffReminder = {
+    ["update"] = true,
+    ["current_buffs"] = {},
+    ["watched_buffs"] = {},
+}
 
 brBuffGroups = {}
 brOptions = {}
@@ -28,6 +32,7 @@ brForceUpdate = true
 brHideAllIcons = false
 
 local lbrWarnIconFrames = {}
+local brIcons = {}
 local lbrUpdateTime = 0
 local lbrButtonSpc = 2
 local lbrBuffList = {}
@@ -97,6 +102,7 @@ function BuffReminder.ClearIcons()
     lbrWarnIconFrames = {}
 end
 
+
 local function MakeIcon(icon)
     lbrWarnIconFrames[icon] = CreateFrame("Frame", nil, BuffReminderFrame)
     lbrWarnIconFrames[icon]:SetFrameStrata("BACKGROUND")
@@ -157,6 +163,7 @@ local function GetPlayerBuffName(n)
     return TooltipScannerTextLeft1:GetText()
 end
 
+
 local function GetPlayerBuffs()
     lbrBuffList = {}
     for i = 0, 15 do
@@ -167,7 +174,6 @@ local function GetPlayerBuffs()
         local time = GetPlayerBuffTimeLeft(i)
         if time == 0 then time = 86401 end -- if zero this is probably non-expiring
         lbrBuffList[i] = {["icon"] = tex, ["name"] = name, ["time"] = time}
-    
     end
     return lbrBuffList
 end
@@ -421,7 +427,6 @@ end
 
 --------------------------------------------------------------------------------------------------
 function BuffReminder_OnLoad()
-    if brOptions == nil then brOptions = brDefaultOptions end
     this:RegisterForDrag("LeftButton")
     this:EnableMouse(false)
     -- this:RegisterEvent("PLAYER_ALIVE")
@@ -473,6 +478,8 @@ function BuffReminder_OnEvent(event, arg1)
         else
             lbrPlayerStatus.taxi = false
         end
+--    elseif event == "PLAYER_AURAS_CHANGED" then
+--        BuffReminder.GetBuffs()
     elseif event == "PARTY_MEMBERS_CHANGED" then
         lbrPlayerStatus.party = (GetNumPartyMembers() > 0)
     elseif event == "RAID_ROSTER_UPDATE" then
@@ -491,10 +498,12 @@ function BuffReminder_OnEvent(event, arg1)
         lbrPlayerStatus.raid = (GetNumRaidMembers() > 0)
         local isInstance, instanceType = (IsInInstance() == 1)
         lbrPlayerStatus.instance = isInstance
+--        BuffReminder.GetBuffs()
     elseif event == "ADDON_LOADED" then
     -- fix old config for tristate conditions or other issues
         if arg1 == "BuffReminder" then
-           if brOptions.enchants == nil then
+            if brOptions == nil or brOptions.version ~= "1.0" then brOptions = brDefaultOptions end
+            if brOptions.enchants == nil then
                 brOptions.enchants = brDefaultOptions.enchants
            end
             BuffReminderFrame:SetWidth(brOptions.size)
