@@ -1,7 +1,22 @@
 BuffReminder = {
+    ["hide_all"] = false,
     ["update"] = true,
+    ["button_space"] = 2,
     ["current_buffs"] = {},
     ["watched_buffs"] = {},
+    ["missing_buffs"] = {},
+    ["missing_groups"] = {},
+    ["icons"] = {},
+    ["enchants"] = {},
+    ["player_status"] = {
+        ["dead"] = false,
+        ["instance"] = false,
+        ["party"] = false,
+        ["raid"] = false,
+        ["resting"] = true,
+        ["taxi"] = true,
+    },
+    ["update_time"] = 0
 }
 
 brBuffGroups = {}
@@ -25,26 +40,6 @@ brDefaultOptions = {
         ["resting"] = 1,
         ["taxi"] = 1,
     },
-}
-
-brShowIcons = {}
-brForceUpdate = true
-brHideAllIcons = false
-
-local lbrWarnIconFrames = {}
-local brIcons = {}
-local lbrUpdateTime = 0
-local lbrButtonSpc = 2
-local lbrBuffList = {}
-local lbrEnchants = {}
-
-lbrPlayerStatus = {
-    ["dead"] = false,
-    ["instance"] = false,
-    ["party"] = false,
-    ["raid"] = false,
-    ["resting"] = true,
-    ["taxi"] = true,
 }
 -- util functions
 local function getArgs(m)
@@ -85,132 +80,164 @@ local function toNum(n)
     return n
 end
 -------------------------------------------------------------------------------
-function BuffReminder.ShowIcons()
-    local pitch = brOptions.size + lbrButtonSpc * 2
-    local c = (pitch * (tableLen(lbrWarnIconFrames) - 1)) / 2
-    for i in lbrWarnIconFrames do
-        lbrWarnIconFrames[i]:SetPoint("CENTER", c, 0)
-        lbrWarnIconFrames[i]:Show()
-        c = c - pitch
-    end
-end
+function BuffReminder.MakeIcon(index, texture)
+    BuffReminder.icons[index] = CreateFrame("Frame", nil, BuffReminderFrame)
+    BuffReminder.icons[index]:SetFrameStrata("BACKGROUND")
+    BuffReminder.icons[index]:SetWidth(brOptions.size)
+    BuffReminder.icons[index]:SetHeight(brOptions.size)
 
-function BuffReminder.ClearIcons()
-    for i in lbrWarnIconFrames do
-        lbrWarnIconFrames[i]:Hide()
-    end
-    lbrWarnIconFrames = {}
-end
-
-
-local function MakeIcon(icon)
-    lbrWarnIconFrames[icon] = CreateFrame("Frame", nil, BuffReminderFrame)
-    lbrWarnIconFrames[icon]:SetFrameStrata("BACKGROUND")
-    lbrWarnIconFrames[icon]:SetWidth(brOptions.size)
-    lbrWarnIconFrames[icon]:SetHeight(brOptions.size)
-
-    local tex = lbrWarnIconFrames[icon]:CreateTexture(nil, "ARTWORK")
-    tex:SetTexture(icon)
+    tex = BuffReminder.icons[index]:CreateTexture(nil, "ARTWORK")
+    tex:SetTexture(texture)
     tex:SetAlpha(brOptions.alpha)
-    tex:SetAllPoints(lbrWarnIconFrames[icon])
-    lbrWarnIconFrames[icon].texture = tex
+    tex:SetAllPoints(BuffReminder.icons[index])
+    BuffReminder.icons[index].texture = tex
 end
 
-function BuffReminder.DrawIcons()
-    BuffReminder.ClearIcons()
-    local skipIcon
-    for i in brBuffGroups do
-    skipIcon = false
-        for j in lbrPlayerStatus do
-            if (brBuffGroups[i].conditions.always ~= 2) and ((brBuffGroups[i].conditions.always == 1) or (lbrPlayerStatus[j] and
-                (brBuffGroups[i].conditions[j] == 1)) or (not lbrPlayerStatus[j] and brBuffGroups[i].conditions[j] == 2)) then
+function BuffReminder.MakeIcons()
+    for i in BuffReminder.icons do
+        BuffReminder.icons[i]:Hide()
+    end
+    local count = 1
+    local skipIcon = false
+    for i in BuffReminder.missing_groups do
+        for j in BuffReminder.player_status do
+            if (brBuffGroups[i].conditions.always ~= 2) and ((brBuffGroups[i].conditions.always == 1) or (BuffReminder.player_status[j] and
+                (brBuffGroups[i].conditions[j] == 1)) or (not BuffReminder.player_status[j] and brBuffGroups[i].conditions[j] == 2)) then
                 skipIcon = true
                 break
             end
         end
-        if not skipIcon and brShowIcons[i] then
-            MakeIcon(brBuffGroups[i].icon)
+        if not skipIcon then
+            BuffReminder.MakeIcon(count, BuffReminder.missing_groups[i])
+            count = count + 1
         end
     end
-    -- weapon enchants icons
     skipIcon = false
-    for i in lbrPlayerStatus do
-        if (brOptions.conditions.always ~= 2) and ((brOptions.conditions.always == 1) or (lbrPlayerStatus[i] and (brOptions.conditions[i] == 1)) or (not lbrPlayerStatus[i] and brOptions.conditions[i] == 2)) then
+    for i in BuffReminder.player_status do
+        if (brOptions.conditions.always ~= 2) and ((brOptions.conditions.always == 1) or (BuffReminder.player_status[i] and (brOptions.conditions[i] == 1)) or (not BuffReminder.player_status[i] and brOptions.conditions[i] == 2)) then
             skipIcon = true
             break
         end
     end
     if not skipIcon then
-        if brOptions.enchants.main and (not lbrEnchants.main) then
+        if brOptions.enchants.main and (not BuffReminder.enchants.main) then
             local t = GetInventoryItemTexture("player", 16)
             if t ~= nil then
-                MakeIcon(t)
+                BuffReminder.MakeIcon(count, t)
+                count = count + 1
             end
         end
-        if brOptions.enchants.off and (not lbrEnchants.off) then
+        if brOptions.enchants.off and (not BuffReminder.enchants.off) then
             local t = GetInventoryItemTexture("player", 17)
             if t ~= nil then
-                MakeIcon(t)
+                BuffReminder.MakeIcon(count, t)
+                count = count + 1
             end
         end
     end
-    BuffReminder.ShowIcons()
+
+
+    local pitch = brOptions.size + BuffReminder.button_space * 2
+    local c = (pitch * (tableLen(BuffReminder.icons) - 1)) / 2
+    for i=(count - 1), 1, -1 do
+        BuffReminder.icons[i]:SetPoint("CENTER", c, 0)
+        BuffReminder.icons[i]:Show()
+        c = c - pitch
+    end
 end
 
-local function GetPlayerBuffName(n)
-    TooltipScanner:ClearLines()
-    TooltipScanner:SetPlayerBuff(n)
-    return TooltipScannerTextLeft1:GetText()
+function BuffReminder.FindBuffGroup(buff)
+    for i in brBuffGroups do
+        if brBuffGroups[i].buffs[buff] ~= nil then
+            return i
+        end
+    end
+    return nil
 end
 
+function BuffReminder.UpdateBuffStatus(buffs)
+    for i in BuffReminder.current_buffs do
+        if buffs[i] == nil then -- lost a buff
+            BuffReminder.update = true
+            return
+        end
+    end
+    for i in buffs do
+        if BuffReminder.current_buffs[i] == nil then -- gained a buff
+            BuffReminder.update = true
+            return
+        end
+    end
+end
 
-local function GetPlayerBuffs()
-    lbrBuffList = {}
+-- creates a list of current buffs which are also watched buffs
+function BuffReminder.GetBuffs()
+    local current_buffs = {}
     for i = 0, 15 do
         local buffIndex, untilCancelled = GetPlayerBuff(i, "HELPFUL")
         if buffIndex == -1 then break end
-        local tex = GetPlayerBuffTexture(i)
-        local name = GetPlayerBuffName(i)
+        local name = BuffReminder.GetPlayerBuffName(i)
         local time = GetPlayerBuffTimeLeft(i)
-        if time == 0 then time = 86401 end -- if zero this is probably non-expiring
-        lbrBuffList[i] = {["icon"] = tex, ["name"] = name, ["time"] = time}
+        local tex = GetPlayerBuffTexture(i)
+        local group = BuffReminder.FindBuffGroup(name)
+        -- if the buff isn't found in the buff groups or time is low then don't add it
+        if group ~= nil and time > brBuffGroups[group].warntime then
+            current_buffs[name] = GetPlayerBuffTexture(i)
+            brBuffGroups[group].icon = tex
+        end
     end
-    return lbrBuffList
+    BuffReminder.UpdateBuffStatus(current_buffs)
+    BuffReminder.current_buffs = current_buffs
 end
 
-local function CheckPlayerBuffs()
-    local iconChanged = false
-    lbrBuffList = GetPlayerBuffs()
+function BuffReminder.GetMissinGroups()
+    missing_groups = {}
     for i in brBuffGroups do
-        local shown = brShowIcons[i] -- save previous state for sound logic
-        brShowIcons[i] = true
-        for j in lbrBuffList do
-            if brBuffGroups[i].buffs[lbrBuffList[j].name] ~= nil then
-                brBuffGroups[i].icon = lbrBuffList[j].icon
-                if lbrBuffList[j].time > brBuffGroups[i].warntime then
-                    brShowIcons[i] = false
-                    if shown then iconChanged = true end
-                    break
-                end
-            end
-        end
-        if brShowIcons[i] and not shown then
-            if brOptions.warnsound ~= nil then PlaySound(tostring(brOptions.warnsound), "master") end
-            iconChanged = true
+        missing_groups[i] = brBuffGroups[i].icon
+    end
+    for i in BuffReminder.watched_buffs do
+        if BuffReminder.current_buffs[i] ~= nil then
+            local group = BuffReminder.FindBuffGroup(i)
+            missing_groups[group] = nil
         end
     end
-    return iconChanged
+    BuffReminder.missing_groups = missing_groups
+end
+
+function BuffReminder.GetMissinBuffs()
+    BuffReminder.missing_buffs = {}
+    for i in BuffReminder.watched_buffs do
+        if BuffReminder.current_buffs[i] == nil then
+            BuffReminder.missing_buffs[i] = BuffReminder.FindBuffGroup(i)
+        end
+    end
+end
+
+function BuffReminder.GetWatchedBuffs()
+    BuffReminder.watched_buffs = {}
+    for i in brBuffGroups do
+        for j in brBuffGroups[i].buffs do
+            BuffReminder.watched_buffs[j] = {}
+        end
+    end
+end
+--------------------------------------------------------------------------------
+
+function BuffReminder.GetPlayerBuffName(n)
+    TooltipScanner:ClearLines()
+    TooltipScanner:SetPlayerBuff(n)
+    return TooltipScannerTextLeft1:GetText()
 end
 
 local function CheckWeaponEnchants()
     local changed = false
     if (brOptions.enchants.main == true) or (brOptions.enchants.off == true) then
         local hasMainHandEnchant, mainHandExpiration, mainHandCharges, hasOffHandEnchant, offHandExpiration, offHandCharges = GetWeaponEnchantInfo();
-        if (lbrEnchants.main ~= hasMainHandEnchant) or (hasOffHandEnchant ~= lbrEnchants.off) then
+        if (BuffReminder.enchants.main ~= hasMainHandEnchant) or (hasOffHandEnchant ~= BuffReminder.enchants.off) then
             changed = true
         end
-        lbrEnchants.main = (hasMainHandEnchant == 1) and (mainHandExpiration > brOptions.warntime * 1000)
-        lbrEnchants.off = (hasOffHandEnchant == 1) and (offHandExpiration > brOptions.warntime * 1000)
+        BuffReminder.enchants.main = (hasMainHandEnchant == 1) and (mainHandExpiration > brOptions.warntime * 1000)
+        BuffReminder.enchants.off = (hasOffHandEnchant == 1) and (offHandExpiration > brOptions.warntime * 1000)
     end
     return changed
 end
@@ -273,7 +300,7 @@ function BuffReminder.AddBuffToGroup(grp, name, print)
         brBuffGroups[grp].buffs[name] = {}
     end
     if print then BuffReminder.PrintGroup(grp) end
-    brForceUpdate = true
+    BuffReminder.update = true
 end
 
 local function ShowHelp()
@@ -418,7 +445,7 @@ function SlashCmdList.BuffReminder(msg)-- we put the slash commands to work
         end
     end
     
-    brForceUpdate = true
+    BuffReminder.update = true
     
     if not handled then
         DEFAULT_CHAT_FRAME:AddMessage("\124cffcbeb1c\124hBuffReminder command error. Try /br help.")
@@ -454,51 +481,52 @@ function BuffReminder_OnLoad()
 end
 --------------------------------------------------------------------------------------------------
 function BuffReminder_OnUpdate(elapsed)
-    lbrUpdateTime = lbrUpdateTime + elapsed
-    if lbrUpdateTime >= 0.5 then
-        if brHideAllIcons then return end
-        lbrUpdateTime = 0
-        if brOptions.disabled then return end
-        if brForceUpdate then
-            CheckPlayerBuffs()
-            CheckWeaponEnchants()
-            brForceUpdate = false
-            BuffReminder.DrawIcons()
-        elseif CheckPlayerBuffs() or CheckWeaponEnchants() then
-            BuffReminder.DrawIcons()
-        end
-        lbrUpdateTime = GetTime()
+    BuffReminder.update_time = BuffReminder.update_time + elapsed
+    if BuffReminder.update_time >= 0.5 then
+        BuffReminder.update_time = 0
+        if BuffReminder.hide_all then return end
+        BuffReminder.Update()
+    end
+end
+
+function BuffReminder.Update()
+    BuffReminder.GetBuffs()
+    CheckWeaponEnchants()
+    if BuffReminder.update then
+        BuffReminder.update = false
+        BuffReminder.GetWatchedBuffs()
+        BuffReminder.GetMissinGroups()
+        BuffReminder.MakeIcons()
     end
 end
 
 function BuffReminder_OnEvent(event, arg1)
     if event == "UNIT_FLAGS" and arg1 == "player" then
         if UnitOnTaxi("player") == 1 then
-            lbrPlayerStatus.taxi = true
+            BuffReminder.player_status.taxi = true
         else
-            lbrPlayerStatus.taxi = false
+            BuffReminder.player_status.taxi = false
         end
---    elseif event == "PLAYER_AURAS_CHANGED" then
---        BuffReminder.GetBuffs()
+    -- elseif event == "PLAYER_AURAS_CHANGED" then
+    --     BuffReminder.update = true
     elseif event == "PARTY_MEMBERS_CHANGED" then
-        lbrPlayerStatus.party = (GetNumPartyMembers() > 0)
+        BuffReminder.player_status.party = (GetNumPartyMembers() > 0)
     elseif event == "RAID_ROSTER_UPDATE" then
-        lbrPlayerStatus.raid = (GetNumRaidMembers() > 0)
+        BuffReminder.player_status.raid = (GetNumRaidMembers() > 0)
     elseif event == "PLAYER_DEAD" then
-        lbrPlayerStatus.dead = true
+        BuffReminder.player_status.dead = true
     elseif event == "PLAYER_UNGHOST" then
-        lbrPlayerStatus.dead = false
+        BuffReminder.player_status.dead = false
     elseif event == "PLAYER_UPDATE_RESTING" then
-        lbrPlayerStatus.resting = (IsResting() == 1)
+        BuffReminder.player_status.resting = (IsResting() == 1)
     elseif event == "PLAYER_ENTERING_WORLD" then
-        lbrPlayerStatus.resting = (IsResting() == 1)
-        lbrPlayerStatus.dead = (UnitIsDeadOrGhost("player") == 1)
-        lbrPlayerStatus.taxi = (UnitOnTaxi("player") == 1)
-        lbrPlayerStatus.party = (GetNumPartyMembers() > 0)
-        lbrPlayerStatus.raid = (GetNumRaidMembers() > 0)
+        BuffReminder.player_status.resting = (IsResting() == 1)
+        BuffReminder.player_status.dead = (UnitIsDeadOrGhost("player") == 1)
+        BuffReminder.player_status.taxi = (UnitOnTaxi("player") == 1)
+        BuffReminder.player_status.party = (GetNumPartyMembers() > 0)
+        BuffReminder.player_status.raid = (GetNumRaidMembers() > 0)
         local isInstance, instanceType = (IsInInstance() == 1)
-        lbrPlayerStatus.instance = isInstance
---        BuffReminder.GetBuffs()
+        BuffReminder.player_status.instance = isInstance
     elseif event == "ADDON_LOADED" then
     -- fix old config for tristate conditions or other issues
         if arg1 == "BuffReminder" then
@@ -532,6 +560,6 @@ function BuffReminder_OnEvent(event, arg1)
         end
     end
     -- fix old config
-    brForceUpdate = true -- force icon update
+    BuffReminder.update = true -- force icon update
 end
 --------------------------------------------------------------------------------------------------

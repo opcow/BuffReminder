@@ -32,16 +32,19 @@ function AddGroupClicked()
     if txt ~= nil and txt ~= "" then
         BuffReminder.AddBuffToGroup(txt, nil)
         GroupLayoutEdit:SetText("")
+        BuffLayoutEdit:SetText("")
         UIDropDownMenu_ClearAll(GroupLayoutDrop)
+        UIDropDownMenu_ClearAll(BuffLayoutDrop)
         GroupLayout_DisableChecks()
     end
 end
 
 function DelGroupClicked()
-    if curGroupSel ~= nill then
+    if curGroupSel ~= nil then
         brBuffGroups[curGroupSel] = nil
     end
     UIDropDownMenu_ClearAll(GroupLayoutDrop)
+    UIDropDownMenu_ClearAll(BuffLayoutDrop)
     GroupLayout_DisableChecks()
 end
 
@@ -56,6 +59,7 @@ end
 function GroupLayoutDrop_OnClick(arg1)
     curGroupSel = arg1
     UIDropDownMenu_SetSelectedID(GroupLayoutDrop, this:GetID())
+    UIDropDownMenu_ClearAll(BuffLayoutDrop)
     if brBuffGroups[arg1] ~= nil then
         GroupLayout_EnableChecks()
         BrCheck_SetState(GConditionsAlwaysCheck, brBuffGroups[arg1].conditions["always"])
@@ -72,6 +76,7 @@ function GroupLayoutDrop_OnClick(arg1)
 end
 
 function GroupLayout_DisableChecks()
+    curGroupSel = nil
     GConditionsAlwaysCheck:Disable()
     GConditionsRestingCheck:Disable()
     GConditionsTaxiCheck:Disable()
@@ -99,7 +104,7 @@ end
 
 function AddBuffClicked()
     local txt = BuffLayoutEdit:GetText()
-    if txt ~= nil and txt ~= "" then
+    if txt ~= nil and txt ~= "" and curGroupSel ~= nil then
         BuffReminder.AddBuffToGroup(curGroupSel, txt)
         BuffLayoutEdit:SetText("")
         UIDropDownMenu_ClearAll(BuffLayoutDrop)
@@ -152,7 +157,8 @@ function BrCheck_Clicked()
         BrCheck_SetState(this, this.state + 1)
     end
     brBuffGroups[curGroupSel].conditions[string.lower(this:GetText())] = this.state
-    brForceUpdate = true
+    BuffReminder.update = true
+    DEFAULT_CHAT_FRAME:AddMessage(string.lower(this:GetText()) .. " " .. this.state)
 end
 
 function BrDefCheck_Clicked()
@@ -197,12 +203,14 @@ function BrGroupsConfigFrame_Toggle(mouseButton)
             BrGroupsConfigFrame:Show();
         end
     else
-        brHideAllIcons = not brHideAllIcons
-        BuffReminder.ClearIcons()
-        brForceUpdate = true
-        if brHideAllIcons then
+        BuffReminder.hide_all = not BuffReminder.hide_all
+        for i in BuffReminder.icons do
+            BuffReminder.icons[i]:Hide()
+        end
+        if BuffReminder.hide_all then
             DEFAULT_CHAT_FRAME:AddMessage("Buff reminder icons will not be shown.")
         else
+            BuffReminder.update = true
             DEFAULT_CHAT_FRAME:AddMessage("Buff reminder icons will be shown.")
         end
     end
