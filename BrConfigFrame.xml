@@ -3,20 +3,20 @@
 	<CheckButton name="BrTrisStateCheckTemplate" inherits="UICheckButtonTemplate" checked="false" virtual="true">
 		<Scripts>
 			<OnLoad>
-				BrCheck_OnLoad();
+				BuffReminder.Check_OnLoad();
 			</OnLoad>
 			<OnClick>
-				BrCheck_Clicked();
+				BuffReminder.Check_Clicked();
 			</OnClick>
 		</Scripts>
 	</CheckButton>
 	<CheckButton name="BrDefTrisStateCheckTemplate" inherits="UICheckButtonTemplate" checked="false" virtual="true">
 		<Scripts>
 			<OnLoad>
-				BrCheck_OnLoad();
+				BuffReminder.Check_OnLoad();
 			</OnLoad>
 			<OnClick>
-				BrDefCheck_Clicked();
+				BuffReminder.DefCheck_Clicked();
 			</OnClick>
 		</Scripts>
 	</CheckButton>
@@ -45,7 +45,7 @@
 		</Shadow>
 	</FontString>
 	<!-- END TEMPLATES -->
-	<Frame name="BrGroupsConfigFrame" inherits="BasicFrameTemplate" parent="UIParent" toplevel="true" enableMouse="true" hidden="true">
+	<Frame name="BRConfig" inherits="BasicFrameTemplate" parent="UIParent" toplevel="true" enableMouse="true" hidden="true">
 		<Size>
 			<AbsDimension x="472" y="440" />
 		</Size>
@@ -65,7 +65,7 @@
 		</TitleRegion>
 		<Frames>
 			<!-- BEGIN GROUP SECTION -->
-			<Frame name="GroupLayout" inherits="BasicFrameTemplate">
+			<Frame name="$parentLayout" inherits="BasicFrameTemplate">
 				<Size>
 					<AbsDimension x="1" y="1" />
 				</Size>
@@ -81,7 +81,7 @@
 						<Scripts>
 							<OnLoad>
 								UIDropDownMenu_SetWidth(120);
-								UIDropDownMenu_Initialize(this, SelGroupDropInit);
+								UIDropDownMenu_Initialize(this, BuffReminder.SelGroupDropInit);
 								UIDropDownMenu_SetText("Select Group");
 							</OnLoad>
 						</Scripts>
@@ -97,7 +97,7 @@
 						<Scripts>
 							<OnLoad>
 								UIDropDownMenu_SetWidth(120);
-								UIDropDownMenu_Initialize(this, DelGroupDropInit);
+								UIDropDownMenu_Initialize(this, BuffReminder.DelGroupDropInit);
 								UIDropDownMenu_SetText("Delete Group");
 							</OnLoad>
 						</Scripts>
@@ -113,7 +113,7 @@
 						<Scripts>
 							<OnLoad>
 								UIDropDownMenu_SetWidth(120);
-								UIDropDownMenu_Initialize(this, DelBuffDropInit);
+								UIDropDownMenu_Initialize(this, BuffReminder.DelBuffDropInit);
 								UIDropDownMenu_SetText("Delete Buff");
 							</OnLoad>
 						</Scripts>
@@ -140,7 +140,7 @@
 								this:SetTextInsets(0, 8, 0, 0);
 							</OnLoad>
 							<OnEnterPressed>
-								AddGroupClicked();
+								BuffReminder.AddGroupClicked();
 								this:ClearFocus();
 							</OnEnterPressed>
 						</Scripts>
@@ -174,7 +174,7 @@
 								this:SetTextInsets(0, 8, 0, 0);
 							</OnLoad>
 							<OnEnterPressed>
-								AddBuffClicked();
+								BuffReminder.AddBuffClicked();
 								this:ClearFocus();
 							</OnEnterPressed>
 						</Scripts>
@@ -202,7 +202,7 @@
 				</Layers>
 				<Scripts>
 					<OnLoad>
-						BrGroupCfg_OnLoad();
+						BuffReminder.GroupCfg_OnLoad();
 					</OnLoad>
 				</Scripts>
 			</Frame>
@@ -273,7 +273,7 @@
 								this:SetTextInsets(0, 8, 0, 0);
 							</OnLoad>
 							<OnEnterPressed>
-								BrSetGroupWarnTime(this:GetText());
+								BuffReminder.SetGroupWarnTime(this:GetText());
 								this:ClearFocus();
 							</OnEnterPressed>
 						</Scripts>
@@ -292,7 +292,7 @@
 				</Anchors>
 				<Scripts>
 					<OnLoad>
-						GroupLayout_DisableChecks();
+						BuffReminder.DisableChecks();
 					</OnLoad>
 				</Scripts>
 				<Layers>
@@ -393,7 +393,7 @@
 								this:SetAutoFocus(false);this:SetTextInsets(0, 8, 0, 0);
 							</OnLoad>
 							<OnEnterPressed>
-								BrSetDefaultWarnTime(this:GetText())
+								BuffReminder.SetDefaultWarnTime(this:GetText())
 								this:ClearFocus();
 							</OnEnterPressed>
 						</Scripts>
@@ -455,7 +455,7 @@
 								this:SetTextInsets(0, 8, 0, 0);
 							</OnLoad>
 							<OnEnterPressed>
-								BrSetWarnCharges(this:GetText());
+								BuffReminder.SetWarnCharges(this:GetText());
 								this:ClearFocus();
 							</OnEnterPressed>
 						</Scripts>
@@ -565,7 +565,7 @@
 				</Anchors>
 				<Scripts>
 					<OnClick>
-						BrGroupsConfigFrame:Hide();
+						BRConfig:Hide();
 					</OnClick>
 				</Scripts>
 			</Button>
@@ -584,7 +584,7 @@
 		</Backdrop>
 		<Scripts>
 			<OnShow>
-				BrGroupsConfigFrame_OnShow();
+				BuffReminder.GroupsConfigFrame_OnShow();
 			</OnShow>
 		</Scripts>
 		<Layers>
@@ -634,13 +634,13 @@
 				this:RegisterForClicks("RightButtonUp", "LeftButtonUp");
 			</OnLoad>
 			<OnClick>
-				BrGroupsConfigFrame_Toggle(arg1, arg2);
+				BuffReminder.GroupsConfigFrame_Toggle(arg1, arg2);
 			</OnClick>
 			<OnEnter>
-				BrGroupsConfigFrame_OnEnter();
+				BuffReminder.GroupsConfigFrame_OnEnter();
 			</OnEnter>
 			<OnLeave>
-				BrGroupsConfigFrame_OnLeave();
+				BuffReminder.GroupsConfigFrame_OnLeave();
 			</OnLeave>
 		</Scripts>
 	</Button>

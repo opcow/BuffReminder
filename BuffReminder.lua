@@ -98,11 +98,12 @@ function BuffReminder.MakeIcons()
         BuffReminder.icons[i]:Hide()
     end
     local index = 1
-    local skipIcon = false
     for i in BuffReminder.missing_groups do
+        local skipIcon = false
         for j in BuffReminder.player_status do
             if (brBuffGroups[i].conditions.always ~= 2) and ((brBuffGroups[i].conditions.always == 1) or (BuffReminder.player_status[j] and
                 (brBuffGroups[i].conditions[j] == 1)) or (not BuffReminder.player_status[j] and brBuffGroups[i].conditions[j] == 2)) then
+                DEFAULT_CHAT_FRAME:AddMessage("Hidden because : " .. j)
                 skipIcon = true
                 break
             end
