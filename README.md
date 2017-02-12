@@ -5,7 +5,7 @@ A World of Warcraft 1.12 (Vanilla WoW) addon that displays user placeable icons 
 ![example icon image](http://i.imgur.com/i6dGRIO.png)
 ![BuffReminder Button Image](http://i.imgur.com/gCf7Ygj.png)
 
-## :japanese_goblin: Warning :japanese_goblin:
+## :exclamation: Warning :exclamation:
 **Saved variable format has changed in version 1.2. Saved configurations will be lost if you upgrade.**
 
 #### Notes
