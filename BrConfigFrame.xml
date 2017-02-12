@@ -559,7 +559,7 @@
 				<Anchors>
 					<Anchor point="BOTTOM">
 						<Offset>
-							<AbsDimension x="0" y="16" />
+							<AbsDimension x="0" y="18" />
 						</Offset>
 					</Anchor>
 				</Anchors>
