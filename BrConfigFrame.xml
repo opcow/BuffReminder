@@ -374,7 +374,7 @@
 								this:SetAutoFocus(false);this:SetTextInsets(0, 8, 0, 0);
 							</OnLoad>
 							<OnEnterPressed>
-								brOptions.warnsound = this:GetText()
+								BRVars.Options.warnsound = this:GetText()
 								this:ClearFocus();
 							</OnEnterPressed>
 						</Scripts>
@@ -404,10 +404,10 @@
 								getglobal(this:GetName() .. "Text"):SetText("Main Hand Enchant")
 							</OnLoad>
 							<OnShow>
-								this:SetChecked(brOptions.enchants.main)
+								this:SetChecked(BRVars.Options.enchants.main)
 							</OnShow>
 							<OnClick>
-								brOptions.enchants.main = (this:GetChecked() == 1)
+								BRVars.Options.enchants.main = (this:GetChecked() == 1)
 								BuffReminder.Update()
 							</OnClick>
 						</Scripts>
@@ -425,10 +425,10 @@
 								getglobal(this:GetName() .. "Text"):SetText("Off Hand Enchant")
 							</OnLoad>
 							<OnShow>
-								this:SetChecked(brOptions.enchants.off)
+								this:SetChecked(BRVars.Options.enchants.off)
 							</OnShow>
 							<OnClick>
-								brOptions.enchants.off = (this:GetChecked() == 1)
+								BRVars.Options.enchants.off = (this:GetChecked() == 1)
 								BuffReminder.Update()
 							</OnClick>
 						</Scripts>
@@ -473,7 +473,7 @@
 						</Anchors>
 						<Scripts>
 							<OnShow>
-								this:SetValue(brOptions.size)
+								this:SetValue(BRVars.Options.size)
 							</OnShow>
 							<OnLoad>
 								getglobal(this:GetName() .. 'Low'):SetText('');
@@ -481,9 +481,9 @@
 								getglobal(this:GetName() .. 'Text'):SetText('Icon Size');
 							</OnLoad>
 							<OnValueChanged>
-								brOptions.size = this:GetValue();
-								BuffReminderFrame:SetWidth(brOptions.size)
-								BuffReminderFrame:SetHeight(brOptions.size)
+								BRVars.Options.size = this:GetValue();
+								BuffReminderFrame:SetWidth(BRVars.Options.size)
+								BuffReminderFrame:SetHeight(BRVars.Options.size)
 								BuffReminder.MakeIcons();
 							</OnValueChanged>
 						</Scripts>
@@ -501,13 +501,13 @@
 						</Anchors>
 						<Scripts>
 							<OnShow>
-								this:SetValue(brOptions.alpha)
+								this:SetValue(BRVars.Options.alpha)
 							</OnShow>
 							<OnLoad>
 								getglobal(this:GetName() .. 'Low'):SetText('');getglobal(this:GetName() .. 'High'):SetText('');getglobal(this:GetName() .. 'Text'):SetText('Icon Transparency');
 							</OnLoad>
 							<OnValueChanged>
-								brOptions.alpha = this:GetValue();
+								BRVars.Options.alpha = this:GetValue();
 								BuffReminder.MakeIcons();
 							</OnValueChanged>
 						</Scripts>

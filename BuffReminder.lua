@@ -17,12 +17,12 @@ BuffReminder = {
     },
     ["update_time"] = 0
 }
+BRVars = {}
+BRVars.BuffGroups = {}
+BRVars.Options = {}
 
-brBuffGroups = {}
-brOptions = {}
-
-brDefaultOptions = {
-    ["version"] = "1.0",
+BuffReminder.DefaultOptions = {
+    ["version"] = "1.2",
     ["warnsound"] = nil,
     ["size"] = 30,
     ["warntime"] = 60,
@@ -83,12 +83,12 @@ end
 function BuffReminder.MakeIcon(index, texture)
     BuffReminder.icons[index] = CreateFrame("Frame", nil, BuffReminderFrame)
     BuffReminder.icons[index]:SetFrameStrata("BACKGROUND")
-    BuffReminder.icons[index]:SetWidth(brOptions.size)
-    BuffReminder.icons[index]:SetHeight(brOptions.size)
+    BuffReminder.icons[index]:SetWidth(BRVars.Options.size)
+    BuffReminder.icons[index]:SetHeight(BRVars.Options.size)
 
     tex = BuffReminder.icons[index]:CreateTexture(nil, "ARTWORK")
     tex:SetTexture(texture)
-    tex:SetAlpha(brOptions.alpha)
+    tex:SetAlpha(BRVars.Options.alpha)
     tex:SetAllPoints(BuffReminder.icons[index])
     BuffReminder.icons[index].texture = tex
 end
@@ -101,8 +101,8 @@ function BuffReminder.MakeIcons()
     for i in BuffReminder.missing_groups do
         local skipIcon = false
         for j in BuffReminder.player_status do
-            if (brBuffGroups[i].conditions.always ~= 2) and ((brBuffGroups[i].conditions.always == 1) or (BuffReminder.player_status[j] and
-                (brBuffGroups[i].conditions[j] == 1)) or (not BuffReminder.player_status[j] and brBuffGroups[i].conditions[j] == 2)) then
+            if (BRVars.BuffGroups[i].conditions.always ~= 2) and ((BRVars.BuffGroups[i].conditions.always == 1) or (BuffReminder.player_status[j] and
+                (BRVars.BuffGroups[i].conditions[j] == 1)) or (not BuffReminder.player_status[j] and BRVars.BuffGroups[i].conditions[j] == 2)) then
                 DEFAULT_CHAT_FRAME:AddMessage("Hidden because : " .. j)
                 skipIcon = true
                 break
@@ -115,20 +115,20 @@ function BuffReminder.MakeIcons()
     end
     skipIcon = false
     for i in BuffReminder.player_status do
-        if (brOptions.conditions.always ~= 2) and ((brOptions.conditions.always == 1) or (BuffReminder.player_status[i] and (brOptions.conditions[i] == 1)) or (not BuffReminder.player_status[i] and brOptions.conditions[i] == 2)) then
+        if (BRVars.Options.conditions.always ~= 2) and ((BRVars.Options.conditions.always == 1) or (BuffReminder.player_status[i] and (BRVars.Options.conditions[i] == 1)) or (not BuffReminder.player_status[i] and BRVars.Options.conditions[i] == 2)) then
             skipIcon = true
             break
         end
     end
     if not skipIcon then
-        if brOptions.enchants.main and (not BuffReminder.enchants.main) then
+        if BRVars.Options.enchants.main and (not BuffReminder.enchants.main) then
             local t = GetInventoryItemTexture("player", 16)
             if t ~= nil then
                 BuffReminder.MakeIcon(index, t)
                 index = index + 1
             end
         end
-        if brOptions.enchants.off and (not BuffReminder.enchants.off) then
+        if BRVars.Options.enchants.off and (not BuffReminder.enchants.off) then
             local t = GetInventoryItemTexture("player", 17)
             if t ~= nil then
                 BuffReminder.MakeIcon(index, t)
@@ -138,7 +138,7 @@ function BuffReminder.MakeIcons()
     end
 
     local count = index - 1
-    local pitch = brOptions.size + BuffReminder.button_space * 2
+    local pitch = BRVars.Options.size + BuffReminder.button_space * 2
     local c = (pitch * (count - 1)) / 2
     for i = count, 1, -1 do
         BuffReminder.icons[i]:SetPoint("CENTER", c, 0)
@@ -148,8 +148,8 @@ function BuffReminder.MakeIcons()
 end
 
 function BuffReminder.FindBuffGroup(buff)
-    for i in brBuffGroups do
-        if brBuffGroups[i].buffs[buff] ~= nil then
+    for i in BRVars.BuffGroups do
+        if BRVars.BuffGroups[i].buffs[buff] ~= nil then
             return i
         end
     end
@@ -182,9 +182,9 @@ function BuffReminder.GetBuffs()
         local tex = GetPlayerBuffTexture(i)
         local group = BuffReminder.FindBuffGroup(name)
         -- if the buff isn't found in the buff groups or time is low then don't add it
-        if group ~= nil and time > brBuffGroups[group].warntime then
+        if group ~= nil and (time > BRVars.BuffGroups[group].warntime or time == 0) then
             current_buffs[name] = GetPlayerBuffTexture(i)
-            brBuffGroups[group].icon = tex
+            BRVars.BuffGroups[group].icon = tex
         end
     end
     local updated = BuffReminder.BuffsUpdated(current_buffs)
@@ -194,8 +194,8 @@ end
 
 function BuffReminder.GetMissinGroups()
     missing_groups = {}
-    for i in brBuffGroups do
-        missing_groups[i] = brBuffGroups[i].icon
+    for i in BRVars.BuffGroups do
+        missing_groups[i] = BRVars.BuffGroups[i].icon
     end
     for i in BuffReminder.watched_buffs do
         if BuffReminder.current_buffs[i] ~= nil then
@@ -217,8 +217,8 @@ end
 
 function BuffReminder.GetWatchedBuffs()
     BuffReminder.watched_buffs = {}
-    for i in brBuffGroups do
-        for j in brBuffGroups[i].buffs do
+    for i in BRVars.BuffGroups do
+        for j in BRVars.BuffGroups[i].buffs do
             BuffReminder.watched_buffs[j] = {}
         end
     end
@@ -232,23 +232,23 @@ end
 
 function BuffReminder.GetEnchants()
     local changed = false
-    if brOptions.enchants.main or brOptions.enchants.off then
+    if BRVars.Options.enchants.main or BRVars.Options.enchants.off then
         local hasMainHandEnchant, mainHandExpiration, mainHandCharges, hasOffHandEnchant, offHandExpiration, offHandCharges = GetWeaponEnchantInfo();
         if (BuffReminder.enchants.main ~= hasMainHandEnchant) or (hasOffHandEnchant ~= BuffReminder.enchants.off) then
             changed = true
         end
-        BuffReminder.enchants.main = (hasMainHandEnchant == 1) and (mainHandExpiration > brOptions.warntime * 1000) and ((mainHandCharges == 0) or (mainHandCharges > brOptions.warncharges))
-        BuffReminder.enchants.off = (hasOffHandEnchant == 1) and (offHandExpiration > brOptions.warntime * 1000) and ((offHandCharges == 0) or (offHandCharges > brOptions.warncharges))
+        BuffReminder.enchants.main = (hasMainHandEnchant == 1) and (mainHandExpiration > BRVars.Options.warntime * 1000) and ((mainHandCharges == 0) or (mainHandCharges > BRVars.Options.warncharges))
+        BuffReminder.enchants.off = (hasOffHandEnchant == 1) and (offHandExpiration > BRVars.Options.warntime * 1000) and ((offHandCharges == 0) or (offHandCharges > BRVars.Options.warncharges))
     end
     return changed
 end
 
 -- slash command functions ------------------------------------------------------------------
 function BuffReminder.GroupExists(group)
-    if brBuffGroups[group] == nil then
+    if BRVars.BuffGroups[group] == nil then
         DEFAULT_CHAT_FRAME:AddMessage('\124cffffff00\124hGroup "' .. tostring(group) .. '" does not exist.')
         DEFAULT_CHAT_FRAME:AddMessage('\124cffffff00\124hYour groups are:')
-        for i in brBuffGroups do
+        for i in BRVars.BuffGroups do
             DEFAULT_CHAT_FRAME:AddMessage('\124cffffff00\124h  ' .. i)
         end
         return false
@@ -256,11 +256,10 @@ function BuffReminder.GroupExists(group)
     return true
 end
 
-
 function BuffReminder.PrintBuffs()
-    for i in brBuffGroups do
+    for i in BRVars.BuffGroups do
         DEFAULT_CHAT_FRAME:AddMessage('\124cffffff00\124hGroup: ' .. tostring(i))
-        for j in brBuffGroups[i].buffs do
+        for j in BRVars.BuffGroups[i].buffs do
             DEFAULT_CHAT_FRAME:AddMessage("\124cffffff00\124h  " .. j)
         end
     end
@@ -268,31 +267,31 @@ end
 
 function BuffReminder.PrintAllGroups()
     DEFAULT_CHAT_FRAME:AddMessage("\124cffcbeb1c\124h** buff groups **")
-    for i in brBuffGroups do
+    for i in BRVars.BuffGroups do
         DEFAULT_CHAT_FRAME:AddMessage("\124cffcbeb1c\124h   " .. i)
-        local t = brBuffGroups[i].buffs
+        local t = BRVars.BuffGroups[i].buffs
     end
     DEFAULT_CHAT_FRAME:AddMessage("\124cffcbeb1c\124h** end of buff groups **")
 end
 
 function BuffReminder.PrintGroup(group)
     DEFAULT_CHAT_FRAME:AddMessage('\124cffffff00\124hGroup: ' .. tostring(group))
-    for i in brBuffGroups[group].buffs do
+    for i in BRVars.BuffGroups[group].buffs do
         DEFAULT_CHAT_FRAME:AddMessage("\124cffffff00\124h  " .. i)
     end
     DEFAULT_CHAT_FRAME:AddMessage("\124cffffff00\124h  ---")
-    for i in brBuffGroups[group].conditions do
-        DEFAULT_CHAT_FRAME:AddMessage("\124cffffff00\124h  hide condition " .. i .. ": \124cff80ff00\124h" .. tostring(brBuffGroups[group].conditions[i]))
+    for i in BRVars.BuffGroups[group].conditions do
+        DEFAULT_CHAT_FRAME:AddMessage("\124cffffff00\124h  hide condition " .. i .. ": \124cff80ff00\124h" .. tostring(BRVars.BuffGroups[group].conditions[i]))
     end
-    DEFAULT_CHAT_FRAME:AddMessage("\124cffffff00\124h  early warning time: \124cff80ff00\124h" .. tostring(brBuffGroups[group].warntime))
+    DEFAULT_CHAT_FRAME:AddMessage("\124cffffff00\124h  early warning time: \124cff80ff00\124h" .. tostring(BRVars.BuffGroups[group].warntime))
 end
 
 function BuffReminder.AddBuffToGroup(grp, name, print)
-    if brBuffGroups[grp] == nil then
-        brBuffGroups[grp] = {["conditions"] = brOptions.conditions, ["warntime"] = brOptions.warntime, ["icon"] = "Interface\\Icons\\INV_Misc_QuestionMark", ["buffs"] = {}}
+    if BRVars.BuffGroups[grp] == nil then
+        BRVars.BuffGroups[grp] = {["conditions"] = BRVars.Options.conditions, ["warntime"] = BRVars.Options.warntime, ["icon"] = "Interface\\Icons\\INV_Misc_QuestionMark", ["buffs"] = {}}
     end
     if name ~= nil then
-        brBuffGroups[grp].buffs[name] = {}
+        BRVars.BuffGroups[grp].buffs[name] = {}
     end
     if print then BuffReminder.PrintGroup(grp) end
     BuffReminder.Update()
@@ -360,17 +359,17 @@ function SlashCmdList.BuffReminder(msg)
                 if not BuffReminder.GroupExists(args[2]) then return end
                 if argc >= 3 then
                     if largs[3] == "disable" then
-                        brBuffGroups[args[2]].conditions.always = true
+                        BRVars.BuffGroups[args[2]].conditions.always = true
                     elseif largs[3] == "enable" then
-                        brBuffGroups[args[2]].conditions.always = false
-                    elseif brBuffGroups[args[2]].conditions[args[3]] ~= nil then
-                        brBuffGroups[args[2]].conditions[args[3]] = not brBuffGroups[args[2]].conditions[args[3]]
+                        BRVars.BuffGroups[args[2]].conditions.always = false
+                    elseif BRVars.BuffGroups[args[2]].conditions[args[3]] ~= nil then
+                        BRVars.BuffGroups[args[2]].conditions[args[3]] = not BRVars.BuffGroups[args[2]].conditions[args[3]]
                     elseif largs[3] == "remove" then
-                        brBuffGroups[args[2]] = nil
+                        BRVars.BuffGroups[args[2]] = nil
                     else
                         local n = toNum(args[3])
                         if n ~= nil then
-                            brBuffGroups[args[2]].warntime = n
+                            BRVars.BuffGroups[args[2]].warntime = n
                         end
                     end
                 end
@@ -390,8 +389,8 @@ function SlashCmdList.BuffReminder(msg)
                 BuffReminder.PrintGroup(g)
             end
         elseif largs[3] == "remove" then
-            for i in brBuffGroups do
-                brBuffGroups[i].buffs[args[2]] = nil
+            for i in BRVars.BuffGroups do
+                BRVars.BuffGroups[i].buffs[args[2]] = nil
             end
             DEFAULT_CHAT_FRAME:AddMessage("\124cffabb7ff\124hRemoved " .. args[2] .. " from all buff groups.")
         end
@@ -406,33 +405,33 @@ function SlashCmdList.BuffReminder(msg)
             brtexture:SetTexture(nil)
             handled = true
         elseif args[1] == "NUKE" then
-            brBuffGroups = {}
-            brOptions = brDefaultOptions
+            BRVars.BuffGroups = {}
+            BRVars.Options = BuffReminder.DefaultOptions
             handled = true
         elseif largs[1] == "sound" then
             if argc == 1 then
-                brOptions.warnsound = nil
+                BRVars.Options.warnsound = nil
             else
-                brOptions.warnsound = args[2]
-                PlaySound(tostring(brOptions.warnsound), "master")
+                BRVars.Options.warnsound = args[2]
+                PlaySound(tostring(BRVars.Options.warnsound), "master")
             end
             handled = true
         elseif largs[1] == "size" then
             local n = toNum(args[2])
             if n ~= nil and (n >= 10 and n <= 400) then
-                brOptions.size = n
+                BRVars.Options.size = n
                 handled = true
             end
         elseif largs[1] == "alpha" then
             local n = toNum(args[2])
             if n ~= nil and (n >= 0 and n <= 1.0) then
-                brOptions.alpha = n
+                BRVars.Options.alpha = n
                 handled = true
             end
         elseif largs[1] == "time" then
             local n = toNum(args[2])
             if n ~= nil then
-                brOptions.warntime = n
+                BRVars.Options.warntime = n
                 handled = true
             end
         elseif largs[1] == "config" then
@@ -521,33 +520,32 @@ function BuffReminder_OnEvent(event, arg1)
         local isInstance, instanceType = (IsInInstance() == 1)
         BuffReminder.player_status.instance = isInstance
     elseif event == "ADDON_LOADED" then
-    -- fix old config for tristate conditions or other issues
         if arg1 == "BuffReminder" then
-            if brOptions == nil or brOptions.version ~= "1.0" then brOptions = brDefaultOptions end
-            BuffReminder.SanityCheck()
-            if brOptions.enchants == nil then
-                brOptions.enchants = brDefaultOptions.enchants
-           end
-            BuffReminderFrame:SetWidth(brOptions.size)
-            BuffReminderFrame:SetHeight(brOptions.size)
-            if brOptions.version == nil then brOptions.version = "1.0" end
-            if brOptions.conditions == nil then
-                brOptions.conditions = brDefaultOptions.conditions
+            if BRVars.Options == nil or BRVars.Options.version ~= BuffReminder.DefaultOptions then
+                BRVars.Options = BuffReminder.DefaultOptions
+            else
+                BuffReminder.SanityCheck()
             end
-            for i in brOptions.conditions do
-                if brOptions.conditions[i] == false then
-                    brOptions.conditions[i] = 0
-                elseif brOptions.conditions[i] == true then
-                    brOptions.conditions[i] = 1
+            BuffReminderFrame:SetWidth(BRVars.Options.size)
+            BuffReminderFrame:SetHeight(BRVars.Options.size)
+            if BRVars.Options.version == nil then BRVars.Options.version = BuffReminder.DefaultOptions.version end
+            if BRVars.Options.conditions == nil then
+                BRVars.Options.conditions = BuffReminder.DefaultOptions.conditions
+            end
+            for i in BRVars.Options.conditions do
+                if BRVars.Options.conditions[i] == false then
+                    BRVars.Options.conditions[i] = 0
+                elseif BRVars.Options.conditions[i] == true then
+                    BRVars.Options.conditions[i] = 1
                 end
             end
-            for i in brBuffGroups do
+            for i in BRVars.BuffGroups do
                 DEFAULT_CHAT_FRAME:AddMessage(i)
-                for j in brBuffGroups[i].conditions do
-                    if brBuffGroups[i].conditions[j] == false then
-                        brBuffGroups[i].conditions[j] = 0
-                    elseif brBuffGroups[i].conditions[j] == true then
-                        brBuffGroups[i].conditions[j] = 1
+                for j in BRVars.BuffGroups[i].conditions do
+                    if BRVars.BuffGroups[i].conditions[j] == false then
+                        BRVars.BuffGroups[i].conditions[j] = 0
+                    elseif BRVars.BuffGroups[i].conditions[j] == true then
+                        BRVars.BuffGroups[i].conditions[j] = 1
                     end
                 end
             end
@@ -557,19 +555,18 @@ function BuffReminder_OnEvent(event, arg1)
     BuffReminder.Update() -- force icon update
 end
 --------------------------------------------------------------------------------------------------
-
 function BuffReminder.SanityCheck()
-    for i in brDefaultOptions do
-        if brOptions[i] == nil then brOptions[i] = brDefaultOptions[i] end
+    for i in BuffReminder.DefaultOptions do
+        if BRVars.Options[i] == nil then BRVars.Options[i] = BuffReminder.DefaultOptions[i] end
     end
-    if brOptions.enchants.main == nil then brOptions.enchants.main = brDefaultOptions.enchants.main end
-    if brOptions.enchants.off == nil then brOptions.enchants.off = brDefaultOptions.enchants.off end
-    for i in brOptions.conditions do
-        if brOptions.conditions[i] == nil then brOptions.conditions[i] = brDefaultOptions.conditions[i] end
+    if BRVars.Options.enchants.main == nil then BRVars.Options.enchants.main = BuffReminder.DefaultOptions.enchants.main end
+    if BRVars.Options.enchants.off == nil then BRVars.Options.enchants.off = BuffReminder.DefaultOptions.enchants.off end
+    for i in BRVars.Options.conditions do
+        if BRVars.Options.conditions[i] == nil then BRVars.Options.conditions[i] = BuffReminder.DefaultOptions.conditions[i] end
     end
-    for i in brBuffGroups do
-        for j in brDefaultOptions.conditions do
-            if brBuffGroups[i].conditions[j] == nil then brBuffGroups[i].conditions[j] = brDefaultOptions.conditions[j] end
+    for i in BRVars.BuffGroups do
+        for j in BuffReminder.DefaultOptions.conditions do
+            if BRVars.BuffGroups[i].conditions[j] == nil then BRVars.BuffGroups[i].conditions[j] = BuffReminder.DefaultOptions.conditions[j] end
         end
     end
 end

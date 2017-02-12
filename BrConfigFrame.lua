@@ -3,25 +3,25 @@
 local curGroupSel
 
 function BuffReminder.GroupsConfigFrame_OnShow()
-    BuffReminder.CheckSetState(DefConditionsAlwaysCheck, brOptions.conditions["always"])
-    BuffReminder.CheckSetState(DefConditionsRestingCheck, brOptions.conditions["resting"])
-    BuffReminder.CheckSetState(DefConditionsTaxiCheck, brOptions.conditions["taxi"])
-    BuffReminder.CheckSetState(DefConditionsDeadCheck, brOptions.conditions["dead"])
-    BuffReminder.CheckSetState(DefConditionsPartyCheck, brOptions.conditions["party"])
-    BuffReminder.CheckSetState(DefConditionsRaidCheck, brOptions.conditions["raid"])
-    BuffReminder.CheckSetState(DefConditionsInstanceCheck, brOptions.conditions["instance"])
-    if brOptions.warntime == nil then
+    BuffReminder.CheckSetState(DefConditionsAlwaysCheck, BRVars.Options.conditions["always"])
+    BuffReminder.CheckSetState(DefConditionsRestingCheck, BRVars.Options.conditions["resting"])
+    BuffReminder.CheckSetState(DefConditionsTaxiCheck, BRVars.Options.conditions["taxi"])
+    BuffReminder.CheckSetState(DefConditionsDeadCheck, BRVars.Options.conditions["dead"])
+    BuffReminder.CheckSetState(DefConditionsPartyCheck, BRVars.Options.conditions["party"])
+    BuffReminder.CheckSetState(DefConditionsRaidCheck, BRVars.Options.conditions["raid"])
+    BuffReminder.CheckSetState(DefConditionsInstanceCheck, BRVars.Options.conditions["instance"])
+    if BRVars.Options.warntime == nil then
         BrDefTimeEdit:SetText(brDefaultOptions.warntime)
     else
-        BrDefTimeEdit:SetText(brOptions.warntime)
+        BrDefTimeEdit:SetText(BRVars.Options.warntime)
     end
-    if brOptions.warncharges == nil then
+    if BRVars.Options.warncharges == nil then
         BrChargesEdit:SetText(brDefaultOptions.warncharges)
     else
-        BrChargesEdit:SetText(brOptions.warncharges)
+        BrChargesEdit:SetText(BRVars.Options.warncharges)
     end
-    if brOptions.warnsound ~= nil then
-        BrSoundEdit:SetText(brOptions.warnsound)
+    if BRVars.Options.warnsound ~= nil then
+        BrSoundEdit:SetText(BRVars.Options.warnsound)
     end
 end
 
@@ -54,7 +54,7 @@ end
 
 function BuffReminder.SelGroupDropInit()
     local info = {}
-    for i in brBuffGroups do
+    for i in BRVars.BuffGroups do
         info.text, info.checked, info.notCheckable, info.keepShownOnClick, info.arg1, info.func = i, false, true, false, i, BuffReminder.SelGroupDrop_OnClick
         UIDropDownMenu_AddButton(info)
     end
@@ -62,7 +62,7 @@ end
 
 function BuffReminder.DelGroupDropInit()
     local info = {}
-    for i in brBuffGroups do
+    for i in BRVars.BuffGroups do
         info.text, info.checked, info.notCheckable, info.keepShownOnClick, info.arg1, info.func = i, false, true, false, i, BuffReminder.DelGroupDrop_OnClick
         UIDropDownMenu_AddButton(info)
     end
@@ -70,8 +70,8 @@ end
 
 function BuffReminder.DelBuffDropInit()
     local info = {}
-    if brBuffGroups[curGroupSel] ~= nil then
-        for i in brBuffGroups[curGroupSel].buffs do
+    if BRVars.BuffGroups[curGroupSel] ~= nil then
+        for i in BRVars.BuffGroups[curGroupSel].buffs do
             info.text, info.checked, info.notCheckable, info.keepShownOnClick, info.arg1, info.func = i, false, false, false, i, BuffReminder.DelBuffDrop_OnClick
             UIDropDownMenu_AddButton(info)
         end
@@ -80,7 +80,7 @@ end
 
 function BuffReminder.SelGroupDrop_OnClick(arg1)
     curGroupSel = arg1
-    if brBuffGroups[arg1] ~= nil then
+    if BRVars.BuffGroups[arg1] ~= nil then
         BuffReminder.GetSelected(arg1)
         BuffReminder.DelBuffDropInit()
     else
@@ -89,7 +89,7 @@ function BuffReminder.SelGroupDrop_OnClick(arg1)
 end
 
 function BuffReminder.DelGroupDrop_OnClick(arg1)
-    brBuffGroups[arg1] = nil
+    BRVars.BuffGroups[arg1] = nil
     BRConfigLayoutHeaderString:SetText("Buff Groups")
     BuffReminder.DisableChecks()
     curGroupSel = nil
@@ -98,7 +98,7 @@ end
 
 function BuffReminder.DelBuffDrop_OnClick(arg1)
     if curGroupSel ~= nil then
-        brBuffGroups[curGroupSel].buffs[arg1] = nil
+        BRVars.BuffGroups[curGroupSel].buffs[arg1] = nil
     end
     BuffReminder.DelBuffDropInit()
     BuffReminder.Update()
@@ -107,14 +107,14 @@ end
 function BuffReminder.GetSelected(group)
     BRConfigLayoutHeaderString:SetText(group)
     BuffReminder.EnableChecks()
-    BuffReminder.CheckSetState(GConditionsAlwaysCheck, brBuffGroups[group].conditions["always"])
-    BuffReminder.CheckSetState(GConditionsRestingCheck, brBuffGroups[group].conditions["resting"])
-    BuffReminder.CheckSetState(GConditionsTaxiCheck, brBuffGroups[group].conditions["taxi"])
-    BuffReminder.CheckSetState(GConditionsDeadCheck, brBuffGroups[group].conditions["dead"])
-    BuffReminder.CheckSetState(GConditionsPartyCheck, brBuffGroups[group].conditions["party"])
-    BuffReminder.CheckSetState(GConditionsRaidCheck, brBuffGroups[group].conditions["raid"])
-    BuffReminder.CheckSetState(GConditionsInstanceCheck, brBuffGroups[group].conditions["instance"])
-    BrTimeEdit:SetText(brBuffGroups[group].warntime)
+    BuffReminder.CheckSetState(GConditionsAlwaysCheck, BRVars.BuffGroups[group].conditions["always"])
+    BuffReminder.CheckSetState(GConditionsRestingCheck, BRVars.BuffGroups[group].conditions["resting"])
+    BuffReminder.CheckSetState(GConditionsTaxiCheck, BRVars.BuffGroups[group].conditions["taxi"])
+    BuffReminder.CheckSetState(GConditionsDeadCheck, BRVars.BuffGroups[group].conditions["dead"])
+    BuffReminder.CheckSetState(GConditionsPartyCheck, BRVars.BuffGroups[group].conditions["party"])
+    BuffReminder.CheckSetState(GConditionsRaidCheck, BRVars.BuffGroups[group].conditions["raid"])
+    BuffReminder.CheckSetState(GConditionsInstanceCheck, BRVars.BuffGroups[group].conditions["instance"])
+    BrTimeEdit:SetText(BRVars.BuffGroups[group].warntime)
 end
 
 function BuffReminder.DisableChecks()
@@ -140,19 +140,19 @@ end
 
 function BuffReminder.SetGroupWarnTime(t)
     if t ~= nil and t ~= "" then
-        brBuffGroups[curGroupSel].warntime = tonumber(t)
+        BRVars.BuffGroups[curGroupSel].warntime = tonumber(t)
     end
 end
 
 function BuffReminder.SetDefaultWarnTime(t)
     if t ~= nil and t ~= "" then
-        brOptions.warntime = tonumber(t)
+        BRVars.Options.warntime = tonumber(t)
     end
 end
 
 function BuffReminder.SetWarnCharges(t)
     if t ~= nil and t ~= "" then
-        brOptions.warncharges = tonumber(t)
+        BRVars.Options.warncharges = tonumber(t)
     end
 end
 
@@ -175,7 +175,7 @@ function BuffReminder.Check_Clicked()
     else
         BuffReminder.CheckSetState(this, this.state + 1)
     end
-    brBuffGroups[curGroupSel].conditions[string.lower(this:GetText())] = this.state
+    BRVars.BuffGroups[curGroupSel].conditions[string.lower(this:GetText())] = this.state
     BuffReminder.Update()
 end
 
@@ -186,7 +186,7 @@ function BuffReminder.DefCheck_Clicked()
         BuffReminder.CheckSetState(this, this.state + 1)
     end
     string.lower(this:GetText())
-    brOptions.conditions[string.lower(this:GetText())] = this.state
+    BRVars.Options.conditions[string.lower(this:GetText())] = this.state
     BuffReminder.Update()
 end
 
