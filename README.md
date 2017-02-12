@@ -2,8 +2,8 @@
 #BuffReminder
 A World of Warcraft 1.12 (Vanilla WoW) addon that displays user placeable icons on your screen when buffs have expired or are soon to expire.
 
-![example icon image](http://i.imgur.com/vbC52QZ.png)
-![BuffReminder Button Image](http://i.imgur.com/i6dGRIO.png)
+![example icon image](http://i.imgur.com/i6dGRIO.png)
+![BuffReminder Button Image](http://i.imgur.com/gCf7Ygj.png)
 #### Notes
 - The config dialog is opened by left-clicking the BR icon.
 - Buffs you want to monitor must be added to buff groups.
