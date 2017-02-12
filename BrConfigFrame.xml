@@ -20,20 +20,7 @@
 			</OnClick>
 		</Scripts>
 	</CheckButton>
-	<EditBox name="BrEditTemplate" inherits="InputBoxTemplate" letters="80" virtual="true">
-		<Size>
-			<AbsDimension x="228" y="32" />
-		</Size>
-		<Scripts>
-			<OnLoad>
-				this:SetAutoFocus(false);
-				this:SetTextInsets(0, 8, 0, 0);
-			</OnLoad>
-			<OnEnterPressed>
-				this:ClearFocus();
-			</OnEnterPressed>
-		</Scripts>
-	</EditBox>
+	edut
 	<FontString name="BrHeaderFontStringTemplate" font="Fonts\FRIZQT__.TTF" justifyH="CENTER" justifyV="TOP" virtual="true">
 		<Color r="1" g="1" b="1" a="1" />
 		<FontHeight val="12" />
@@ -51,71 +38,16 @@
 	</FontString>
 	<FontString name="BrFontStringTemplate" font="Fonts\FRIZQT__.TTF" justifyH="CENTER" justifyV="TOP" virtual="true">
 		<Color r="1" g="1" b="0" a="1" />
-		<FontHeight val="12" />
+		<FontHeight val="10" />
 		<Shadow>
 			<Offset x="1" y="1" />
 			<Color r="0" g="0" b="0" />
 		</Shadow>
 	</FontString>
-	<Button name="BrButtonTemplate" inherits="GameMenuButtonTemplate" text="Button" virtual="true">
-		<Size>
-			<AbsDimension x="50" y="20" />
-		</Size>
-	</Button>
-	<Button name="BrDropTemplate" inherits="UIDropDownMenuTemplate" virtual="true">
-		<Size>
-			<AbsDimension x="200" y="30" />
-		</Size>
-		<Size>
-			<AbsDimension x="200" y="30" />
-		</Size>
-		<Anchors>
-			<Anchor point="TOPLEFT">
-				<Offset>
-					<AbsDimension x="70" y="-60" />
-				</Offset>
-			</Anchor>
-		</Anchors>
-	</Button>
-	<!-- LAYOUT TEMPLATE -->
-	<Frame name="BrLayoutTemplate" virtual="true">
-		<Size>
-			<AbsDimension x="400" y="200" />
-		</Size>
-		<Frames>
-			<Button name="$parentAddBtn" inherits="BrButtonTemplate" text="Add">
-				<Anchors>
-					<Anchor point="TOPLEFT">
-						<Offset>
-							<AbsDimension x="26" y="-16" />
-						</Offset>
-					</Anchor>
-				</Anchors>
-			</Button>
-			<Button name="$parentDelBtn" inherits="BrButtonTemplate" text="Del">
-				<Anchors>
-					<Anchor point="TOPLEFT">
-						<Offset>
-							<AbsDimension x="26" y="-44" />
-						</Offset>
-					</Anchor>
-				</Anchors>
-			</Button>
-			<EditBox name="$parentEdit" inherits="BrEditTemplate">
-				<Anchors>
-					<Anchor point="TOPLEFT">
-						<Offset>
-							<AbsDimension x="90" y="-10" />
-						</Offset>
-					</Anchor>
-				</Anchors>
-			</EditBox>
-		</Frames>
-	</Frame>
 	<!-- END TEMPLATES -->
-	<Frame name="BrGroupsConfigFrame" parent="UIParent" toplevel="true" enableMouse="true" hidden="true">
+	<Frame name="BrGroupsConfigFrame" inherits="BasicFrameTemplate" parent="UIParent" toplevel="true" enableMouse="true" hidden="true">
 		<Size>
-			<AbsDimension x="400" y="540" />
+			<AbsDimension x="472" y="440" />
 		</Size>
 		<Anchors>
 			<Anchor point="CENTER">
@@ -133,34 +65,139 @@
 		</TitleRegion>
 		<Frames>
 			<!-- BEGIN GROUP SECTION -->
-			<Frame name="GroupLayout" inherits="BrLayoutTemplate">
+			<Frame name="GroupLayout" inherits="BasicFrameTemplate">
+				<Size>
+					<AbsDimension x="1" y="1" />
+				</Size>
 				<Frames>
-					<Button name="$parentDrop" inherits="UIDropDownMenuTemplate">
-						<Size>
-							<AbsDimension x="200" y="30" />
-						</Size>
+					<Button name="$parentSelGroupDrop" inherits="UIDropDownMenuTemplate">
 						<Anchors>
 							<Anchor point="TOPLEFT">
 								<Offset>
-									<AbsDimension x="66" y="-40" />
+									<AbsDimension x="10" y="-16" />
 								</Offset>
 							</Anchor>
 						</Anchors>
 						<Scripts>
 							<OnLoad>
-								UIDropDownMenu_SetWidth(200);                UIDropDownMenu_Initialize(this, GroupDropInit)
+								UIDropDownMenu_SetWidth(120);
+								UIDropDownMenu_Initialize(this, SelGroupDropInit);
+								UIDropDownMenu_SetText("Select Group");
 							</OnLoad>
 						</Scripts>
 					</Button>
+					<Button name="$parentDelGroupDrop" inherits="UIDropDownMenuTemplate">
+						<Anchors>
+							<Anchor point="TOPLEFT">
+								<Offset>
+									<AbsDimension x="150" y="-16" />
+								</Offset>
+							</Anchor>
+						</Anchors>
+						<Scripts>
+							<OnLoad>
+								UIDropDownMenu_SetWidth(120);
+								UIDropDownMenu_Initialize(this, DelGroupDropInit);
+								UIDropDownMenu_SetText("Delete Group");
+							</OnLoad>
+						</Scripts>
+					</Button>
+					<Button name="$parentDelBuffDrop" inherits="UIDropDownMenuTemplate">
+						<Anchors>
+							<Anchor point="TOPLEFT">
+								<Offset>
+									<AbsDimension x="290" y="-16" />
+								</Offset>
+							</Anchor>
+						</Anchors>
+						<Scripts>
+							<OnLoad>
+								UIDropDownMenu_SetWidth(120);
+								UIDropDownMenu_Initialize(this, DelBuffDropInit);
+								UIDropDownMenu_SetText("Delete Buff");
+							</OnLoad>
+						</Scripts>
+					</Button>
+					<Button name="$parentAddGroupBtn" inherits="GameMenuButtonTemplate" text="Add Group">
+						<Size>
+							<AbsDimension x="90" y="20" />
+						</Size>
+						<Anchors>
+							<Anchor point="TOPLEFT">
+								<Offset>
+									<AbsDimension x="26" y="-54" />
+								</Offset>
+							</Anchor>
+						</Anchors>
+					</Button>
+					<EditBox name="$parentGroupEdit" inherits="InputBoxTemplate" letters="80">
+						<Size>
+							<AbsDimension x="100" y="32" />
+						</Size>
+						<Scripts>
+							<OnLoad>
+								this:SetAutoFocus(false);
+								this:SetTextInsets(0, 8, 0, 0);
+							</OnLoad>
+							<OnEnterPressed>
+								AddGroupClicked();
+								this:ClearFocus();
+							</OnEnterPressed>
+						</Scripts>
+						<Anchors>
+							<Anchor point="TOPLEFT">
+								<Offset>
+									<AbsDimension x="124" y="-48" />
+								</Offset>
+							</Anchor>
+						</Anchors>
+					</EditBox>
+					<Button name="$parentAddBuffBtn" inherits="GameMenuButtonTemplate" text="Add Buff">
+						<Size>
+							<AbsDimension x="90" y="20" />
+						</Size>
+						<Anchors>
+							<Anchor point="TOPLEFT">
+								<Offset>
+									<AbsDimension x="230" y="-54" />
+								</Offset>
+							</Anchor>
+						</Anchors>
+					</Button>
+					<EditBox name="$parentBuffEdit" inherits="InputBoxTemplate" letters="80">
+						<Size>
+							<AbsDimension x="100" y="32" />
+						</Size>
+						<Scripts>
+							<OnLoad>
+								this:SetAutoFocus(false);
+								this:SetTextInsets(0, 8, 0, 0);
+							</OnLoad>
+							<OnEnterPressed>
+								AddBuffClicked();
+								this:ClearFocus();
+							</OnEnterPressed>
+						</Scripts>
+						<Anchors>
+							<Anchor point="TOPLEFT">
+								<Offset>
+									<AbsDimension x="328" y="-48" />
+								</Offset>
+							</Anchor>
+						</Anchors>
+					</EditBox>
 				</Frames>
 				<Anchors>
-					<Anchor point="TOP">
-						<Offset x="0" y="-24" />
+					<Anchor point="TOPLEFT">
+						<Offset x="0" y="-20" />
+					</Anchor>
+					<Anchor point="TOPRIGHT">
+						<Offset x="0" y="-20" />
 					</Anchor>
 				</Anchors>
 				<Layers>
-					<Layer>
-						<FontString name="$parentHeaderString" text="Groups" inherits="BrHeaderFontStringTemplate" />
+					<Layer level="BACKGROUND">
+						<FontString name="$parentHeaderString" text="Buff Groups" inherits="BrHeaderFontStringTemplate" />
 					</Layer>
 				</Layers>
 				<Scripts>
@@ -169,44 +206,7 @@
 					</OnLoad>
 				</Scripts>
 			</Frame>
-			<!-- BEGIN BUFF SECTION -->
-			<Frame name="BuffLayout" inherits="BrLayoutTemplate" value="Buff">
-				<Frames>
-					<Button name="$parentDrop" inherits="UIDropDownMenuTemplate">
-						<Size>
-							<AbsDimension x="200" y="30" />
-						</Size>
-						<Anchors>
-							<Anchor point="TOPLEFT">
-								<Offset>
-									<AbsDimension x="66" y="-40" />
-								</Offset>
-							</Anchor>
-						</Anchors>
-						<Scripts>
-							<OnLoad>
-								UIDropDownMenu_SetWidth(200);              UIDropDownMenu_Initialize(this, BuffDropInit);
-							</OnLoad>
-						</Scripts>
-					</Button>
-				</Frames>
-				<Anchors>
-					<Anchor point="TOP">
-						<Offset x="0" y="-102" />
-					</Anchor>
-				</Anchors>
-				<Layers>
-					<Layer>
-						<FontString name="$parentHeaderString" text="Buffs" inherits="BrHeaderFontStringTemplate" />
-					</Layer>
-				</Layers>
-				<Scripts>
-					<OnLoad>
-						BrBuffCfg_OnLoad();
-					</OnLoad>
-				</Scripts>
-			</Frame>
-			<!-- END BUFF SECTION -->
+			<!-- END GROUPS SECTION -->
 			<Frame name="GConditions" inherits="BasicFrameTemplate">
 				<Frames>
 					<CheckButton name="$parentAlwaysCheck" inherits="BrTrisStateCheckTemplate" checked="false" disabled="true" text="Always">
@@ -219,42 +219,42 @@
 					<CheckButton name="$parentRestingCheck" inherits="BrTrisStateCheckTemplate" checked="false" text="Resting">
 						<Anchors>
 							<Anchor point="TOPLEFT">
-								<Offset x="80" y="-16" />
+								<Offset x="70" y="-16" />
 							</Anchor>
 						</Anchors>
 					</CheckButton>
 					<CheckButton name="$parentTaxiCheck" inherits="BrTrisStateCheckTemplate" checked="false" text="Taxi">
 						<Anchors>
 							<Anchor point="TOPLEFT">
-								<Offset x="160" y="-16" />
+								<Offset x="140" y="-16" />
 							</Anchor>
 						</Anchors>
 					</CheckButton>
 					<CheckButton name="$parentDeadCheck" inherits="BrTrisStateCheckTemplate" checked="false" text="Dead">
 						<Anchors>
 							<Anchor point="TOPLEFT">
-								<Offset x="240" y="-16" />
+								<Offset x="210" y="-16" />
 							</Anchor>
 						</Anchors>
 					</CheckButton>
 					<CheckButton name="$parentPartyCheck" inherits="BrTrisStateCheckTemplate" checked="false" text="Party">
 						<Anchors>
 							<Anchor point="TOPLEFT">
-								<Offset x="0" y="-46" />
+								<Offset x="280" y="-16" />
 							</Anchor>
 						</Anchors>
 					</CheckButton>
 					<CheckButton name="$parentRaidCheck" inherits="BrTrisStateCheckTemplate" checked="false" text="Raid">
 						<Anchors>
 							<Anchor point="TOPLEFT">
-								<Offset x="80" y="-46" />
+								<Offset x="350" y="-16" />
 							</Anchor>
 						</Anchors>
 					</CheckButton>
 					<CheckButton name="$parentInstanceCheck" inherits="BrTrisStateCheckTemplate" checked="false" text="Instance">
 						<Anchors>
 							<Anchor point="TOPLEFT">
-								<Offset x="160" y="-46" />
+								<Offset x="0" y="-46" />
 							</Anchor>
 						</Anchors>
 					</CheckButton>
@@ -264,26 +264,30 @@
 						</Size>
 						<Anchors>
 							<Anchor point="TOPLEFT">
-								<Offset x="140" y="-74" />
+								<Offset x="210" y="-45" />
 							</Anchor>
 						</Anchors>
 						<Scripts>
 							<OnLoad>
-								this:SetAutoFocus(false);                this:SetTextInsets(0, 8, 0, 0);
+								this:SetAutoFocus(false);
+								this:SetTextInsets(0, 8, 0, 0);
 							</OnLoad>
 							<OnEnterPressed>
+								BrSetGroupWarnTime(this:GetText());
 								this:ClearFocus();
-								BrSetGroupWarnTime();
 							</OnEnterPressed>
 						</Scripts>
 					</EditBox>
 				</Frames>
 				<Size>
-					<AbsDimension x="340" y="100" />
+					<AbsDimension x="1" y="1" />
 				</Size>
 				<Anchors>
-					<Anchor point="TOP">
-						<Offset x="0" y="-182" />
+					<Anchor point="TOPLEFT">
+						<Offset x="16" y="-110" />
+					</Anchor>
+					<Anchor point="TOPRIGHT">
+						<Offset x="-16" y="-110" />
 					</Anchor>
 				</Anchors>
 				<Scripts>
@@ -297,7 +301,7 @@
 						<FontString name="$parentTimeString" text="Early Warning Time:" inherits="BrFontStringTemplate">
 							<Anchors>
 								<Anchor point="TOPLEFT">
-									<Offset x="8" y="-84" />
+									<Offset x="100" y="-57" />
 								</Anchor>
 							</Anchors>
 						</FontString>
@@ -317,42 +321,42 @@
 					<CheckButton name="$parentRestingCheck" inherits="BrDefTrisStateCheckTemplate" checked="false" text="Resting">
 						<Anchors>
 							<Anchor point="TOPLEFT">
-								<Offset x="80" y="-16" />
+								<Offset x="70" y="-16" />
 							</Anchor>
 						</Anchors>
 					</CheckButton>
 					<CheckButton name="$parentTaxiCheck" inherits="BrDefTrisStateCheckTemplate" checked="false" text="Taxi">
 						<Anchors>
 							<Anchor point="TOPLEFT">
-								<Offset x="160" y="-16" />
+								<Offset x="140" y="-16" />
 							</Anchor>
 						</Anchors>
 					</CheckButton>
 					<CheckButton name="$parentDeadCheck" inherits="BrDefTrisStateCheckTemplate" checked="false" text="Dead">
 						<Anchors>
 							<Anchor point="TOPLEFT">
-								<Offset x="240" y="-16" />
+								<Offset x="210" y="-16" />
 							</Anchor>
 						</Anchors>
 					</CheckButton>
 					<CheckButton name="$parentPartyCheck" inherits="BrDefTrisStateCheckTemplate" checked="false" text="Party">
 						<Anchors>
 							<Anchor point="TOPLEFT">
-								<Offset x="0" y="-46" />
+								<Offset x="280" y="-16" />
 							</Anchor>
 						</Anchors>
 					</CheckButton>
 					<CheckButton name="$parentRaidCheck" inherits="BrDefTrisStateCheckTemplate" checked="false" text="Raid">
 						<Anchors>
 							<Anchor point="TOPLEFT">
-								<Offset x="80" y="-46" />
+								<Offset x="350" y="-16" />
 							</Anchor>
 						</Anchors>
 					</CheckButton>
 					<CheckButton name="$parentInstanceCheck" inherits="BrDefTrisStateCheckTemplate" checked="false" text="Instance">
 						<Anchors>
 							<Anchor point="TOPLEFT">
-								<Offset x="160" y="-46" />
+								<Offset x="0" y="-46" />
 							</Anchor>
 						</Anchors>
 					</CheckButton>
@@ -362,7 +366,7 @@
 						</Size>
 						<Anchors>
 							<Anchor point="TOPLEFT">
-								<Offset x="112" y="-100" />
+								<Offset x="100" y="-84" />
 							</Anchor>
 						</Anchors>
 						<Scripts>
@@ -370,8 +374,8 @@
 								this:SetAutoFocus(false);this:SetTextInsets(0, 8, 0, 0);
 							</OnLoad>
 							<OnEnterPressed>
-								this:ClearFocus();
 								brOptions.warnsound = this:GetText()
+								this:ClearFocus();
 							</OnEnterPressed>
 						</Scripts>
 					</EditBox>
@@ -381,7 +385,7 @@
 						</Size>
 						<Anchors>
 							<Anchor point="TOPLEFT">
-								<Offset x="140" y="-75" />
+								<Offset x="210" y="-45" />
 							</Anchor>
 						</Anchors>
 						<Scripts>
@@ -389,8 +393,8 @@
 								this:SetAutoFocus(false);this:SetTextInsets(0, 8, 0, 0);
 							</OnLoad>
 							<OnEnterPressed>
+								BrSetDefaultWarnTime(this:GetText())
 								this:ClearFocus();
-								brOptions.warntime = tonumber(this:GetText())
 							</OnEnterPressed>
 						</Scripts>
 					</EditBox>
@@ -404,13 +408,13 @@
 							</OnShow>
 							<OnClick>
 								brOptions.enchants.main = (this:GetChecked() == 1)
-								BuffReminder.update = true
+								BuffReminder.Update()
 							</OnClick>
 						</Scripts>
 						<Anchors>
 							<Anchor point="BOTTOMLEFT">
 								<Offset>
-									<AbsDimension x="2" y="-24" />
+									<AbsDimension x="2" y="-150" />
 								</Offset>
 							</Anchor>
 						</Anchors>
@@ -425,25 +429,45 @@
 							</OnShow>
 							<OnClick>
 								brOptions.enchants.off = (this:GetChecked() == 1)
-								BuffReminder.update = true
+								BuffReminder.Update()
 							</OnClick>
 						</Scripts>
 						<Anchors>
 							<Anchor point="BOTTOMLEFT">
 								<Offset>
-									<AbsDimension x="142" y="-24" />
+									<AbsDimension x="142" y="-150" />
 								</Offset>
 							</Anchor>
 						</Anchors>
 					</CheckButton>
+					<EditBox name="BrChargesEdit" inherits="InputBoxTemplate" letters="2" numeric="true">
+						<Size>
+							<AbsDimension x="30" y="32" />
+						</Size>
+						<Anchors>
+							<Anchor point="TOPLEFT">
+								<Offset x="334" y="-118" />
+							</Anchor>
+						</Anchors>
+						<Scripts>
+							<OnLoad>
+								this:SetAutoFocus(false);
+								this:SetTextInsets(0, 8, 0, 0);
+							</OnLoad>
+							<OnEnterPressed>
+								BrSetWarnCharges(this:GetText());
+								this:ClearFocus();
+							</OnEnterPressed>
+						</Scripts>
+					</EditBox>
 					<Slider name="$parentSizeSlider" inherits="OptionsSliderTemplate" minValue="10" maxValue="400" valuestep="2">
 						<Size>
-							<AbsDimension x="220" y="16" />
+							<AbsDimension x="300" y="16" />
 						</Size>
 						<Anchors>
 							<Anchor point="BOTTOMLEFT">
 								<Offset>
-									<AbsDimension x="2" y="-50" />
+									<AbsDimension x="8" y="-182" />
 								</Offset>
 							</Anchor>
 						</Anchors>
@@ -471,7 +495,7 @@
 						<Anchors>
 							<Anchor point="BOTTOMLEFT">
 								<Offset>
-									<AbsDimension x="234" y="-50" />
+									<AbsDimension x="320" y="-182" />
 								</Offset>
 							</Anchor>
 						</Anchors>
@@ -490,11 +514,14 @@
 					</Slider>
 				</Frames>
 				<Size>
-					<AbsDimension x="340" y="140" />
+					<AbsDimension x="1" y="1" />
 				</Size>
 				<Anchors>
-					<Anchor point="TOP">
-						<Offset x="0" y="-300" />
+					<Anchor point="TOPLEFT">
+						<Offset x="16" y="-200" />
+					</Anchor>
+					<Anchor point="TOPRIGHT">
+						<Offset x="-16" y="-200" />
 					</Anchor>
 				</Anchors>
 				<Layers>
@@ -503,14 +530,21 @@
 						<FontString name="$parentTimeString" text="Early Warning Time:" inherits="BrFontStringTemplate">
 							<Anchors>
 								<Anchor point="TOPLEFT">
-									<Offset x="8" y="-85" />
+									<Offset x="100" y="-57" />
 								</Anchor>
 							</Anchors>
 						</FontString>
 						<FontString name="$parentSoundString" text="Warning Sound:" inherits="BrFontStringTemplate">
 							<Anchors>
 								<Anchor point="TOPLEFT">
-									<Offset x="8" y="-110" />
+									<Offset x="8" y="-97" />
+								</Anchor>
+							</Anchors>
+						</FontString>
+						<FontString name="$parentChargesString" text="Charges:" inherits="BrFontStringTemplate">
+							<Anchors>
+								<Anchor point="TOPLEFT">
+									<Offset x="280" y="-130" />
 								</Anchor>
 							</Anchors>
 						</FontString>

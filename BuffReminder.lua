@@ -1,6 +1,5 @@
 BuffReminder = {
     ["hide_all"] = false,
-    ["update"] = true,
     ["button_space"] = 2,
     ["current_buffs"] = {},
     ["watched_buffs"] = {},
@@ -21,11 +20,13 @@ BuffReminder = {
 
 brBuffGroups = {}
 brOptions = {}
+
 brDefaultOptions = {
     ["version"] = "1.0",
     ["warnsound"] = nil,
     ["size"] = 30,
     ["warntime"] = 60,
+    ["warncharges"] = 5,
     ["alpha"] = 1.0,
     ["enchants"] = {
         ["main"] = false,
@@ -43,7 +44,6 @@ brDefaultOptions = {
 }
 -- util functions
 local function getArgs(m)
-    
     local _, count = string.gsub(m, [["]], "")
     if math.mod(count, 2) ~= 0 then
         DEFAULT_CHAT_FRAME:AddMessage("Unfinished quote in command.")
@@ -97,7 +97,7 @@ function BuffReminder.MakeIcons()
     for i in BuffReminder.icons do
         BuffReminder.icons[i]:Hide()
     end
-    local count = 1
+    local index = 1
     local skipIcon = false
     for i in BuffReminder.missing_groups do
         for j in BuffReminder.player_status do
@@ -108,8 +108,8 @@ function BuffReminder.MakeIcons()
             end
         end
         if not skipIcon then
-            BuffReminder.MakeIcon(count, BuffReminder.missing_groups[i])
-            count = count + 1
+            BuffReminder.MakeIcon(index, BuffReminder.missing_groups[i])
+            index = index + 1
         end
     end
     skipIcon = false
@@ -123,23 +123,23 @@ function BuffReminder.MakeIcons()
         if brOptions.enchants.main and (not BuffReminder.enchants.main) then
             local t = GetInventoryItemTexture("player", 16)
             if t ~= nil then
-                BuffReminder.MakeIcon(count, t)
-                count = count + 1
+                BuffReminder.MakeIcon(index, t)
+                index = index + 1
             end
         end
         if brOptions.enchants.off and (not BuffReminder.enchants.off) then
             local t = GetInventoryItemTexture("player", 17)
             if t ~= nil then
-                BuffReminder.MakeIcon(count, t)
-                count = count + 1
+                BuffReminder.MakeIcon(index, t)
+                index = index + 1
             end
         end
     end
 
-
+    local count = index - 1
     local pitch = brOptions.size + BuffReminder.button_space * 2
-    local c = (pitch * (tableLen(BuffReminder.icons) - 1)) / 2
-    for i=(count - 1), 1, -1 do
+    local c = (pitch * (count - 1)) / 2
+    for i = count, 1, -1 do
         BuffReminder.icons[i]:SetPoint("CENTER", c, 0)
         BuffReminder.icons[i]:Show()
         c = c - pitch
@@ -155,19 +155,19 @@ function BuffReminder.FindBuffGroup(buff)
     return nil
 end
 
-function BuffReminder.UpdateBuffStatus(buffs)
+-- check if buffs have changd since last update
+function BuffReminder.BuffsUpdated(buffs)
     for i in BuffReminder.current_buffs do
         if buffs[i] == nil then -- lost a buff
-            BuffReminder.update = true
-            return
+            return true
         end
     end
     for i in buffs do
         if BuffReminder.current_buffs[i] == nil then -- gained a buff
-            BuffReminder.update = true
-            return
+            return true
         end
     end
+    return false
 end
 
 -- creates a list of current buffs which are also watched buffs
@@ -186,8 +186,9 @@ function BuffReminder.GetBuffs()
             brBuffGroups[group].icon = tex
         end
     end
-    BuffReminder.UpdateBuffStatus(current_buffs)
+    local updated = BuffReminder.BuffsUpdated(current_buffs)
     BuffReminder.current_buffs = current_buffs
+    return updated
 end
 
 function BuffReminder.GetMissinGroups()
@@ -221,7 +222,6 @@ function BuffReminder.GetWatchedBuffs()
         end
     end
 end
---------------------------------------------------------------------------------
 
 function BuffReminder.GetPlayerBuffName(n)
     TooltipScanner:ClearLines()
@@ -229,21 +229,21 @@ function BuffReminder.GetPlayerBuffName(n)
     return TooltipScannerTextLeft1:GetText()
 end
 
-local function CheckWeaponEnchants()
+function BuffReminder.GetEnchants()
     local changed = false
-    if (brOptions.enchants.main == true) or (brOptions.enchants.off == true) then
+    if brOptions.enchants.main or brOptions.enchants.off then
         local hasMainHandEnchant, mainHandExpiration, mainHandCharges, hasOffHandEnchant, offHandExpiration, offHandCharges = GetWeaponEnchantInfo();
         if (BuffReminder.enchants.main ~= hasMainHandEnchant) or (hasOffHandEnchant ~= BuffReminder.enchants.off) then
             changed = true
         end
-        BuffReminder.enchants.main = (hasMainHandEnchant == 1) and (mainHandExpiration > brOptions.warntime * 1000)
-        BuffReminder.enchants.off = (hasOffHandEnchant == 1) and (offHandExpiration > brOptions.warntime * 1000)
+        BuffReminder.enchants.main = (hasMainHandEnchant == 1) and (mainHandExpiration > brOptions.warntime * 1000) and ((mainHandCharges == 0) or (mainHandCharges > brOptions.warncharges))
+        BuffReminder.enchants.off = (hasOffHandEnchant == 1) and (offHandExpiration > brOptions.warntime * 1000) and ((offHandCharges == 0) or (offHandCharges > brOptions.warncharges))
     end
     return changed
 end
 
 -- slash command functions ------------------------------------------------------------------
-local function GroupExists(group)
+function BuffReminder.GroupExists(group)
     if brBuffGroups[group] == nil then
         DEFAULT_CHAT_FRAME:AddMessage('\124cffffff00\124hGroup "' .. tostring(group) .. '" does not exist.')
         DEFAULT_CHAT_FRAME:AddMessage('\124cffffff00\124hYour groups are:')
@@ -255,14 +255,8 @@ local function GroupExists(group)
     return true
 end
 
-local function FindBuff(buff)
-    for i in brBuffGroups do
-        if brBuffGroups[i].buffs[buff] ~= nil then return i end
-    end
-    return nil
-end
 
-local function PrintBuffs()
+function BuffReminder.PrintBuffs()
     for i in brBuffGroups do
         DEFAULT_CHAT_FRAME:AddMessage('\124cffffff00\124hGroup: ' .. tostring(i))
         for j in brBuffGroups[i].buffs do
@@ -300,10 +294,10 @@ function BuffReminder.AddBuffToGroup(grp, name, print)
         brBuffGroups[grp].buffs[name] = {}
     end
     if print then BuffReminder.PrintGroup(grp) end
-    BuffReminder.update = true
+    BuffReminder.Update()
 end
 
-local function ShowHelp()
+function BuffReminder.ShowHelp()
     DEFAULT_CHAT_FRAME:AddMessage("\124cfff4f9a7\124h ***** BuffReminder Help ***** ")
     DEFAULT_CHAT_FRAME:AddMessage("\124cfff4f9a7\124hBuffs you want to monitor must be added to buff groups.")
     DEFAULT_CHAT_FRAME:AddMessage("\124cfff4f9a7\124hMutually exclusive buffs should go into common groups.")
@@ -346,12 +340,12 @@ end
 -- end slash command functions --------------------------------------------------------------
 SLASH_BuffReminder1 = "/br"
 SLASH_BuffReminder2 = "/buffreminder"
-function SlashCmdList.BuffReminder(msg)-- we put the slash commands to work
+function SlashCmdList.BuffReminder(msg)
     local handled = false
     local args, largs, argc = getArgs(msg)
     
     if argc == 0 or largs[1] == "help" then
-        ShowHelp()
+        BuffReminder.ShowHelp()
         return
     end
     -- group command and subcommands
@@ -362,7 +356,7 @@ function SlashCmdList.BuffReminder(msg)-- we put the slash commands to work
             if largs[3] == "add" then
                 BuffReminder.AddBuffToGroup(args[2], args[4], true)
             else
-                if not GroupExists(args[2]) then return end
+                if not BuffReminder.GroupExists(args[2]) then return end
                 if argc >= 3 then
                     if largs[3] == "disable" then
                         brBuffGroups[args[2]].conditions.always = true
@@ -386,9 +380,9 @@ function SlashCmdList.BuffReminder(msg)-- we put the slash commands to work
     -- buff command and subcommands
     elseif largs[1] == "buff" then
         if argc == 1 then
-            PrintBuffs()
+            BuffReminder.PrintBuffs()
         elseif argc == 2 then
-            local g = FindBuff(args[2])
+            local g = BuffReminder.FindBuffGroup(args[2])
             if g == nil then
                 DEFAULT_CHAT_FRAME:AddMessage("\124cffabb7ff\124hBuff " .. args[2] .. " does not exist in any buff groups.")
             else
@@ -445,7 +439,7 @@ function SlashCmdList.BuffReminder(msg)-- we put the slash commands to work
         end
     end
     
-    BuffReminder.update = true
+    BuffReminder.Update()
     
     if not handled then
         DEFAULT_CHAT_FRAME:AddMessage("\124cffcbeb1c\124hBuffReminder command error. Try /br help.")
@@ -477,7 +471,6 @@ function BuffReminder_OnLoad()
         DEFAULT_CHAT_FRAME:AddMessage("BuffReminder AddOn loaded. Type '/br help' for config commands.")
     end
     UIErrorsFrame:AddMessage("BuffReminder AddOn loaded", 1.0, 1.0, 1.0, 1.0, UIERRORS_HOLD_TIME)
-
 end
 --------------------------------------------------------------------------------------------------
 function BuffReminder_OnUpdate(elapsed)
@@ -485,19 +478,18 @@ function BuffReminder_OnUpdate(elapsed)
     if BuffReminder.update_time >= 0.5 then
         BuffReminder.update_time = 0
         if BuffReminder.hide_all then return end
-        BuffReminder.Update()
+        local buffsChanged = BuffReminder.GetBuffs()
+        local enchantsChanged = BuffReminder.GetEnchants()
+        if buffsChanged or enchantsChanged then
+            BuffReminder.Update()
+        end
     end
 end
 
 function BuffReminder.Update()
-    BuffReminder.GetBuffs()
-    CheckWeaponEnchants()
-    if BuffReminder.update then
-        BuffReminder.update = false
-        BuffReminder.GetWatchedBuffs()
-        BuffReminder.GetMissinGroups()
-        BuffReminder.MakeIcons()
-    end
+    BuffReminder.GetWatchedBuffs()
+    BuffReminder.GetMissinGroups()
+    BuffReminder.MakeIcons()
 end
 
 function BuffReminder_OnEvent(event, arg1)
@@ -508,7 +500,7 @@ function BuffReminder_OnEvent(event, arg1)
             BuffReminder.player_status.taxi = false
         end
     -- elseif event == "PLAYER_AURAS_CHANGED" then
-    --     BuffReminder.update = true
+    --     BuffReminder.Update()
     elseif event == "PARTY_MEMBERS_CHANGED" then
         BuffReminder.player_status.party = (GetNumPartyMembers() > 0)
     elseif event == "RAID_ROSTER_UPDATE" then
@@ -531,6 +523,7 @@ function BuffReminder_OnEvent(event, arg1)
     -- fix old config for tristate conditions or other issues
         if arg1 == "BuffReminder" then
             if brOptions == nil or brOptions.version ~= "1.0" then brOptions = brDefaultOptions end
+            BuffReminder.SanityCheck()
             if brOptions.enchants == nil then
                 brOptions.enchants = brDefaultOptions.enchants
            end
@@ -560,6 +553,22 @@ function BuffReminder_OnEvent(event, arg1)
         end
     end
     -- fix old config
-    BuffReminder.update = true -- force icon update
+    BuffReminder.Update() -- force icon update
 end
 --------------------------------------------------------------------------------------------------
+
+function BuffReminder.SanityCheck()
+    for i in brDefaultOptions do
+        if brOptions[i] == nil then brOptions[i] = brDefaultOptions[i] end
+    end
+    if brOptions.enchants.main == nil then brOptions.enchants.main = brDefaultOptions.enchants.main end
+    if brOptions.enchants.off == nil then brOptions.enchants.off = brDefaultOptions.enchants.off end
+    for i in brOptions.conditions do
+        if brOptions.conditions[i] == nil then brOptions.conditions[i] = brDefaultOptions.conditions[i] end
+    end
+    for i in brBuffGroups do
+        for j in brDefaultOptions.conditions do
+            if brBuffGroups[i].conditions[j] == nil then brBuffGroups[i].conditions[j] = brDefaultOptions.conditions[j] end
+        end
+    end
+end

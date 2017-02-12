@@ -1,7 +1,6 @@
 ﻿-- Author      : mcrane
 -- Create Date : 1/6/2017 7:45:06 AM
 local curGroupSel
-local curBuffSel
 
 function BrGroupsConfigFrame_OnShow()
     BrCheck_SetState(DefConditionsAlwaysCheck, brOptions.conditions["always"])
@@ -12,9 +11,14 @@ function BrGroupsConfigFrame_OnShow()
     BrCheck_SetState(DefConditionsRaidCheck, brOptions.conditions["raid"])
     BrCheck_SetState(DefConditionsInstanceCheck, brOptions.conditions["instance"])
     if brOptions.warntime == nil then
-        BrDefTimeEdit:SetText("60")
+        BrDefTimeEdit:SetText(brDefaultOptions.warntime)
     else
         BrDefTimeEdit:SetText(brOptions.warntime)
+    end
+    if brOptions.warncharges == nil then
+        BrChargesEdit:SetText(brDefaultOptions.warncharges)
+    else
+        BrChargesEdit:SetText(brOptions.warncharges)
     end
     if brOptions.warnsound ~= nil then
         BrSoundEdit:SetText(brOptions.warnsound)
@@ -23,56 +27,94 @@ end
 
 --- Group Section ---
 function BrGroupCfg_OnLoad()
-    GroupLayoutAddBtn:SetScript("OnClick", AddGroupClicked)
-    GroupLayoutDelBtn:SetScript("OnClick", DelGroupClicked)
+    GroupLayoutAddGroupBtn:SetScript("OnClick", AddGroupClicked)
+    GroupLayoutAddBuffBtn:SetScript("OnClick", AddBuffClicked)
 end
 
 function AddGroupClicked()
-    local txt = GroupLayoutEdit:GetText()
+    local txt = GroupLayoutGroupEdit:GetText()
     if txt ~= nil and txt ~= "" then
         BuffReminder.AddBuffToGroup(txt, nil)
-        GroupLayoutEdit:SetText("")
-        BuffLayoutEdit:SetText("")
-        UIDropDownMenu_ClearAll(GroupLayoutDrop)
-        UIDropDownMenu_ClearAll(BuffLayoutDrop)
-        GroupLayout_DisableChecks()
+        GroupLayoutGroupEdit:SetText("")
+        GroupLayoutBuffEdit:SetText("")
+        DelBuffDropInit(txt)
+        GroupLayout_GetSelected(txt)
+        curGroupSel = txt
+        BuffReminder.Update()
     end
 end
 
-function DelGroupClicked()
-    if curGroupSel ~= nil then
-        brBuffGroups[curGroupSel] = nil
+function AddBuffClicked()
+    local txt = GroupLayoutBuffEdit:GetText()
+    if txt ~= nil and txt ~= "" and curGroupSel ~= nil then
+        BuffReminder.AddBuffToGroup(curGroupSel, txt)
+        GroupLayoutBuffEdit:SetText("")
     end
-    UIDropDownMenu_ClearAll(GroupLayoutDrop)
-    UIDropDownMenu_ClearAll(BuffLayoutDrop)
-    GroupLayout_DisableChecks()
 end
 
-function GroupDropInit(level)
+function SelGroupDropInit()
     local info = {}
     for i in brBuffGroups do
-        info.text, info.checked, info.notCheckable, info.keepShownOnClick, info.arg1, info.func = i, false, false, false, i, GroupLayoutDrop_OnClick
+        info.text, info.checked, info.notCheckable, info.keepShownOnClick, info.arg1, info.func = i, false, true, false, i, GroupLayoutSelGroupDrop_OnClick
         UIDropDownMenu_AddButton(info)
     end
 end
 
-function GroupLayoutDrop_OnClick(arg1)
+function DelGroupDropInit()
+    local info = {}
+    for i in brBuffGroups do
+        info.text, info.checked, info.notCheckable, info.keepShownOnClick, info.arg1, info.func = i, false, true, false, i, GroupLayoutDelGroupDrop_OnClick
+        UIDropDownMenu_AddButton(info)
+    end
+end
+
+function DelBuffDropInit()
+    local info = {}
+    if brBuffGroups[curGroupSel] ~= nil then
+        for i in brBuffGroups[curGroupSel].buffs do
+            info.text, info.checked, info.notCheckable, info.keepShownOnClick, info.arg1, info.func = i, false, false, false, i, GroupLayoutDelBuffDrop_OnClick
+            UIDropDownMenu_AddButton(info)
+        end
+    end
+end
+
+function GroupLayoutSelGroupDrop_OnClick(arg1)
     curGroupSel = arg1
-    UIDropDownMenu_SetSelectedID(GroupLayoutDrop, this:GetID())
-    UIDropDownMenu_ClearAll(BuffLayoutDrop)
     if brBuffGroups[arg1] ~= nil then
-        GroupLayout_EnableChecks()
-        BrCheck_SetState(GConditionsAlwaysCheck, brBuffGroups[arg1].conditions["always"])
-        BrCheck_SetState(GConditionsRestingCheck, brBuffGroups[arg1].conditions["resting"])
-        BrCheck_SetState(GConditionsTaxiCheck, brBuffGroups[arg1].conditions["taxi"])
-        BrCheck_SetState(GConditionsDeadCheck, brBuffGroups[arg1].conditions["dead"])
-        BrCheck_SetState(GConditionsPartyCheck, brBuffGroups[arg1].conditions["party"])
-        BrCheck_SetState(GConditionsRaidCheck, brBuffGroups[arg1].conditions["raid"])
-        BrCheck_SetState(GConditionsInstanceCheck, brBuffGroups[arg1].conditions["instance"])
-        BrTimeEdit:SetText(brBuffGroups[arg1].warntime)
+        GroupLayout_GetSelected(arg1)
+        DelBuffDropInit()
     else
         GroupLayout_DisableChecks()
     end
+end
+
+function GroupLayoutDelGroupDrop_OnClick(arg1)
+    brBuffGroups[arg1] = nil
+    GroupLayoutHeaderString:SetText("Buff Groups")
+    GroupLayout_DisableChecks()
+    curGroupSel = nil
+    BuffReminder.Update()
+end
+
+function GroupLayoutDelBuffDrop_OnClick(arg1)
+    if curGroupSel ~= nil then
+        brBuffGroups[curGroupSel].buffs[arg1] = nil
+    end
+    DelBuffDropInit()
+    BuffReminder.Update()
+end
+
+function GroupLayout_GetSelected(group)
+    GroupLayoutHeaderString:SetText(group)
+    GroupLayout_EnableChecks()
+    BrCheck_SetState(GConditionsAlwaysCheck, brBuffGroups[group].conditions["always"])
+    BrCheck_SetState(GConditionsRestingCheck, brBuffGroups[group].conditions["resting"])
+    BrCheck_SetState(GConditionsTaxiCheck, brBuffGroups[group].conditions["taxi"])
+    BrCheck_SetState(GConditionsDeadCheck, brBuffGroups[group].conditions["dead"])
+    BrCheck_SetState(GConditionsPartyCheck, brBuffGroups[group].conditions["party"])
+    BrCheck_SetState(GConditionsRaidCheck, brBuffGroups[group].conditions["raid"])
+    BrCheck_SetState(GConditionsInstanceCheck, brBuffGroups[group].conditions["instance"])
+    BrTimeEdit:SetText(brBuffGroups[group].warntime)
 end
 
 function GroupLayout_DisableChecks()
@@ -96,45 +138,22 @@ function GroupLayout_EnableChecks()
     GConditionsInstanceCheck:Enable()
 end
 
--- Buff Section --
-function BrBuffCfg_OnLoad()
-    BuffLayoutAddBtn:SetScript("OnClick", AddBuffClicked)
-    BuffLayoutDelBtn:SetScript("OnClick", DelBuffClicked)
-end
-
-function AddBuffClicked()
-    local txt = BuffLayoutEdit:GetText()
-    if txt ~= nil and txt ~= "" and curGroupSel ~= nil then
-        BuffReminder.AddBuffToGroup(curGroupSel, txt)
-        BuffLayoutEdit:SetText("")
-        UIDropDownMenu_ClearAll(BuffLayoutDrop)
+function BrSetGroupWarnTime(t)
+    if t ~= nil and t ~= "" then
+        brBuffGroups[curGroupSel].warntime = tonumber(t)
     end
 end
 
-function DelBuffClicked()
-    if curBuffSel ~= nil then
-        brBuffGroups[curGroupSel].buffs[curBuffSel] = nil
-        UIDropDownMenu_ClearAll(BuffLayoutDrop)
+function BrSetDefaultWarnTime(t)
+    if t ~= nil and t ~= "" then
+        brOptions.warntime = tonumber(t)
     end
 end
 
-function BuffDropInit(level)
-    local info = {}
-    if brBuffGroups[curGroupSel] ~= nil then
-        for i in brBuffGroups[curGroupSel].buffs do
-            info.text, info.checked, info.notCheckable, info.keepShownOnClick, info.arg1, info.func = i, false, false, false, i, BuffLayoutDrop_OnClick
-            UIDropDownMenu_AddButton(info)
-        end
+function BrSetWarnCharges(t)
+    if t ~= nil and t ~= "" then
+        brOptions.warncharges = tonumber(t)
     end
-end
-
-function BuffLayoutDrop_OnClick(arg1)
-    curBuffSel = arg1
-    UIDropDownMenu_SetSelectedID(BuffLayoutDrop, this:GetID())
-end
-
-function BrSetGroupWarnTime()
-    brBuffGroups[curGroupSel].warntime = tonumber(BrTimeEdit:GetText())
 end
 
 -- Check Buttons --
@@ -157,8 +176,7 @@ function BrCheck_Clicked()
         BrCheck_SetState(this, this.state + 1)
     end
     brBuffGroups[curGroupSel].conditions[string.lower(this:GetText())] = this.state
-    BuffReminder.update = true
-    DEFAULT_CHAT_FRAME:AddMessage(string.lower(this:GetText()) .. " " .. this.state)
+    BuffReminder.Update()
 end
 
 function BrDefCheck_Clicked()
@@ -168,8 +186,8 @@ function BrDefCheck_Clicked()
         BrCheck_SetState(this, this.state + 1)
     end
     string.lower(this:GetText())
-
     brOptions.conditions[string.lower(this:GetText())] = this.state
+    BuffReminder.Update()
 end
 
 function BrCheck_SetState(check, state)
@@ -210,7 +228,7 @@ function BrGroupsConfigFrame_Toggle(mouseButton)
         if BuffReminder.hide_all then
             DEFAULT_CHAT_FRAME:AddMessage("Buff reminder icons will not be shown.")
         else
-            BuffReminder.update = true
+            BuffReminder.Update()
             DEFAULT_CHAT_FRAME:AddMessage("Buff reminder icons will be shown.")
         end
     end
