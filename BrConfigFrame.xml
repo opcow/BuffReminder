@@ -129,29 +129,12 @@
 								</Offset>
 							</Anchor>
 						</Anchors>
-					</Button>
-					<EditBox name="$parentGroupEdit" inherits="InputBoxTemplate" letters="80">
-						<Size>
-							<AbsDimension x="100" y="32" />
-						</Size>
 						<Scripts>
-							<OnLoad>
-								this:SetAutoFocus(false);
-								this:SetTextInsets(0, 8, 0, 0);
-							</OnLoad>
-							<OnEnterPressed>
-								BuffReminder.AddGroupClicked();
-								this:ClearFocus();
-							</OnEnterPressed>
+								<OnClick>
+									BuffReminder.AddGroupClicked();
+								</OnClick>
 						</Scripts>
-						<Anchors>
-							<Anchor point="TOPLEFT">
-								<Offset>
-									<AbsDimension x="124" y="-48" />
-								</Offset>
-							</Anchor>
-						</Anchors>
-					</EditBox>
+					</Button>
 					<Button name="$parentAddBuffBtn" inherits="GameMenuButtonTemplate" text="Add Buff">
 						<Size>
 							<AbsDimension x="90" y="20" />
@@ -159,29 +142,30 @@
 						<Anchors>
 							<Anchor point="TOPLEFT">
 								<Offset>
-									<AbsDimension x="230" y="-54" />
+									<AbsDimension x="120" y="-54" />
 								</Offset>
 							</Anchor>
 						</Anchors>
+						<Scripts>
+								<OnClick>
+									BuffReminder.AddBuffClicked();
+								</OnClick>
+						</Scripts>
 					</Button>
-					<EditBox name="$parentBuffEdit" inherits="InputBoxTemplate" letters="80">
+					<EditBox name="$parentGroupEdit" inherits="InputBoxTemplate" letters="80">
 						<Size>
-							<AbsDimension x="100" y="32" />
+							<AbsDimension x="225" y="32" />
 						</Size>
 						<Scripts>
 							<OnLoad>
 								this:SetAutoFocus(false);
 								this:SetTextInsets(0, 8, 0, 0);
 							</OnLoad>
-							<OnEnterPressed>
-								BuffReminder.AddBuffClicked();
-								this:ClearFocus();
-							</OnEnterPressed>
 						</Scripts>
 						<Anchors>
 							<Anchor point="TOPLEFT">
 								<Offset>
-									<AbsDimension x="328" y="-48" />
+									<AbsDimension x="220" y="-48" />
 								</Offset>
 							</Anchor>
 						</Anchors>
@@ -200,11 +184,6 @@
 						<FontString name="$parentHeaderString" text="Buff Groups" inherits="BrHeaderFontStringTemplate" />
 					</Layer>
 				</Layers>
-				<Scripts>
-					<OnLoad>
-						BuffReminder.GroupCfg_OnLoad();
-					</OnLoad>
-				</Scripts>
 			</Frame>
 			<!-- END GROUPS SECTION -->
 			<Frame name="GConditions" inherits="BasicFrameTemplate">
@@ -273,7 +252,7 @@
 								this:SetTextInsets(0, 8, 0, 0);
 							</OnLoad>
 							<OnEnterPressed>
-								BuffReminder.SetGroupWarnTime(this:GetText());
+								BuffReminder.SetGroupWarnTime(this:GetNumber());
 								this:ClearFocus();
 							</OnEnterPressed>
 						</Scripts>
@@ -393,7 +372,7 @@
 								this:SetAutoFocus(false);this:SetTextInsets(0, 8, 0, 0);
 							</OnLoad>
 							<OnEnterPressed>
-								BuffReminder.SetDefaultWarnTime(this:GetText())
+								BuffReminder.SetDefaultWarnTime(this:GetNumber())
 								this:ClearFocus();
 							</OnEnterPressed>
 						</Scripts>
@@ -455,7 +434,7 @@
 								this:SetTextInsets(0, 8, 0, 0);
 							</OnLoad>
 							<OnEnterPressed>
-								BuffReminder.SetWarnCharges(this:GetText());
+								BuffReminder.SetWarnCharges(this:GetNumber());
 								this:ClearFocus();
 							</OnEnterPressed>
 						</Scripts>

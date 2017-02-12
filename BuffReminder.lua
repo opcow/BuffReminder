@@ -103,7 +103,6 @@ function BuffReminder.MakeIcons()
         for j in BuffReminder.player_status do
             if (BRVars.BuffGroups[i].conditions.always ~= 2) and ((BRVars.BuffGroups[i].conditions.always == 1) or (BuffReminder.player_status[j] and
                 (BRVars.BuffGroups[i].conditions[j] == 1)) or (not BuffReminder.player_status[j] and BRVars.BuffGroups[i].conditions[j] == 2)) then
-                DEFAULT_CHAT_FRAME:AddMessage("Hidden because : " .. j)
                 skipIcon = true
                 break
             end

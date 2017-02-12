@@ -25,18 +25,12 @@ function BuffReminder.GroupsConfigFrame_OnShow()
     end
 end
 
---- Group Section ---
-function BuffReminder.GroupCfg_OnLoad()
-    BRConfigLayoutAddGroupBtn:SetScript("OnClick", BuffReminder.AddGroupClicked)
-    BRConfigLayoutAddBuffBtn:SetScript("OnClick", BuffReminder.AddBuffClicked)
-end
-
 function BuffReminder.AddGroupClicked()
     local txt = BRConfigLayoutGroupEdit:GetText()
     if txt ~= nil and txt ~= "" then
         BuffReminder.AddBuffToGroup(txt, nil)
         BRConfigLayoutGroupEdit:SetText("")
-        BRConfigLayoutBuffEdit:SetText("")
+        BRConfigLayoutGroupEdit:SetText("")
         BuffReminder.DelBuffDropInit(txt)
         BuffReminder.GetSelected(txt)
         curGroupSel = txt
@@ -45,10 +39,10 @@ function BuffReminder.AddGroupClicked()
 end
 
 function BuffReminder.AddBuffClicked()
-    local txt = BRConfigLayoutBuffEdit:GetText()
+    local txt = BRConfigLayoutGroupEdit:GetText()
     if txt ~= nil and txt ~= "" and curGroupSel ~= nil then
         BuffReminder.AddBuffToGroup(curGroupSel, txt)
-        BRConfigLayoutBuffEdit:SetText("")
+        BRConfigLayoutGroupEdit:SetText("")
     end
 end
 
@@ -138,21 +132,21 @@ function BuffReminder.EnableChecks()
     GConditionsInstanceCheck:Enable()
 end
 
-function BuffReminder.SetGroupWarnTime(t)
-    if t ~= nil and t ~= "" then
-        BRVars.BuffGroups[curGroupSel].warntime = tonumber(t)
+function BuffReminder.SetGroupWarnTime(n)
+    if t ~= nil then
+        BRVars.BuffGroups[curGroupSel].warntime = n
     end
 end
 
-function BuffReminder.SetDefaultWarnTime(t)
-    if t ~= nil and t ~= "" then
-        BRVars.Options.warntime = tonumber(t)
+function BuffReminder.SetDefaultWarnTime(n)
+    if n ~= nil then
+        BRVars.Options.warntime = n
     end
 end
 
-function BuffReminder.SetWarnCharges(t)
-    if t ~= nil and t ~= "" then
-        BRVars.Options.warncharges = tonumber(t)
+function BuffReminder.SetWarnCharges(n)
+    if n ~= nil then
+        BRVars.Options.warncharges = n
     end
 end
 
