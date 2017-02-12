@@ -5,8 +5,8 @@ A World of Warcraft 1.12 (Vanilla WoW) addon that displays user placeable icons 
 ![example icon image](http://i.imgur.com/i6dGRIO.png)
 ![BuffReminder Button Image](http://i.imgur.com/gCf7Ygj.png)
 
-## Warning
-** Saved variable format has changed in version 1.2. Saved configurations will be lost if you upgrade. **
+## :exclamation: Warning :exclamation:
+**Saved variable format has changed in version 1.2. Saved configurations will be lost if you upgrade.**
 
 #### Notes
 - The config dialog is opened by left-clicking the BR icon.
