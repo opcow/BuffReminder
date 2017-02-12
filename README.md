@@ -8,8 +8,7 @@ A World of Warcraft 1.12 (Vanilla WoW) addon that displays user placeable icons 
 ## :japanese_goblin: Warning :japanese_goblin:
 **Saved variable format has changed in version 1.2. Saved configurations will be lost if you upgrade.**
 ```html
-   // code for coloring
-   <font>color="red"zzz.</font>
+<font>color="red"zzz.</font>
 ```
 
 #### Notes
