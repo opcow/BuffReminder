@@ -15,6 +15,7 @@ BuffReminder = {
         ["raid"] = false,
         ["resting"] = true,
         ["taxi"] = true,
+        ["combat"] = false,
     },
     ["update_time"] = 0,
 }
@@ -41,6 +42,7 @@ BuffReminder.DefaultOptions = {
         ["raid"] = 0,
         ["resting"] = 1,
         ["taxi"] = 1,
+        ["combat"] = 0,
     },
 }
 -- util functions
@@ -496,8 +498,10 @@ function BuffReminder_OnLoad()
     this:RegisterEvent("PLAYER_ENTERING_WORLD")
     this:RegisterEvent("PARTY_MEMBERS_CHANGED")
     this:RegisterEvent("RAID_ROSTER_UPDATE")
-    this:RegisterEvent("ADDON_LOADED")
     this:RegisterEvent("UNIT_INVENTORY_CHANGED")
+    this:RegisterEvent("PLAYER_REGEN_ENABLED")
+    this:RegisterEvent("PLAYER_REGEN_DISABLED")
+    this:RegisterEvent("ADDON_LOADED")
     -- this:RegisterAllEvents()
     -- tooltip frame for getting spell name
     lbrTooltipFrame = CreateFrame('GameTooltip', 'BrTooltip', UIParent, 'GameTooltipTemplate')
@@ -513,7 +517,6 @@ function BuffReminder_OnUpdate(elapsed)
     BuffReminder.update_time = BuffReminder.update_time + elapsed
     if BuffReminder.update_time >= 0.5 then
         BuffReminder.update_time = 0
-        if BuffReminder.hide_all then return end
         local buffsChanged = BuffReminder.GetBuffs()
         local enchantsChanged = BuffReminder.GetEnchants()
         if buffsChanged or enchantsChanged then
@@ -523,6 +526,7 @@ function BuffReminder_OnUpdate(elapsed)
 end
 
 function BuffReminder.Update()
+    if BuffReminder.hide_all then return end
     BuffReminder.GetWatchedBuffs()
     BuffReminder.GetMissinGroups()
     BuffReminder.MakeIcons()
@@ -547,12 +551,19 @@ function BuffReminder_OnEvent(event, arg1)
         BuffReminder.player_status.dead = false
     elseif event == "PLAYER_UPDATE_RESTING" then
         BuffReminder.player_status.resting = (IsResting() == 1)
+    elseif event == "PLAYER_REGEN_ENABLED" then
+    DEFAULT_CHAT_FRAME:AddMessage("+++ PLAYER_REGEN_ENABLED")
+        BuffReminder.player_status.combat = false
+    elseif event == "PLAYER_REGEN_DISABLED" then
+    DEFAULT_CHAT_FRAME:AddMessage("+++ PLAYER_REGEN_DISABLED")
+        BuffReminder.player_status.combat = true
     elseif event == "PLAYER_ENTERING_WORLD" then
         BuffReminder.player_status.resting = (IsResting() == 1)
         BuffReminder.player_status.dead = (UnitIsDeadOrGhost("player") == 1)
         BuffReminder.player_status.taxi = (UnitOnTaxi("player") == 1)
         BuffReminder.player_status.party = (GetNumPartyMembers() > 0)
         BuffReminder.player_status.raid = (GetNumRaidMembers() > 0)
+        BuffReminder.player_status.combat = false
         local isInstance, instanceType = (IsInInstance() == 1)
         BuffReminder.player_status.instance = isInstance
     elseif event == "ADDON_LOADED" then
@@ -572,6 +583,9 @@ end
 function BuffReminder.SanityCheck()
     for i in BuffReminder.DefaultOptions do
         if BRVars.Options[i] == nil then BRVars.Options[i] = BuffReminder.DefaultOptions[i] end
+    end
+    for i in BuffReminder.DefaultOptions.conditions do
+        if BRVars.Options.conditions[i] == nil then BRVars.Options.conditions[i] = BuffReminder.DefaultOptions.conditions[i] end
     end
     if BRVars.Options.enchants.main == nil then BRVars.Options.enchants.main = BuffReminder.DefaultOptions.enchants.main end
     if BRVars.Options.enchants.off == nil then BRVars.Options.enchants.off = BuffReminder.DefaultOptions.enchants.off end

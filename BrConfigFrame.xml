@@ -198,42 +198,49 @@
 					<CheckButton name="$parentRestingCheck" inherits="BrTrisStateCheckTemplate" checked="false" text="Resting">
 						<Anchors>
 							<Anchor point="TOPLEFT">
-								<Offset x="70" y="-16" />
+								<Offset x="74" y="-16" />
 							</Anchor>
 						</Anchors>
 					</CheckButton>
 					<CheckButton name="$parentTaxiCheck" inherits="BrTrisStateCheckTemplate" checked="false" text="Taxi">
 						<Anchors>
 							<Anchor point="TOPLEFT">
-								<Offset x="140" y="-16" />
+								<Offset x="148" y="-16" />
 							</Anchor>
 						</Anchors>
 					</CheckButton>
 					<CheckButton name="$parentDeadCheck" inherits="BrTrisStateCheckTemplate" checked="false" text="Dead">
 						<Anchors>
 							<Anchor point="TOPLEFT">
-								<Offset x="210" y="-16" />
+								<Offset x="222" y="-16" />
 							</Anchor>
 						</Anchors>
 					</CheckButton>
 					<CheckButton name="$parentPartyCheck" inherits="BrTrisStateCheckTemplate" checked="false" text="Party">
 						<Anchors>
 							<Anchor point="TOPLEFT">
-								<Offset x="280" y="-16" />
+								<Offset x="296" y="-16" />
 							</Anchor>
 						</Anchors>
 					</CheckButton>
 					<CheckButton name="$parentRaidCheck" inherits="BrTrisStateCheckTemplate" checked="false" text="Raid">
 						<Anchors>
 							<Anchor point="TOPLEFT">
-								<Offset x="350" y="-16" />
+								<Offset x="370" y="-16" />
+							</Anchor>
+						</Anchors>
+					</CheckButton>
+					<CheckButton name="$parentCombatCheck" inherits="BrTrisStateCheckTemplate" checked="false" text="Combat">
+						<Anchors>
+							<Anchor point="TOPLEFT">
+								<Offset x="0" y="-46" />
 							</Anchor>
 						</Anchors>
 					</CheckButton>
 					<CheckButton name="$parentInstanceCheck" inherits="BrTrisStateCheckTemplate" checked="false" text="Instance">
 						<Anchors>
 							<Anchor point="TOPLEFT">
-								<Offset x="0" y="-46" />
+								<Offset x="74" y="-46" />
 							</Anchor>
 						</Anchors>
 					</CheckButton>
@@ -243,7 +250,7 @@
 						</Size>
 						<Anchors>
 							<Anchor point="TOPLEFT">
-								<Offset x="210" y="-45" />
+								<Offset x="300" y="-45" />
 							</Anchor>
 						</Anchors>
 						<Scripts>
@@ -280,7 +287,7 @@
 						<FontString name="$parentTimeString" text="Early Warning Time:" inherits="BrFontStringTemplate">
 							<Anchors>
 								<Anchor point="TOPLEFT">
-									<Offset x="100" y="-57" />
+									<Offset x="190" y="-57" />
 								</Anchor>
 							</Anchors>
 						</FontString>
@@ -300,42 +307,49 @@
 					<CheckButton name="$parentRestingCheck" inherits="BrDefTrisStateCheckTemplate" checked="false" text="Resting">
 						<Anchors>
 							<Anchor point="TOPLEFT">
-								<Offset x="70" y="-16" />
+								<Offset x="74" y="-16" />
 							</Anchor>
 						</Anchors>
 					</CheckButton>
 					<CheckButton name="$parentTaxiCheck" inherits="BrDefTrisStateCheckTemplate" checked="false" text="Taxi">
 						<Anchors>
 							<Anchor point="TOPLEFT">
-								<Offset x="140" y="-16" />
+								<Offset x="148" y="-16" />
 							</Anchor>
 						</Anchors>
 					</CheckButton>
 					<CheckButton name="$parentDeadCheck" inherits="BrDefTrisStateCheckTemplate" checked="false" text="Dead">
 						<Anchors>
 							<Anchor point="TOPLEFT">
-								<Offset x="210" y="-16" />
+								<Offset x="222" y="-16" />
 							</Anchor>
 						</Anchors>
 					</CheckButton>
 					<CheckButton name="$parentPartyCheck" inherits="BrDefTrisStateCheckTemplate" checked="false" text="Party">
 						<Anchors>
 							<Anchor point="TOPLEFT">
-								<Offset x="280" y="-16" />
+								<Offset x="296" y="-16" />
 							</Anchor>
 						</Anchors>
 					</CheckButton>
 					<CheckButton name="$parentRaidCheck" inherits="BrDefTrisStateCheckTemplate" checked="false" text="Raid">
 						<Anchors>
 							<Anchor point="TOPLEFT">
-								<Offset x="350" y="-16" />
+								<Offset x="370" y="-16" />
+							</Anchor>
+						</Anchors>
+					</CheckButton>
+					<CheckButton name="$parentCombatCheck" inherits="BrDefTrisStateCheckTemplate" checked="false" text="Combat">
+						<Anchors>
+							<Anchor point="TOPLEFT">
+								<Offset x="0" y="-46" />
 							</Anchor>
 						</Anchors>
 					</CheckButton>
 					<CheckButton name="$parentInstanceCheck" inherits="BrDefTrisStateCheckTemplate" checked="false" text="Instance">
 						<Anchors>
 							<Anchor point="TOPLEFT">
-								<Offset x="0" y="-46" />
+								<Offset x="74" y="-46" />
 							</Anchor>
 						</Anchors>
 					</CheckButton>
@@ -364,7 +378,7 @@
 						</Size>
 						<Anchors>
 							<Anchor point="TOPLEFT">
-								<Offset x="210" y="-45" />
+								<Offset x="300" y="-45" />
 							</Anchor>
 						</Anchors>
 						<Scripts>
@@ -509,7 +523,7 @@
 						<FontString name="$parentTimeString" text="Early Warning Time:" inherits="BrFontStringTemplate">
 							<Anchors>
 								<Anchor point="TOPLEFT">
-									<Offset x="100" y="-57" />
+									<Offset x="190" y="-57" />
 								</Anchor>
 							</Anchors>
 						</FontString>
