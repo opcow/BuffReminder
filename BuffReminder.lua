@@ -2,6 +2,7 @@ BuffReminder = {
     ["hide_all"] = false,
     ["button_space"] = 2,
     ["current_buffs"] = {},
+    ["new_buffs"] = {},
     ["watched_buffs"] = {},
     ["missing_buffs"] = {},
     ["missing_groups"] = {},
@@ -15,7 +16,7 @@ BuffReminder = {
         ["resting"] = true,
         ["taxi"] = true,
     },
-    ["update_time"] = 0
+    ["update_time"] = 0,
 }
 BRVars = {}
 BRVars.BuffGroups = {}
@@ -146,10 +147,30 @@ function BuffReminder.MakeIcons()
     end
 end
 
-function BuffReminder.FindBuffGroup(buff)
+-- search groups for matching buff name
+function BuffReminder.FindBuffGroupByName(buff)
     for i in BRVars.BuffGroups do
         if BRVars.BuffGroups[i].buffs[buff] ~= nil then
             return i
+        end
+    end
+    return nil
+end
+
+-- search groups for matching buff icon
+function BuffReminder.FindGroupByIcon(icon, n)
+    for i in BRVars.BuffGroups do
+        for j in BRVars.BuffGroups[i].buffs do
+            -- if this buff has no icon caches then cache t if matched
+            if BRVars.BuffGroups[i].buffs[j] == "" then
+                local name = BuffReminder.GetPlayerBuffName(n)
+                if name == j then
+                    BRVars.BuffGroups[i].buffs[j] = icon
+                    return i, j
+                end
+            elseif BRVars.BuffGroups[i].buffs[j] == icon then
+                return i, j
+            end
         end
     end
     return nil
@@ -172,37 +193,37 @@ end
 
 -- creates a list of current buffs which are also watched buffs
 function BuffReminder.GetBuffs()
-    local current_buffs = {}
+    BuffReminder.new_buffs = {}
     for i = 0, 15 do
         local buffIndex, untilCancelled = GetPlayerBuff(i, "HELPFUL")
         if buffIndex == -1 then break end
-        local name = BuffReminder.GetPlayerBuffName(i)
         local time = GetPlayerBuffTimeLeft(i)
-        local tex = GetPlayerBuffTexture(i)
-        local group = BuffReminder.FindBuffGroup(name)
+        local icon = GetPlayerBuffTexture(i)
+        local group, name = BuffReminder.FindGroupByIcon(icon, i)
+
         -- if the buff isn't found in the buff groups or time is low then don't add it
         if group ~= nil and (time > BRVars.BuffGroups[group].warntime or time == 0) then
-            current_buffs[name] = GetPlayerBuffTexture(i)
-            BRVars.BuffGroups[group].icon = tex
+            BuffReminder.new_buffs[name] = icon
+            BRVars.BuffGroups[group].icon = icon
         end
     end
-    local updated = BuffReminder.BuffsUpdated(current_buffs)
-    BuffReminder.current_buffs = current_buffs
+    local updated = BuffReminder.BuffsUpdated(BuffReminder.new_buffs)
+    BuffReminder.current_buffs = BuffReminder.new_buffs
     return updated
 end
 
 function BuffReminder.GetMissinGroups()
-    missing_groups = {}
+    BuffReminder.missing_groups = {}
+    -- first add all groups then remove any not found
     for i in BRVars.BuffGroups do
-        missing_groups[i] = BRVars.BuffGroups[i].icon
+        BuffReminder.missing_groups[i] = BRVars.BuffGroups[i].icon
     end
     for i in BuffReminder.watched_buffs do
         if BuffReminder.current_buffs[i] ~= nil then
-            local group = BuffReminder.FindBuffGroup(i)
-            missing_groups[group] = nil
+            local group = BuffReminder.FindBuffGroupByName(i)
+            BuffReminder.missing_groups[group] = nil
         end
     end
-    BuffReminder.missing_groups = missing_groups
 end
 
 function BuffReminder.GetMissinBuffs()
@@ -214,11 +235,12 @@ function BuffReminder.GetMissinBuffs()
     end
 end
 
+-- get a table of all watched buffs
 function BuffReminder.GetWatchedBuffs()
     BuffReminder.watched_buffs = {}
     for i in BRVars.BuffGroups do
         for j in BRVars.BuffGroups[i].buffs do
-            BuffReminder.watched_buffs[j] = {}
+            BuffReminder.watched_buffs[j] = BRVars.BuffGroups[i].buffs[j]
         end
     end
 end
@@ -241,8 +263,17 @@ function BuffReminder.GetEnchants()
     end
     return changed
 end
-
 -- slash command functions ------------------------------------------------------------------
+function BuffReminder.ClearIcons()
+    for i in BRVars.BuffGroups do
+        BRVars.BuffGroups[i].icon = "Interface\\Icons\\INV_Misc_QuestionMark"
+        for j in BRVars.BuffGroups[i].buffs do
+            BRVars.BuffGroups[i].buffs[j] = ""
+        end
+    end
+    BuffReminder.Update()
+end
+
 function BuffReminder.GroupExists(group)
     if BRVars.BuffGroups[group] == nil then
         DEFAULT_CHAT_FRAME:AddMessage('\124cffffff00\124hGroup "' .. tostring(group) .. '" does not exist.')
@@ -287,10 +318,13 @@ end
 
 function BuffReminder.AddBuffToGroup(grp, name, print)
     if BRVars.BuffGroups[grp] == nil then
-        BRVars.BuffGroups[grp] = {["conditions"] = BRVars.Options.conditions, ["warntime"] = BRVars.Options.warntime, ["icon"] = "Interface\\Icons\\INV_Misc_QuestionMark", ["buffs"] = {}}
+        BRVars.BuffGroups[grp] = {["conditions"] = {}, ["warntime"] = BRVars.Options.warntime, ["icon"] = "Interface\\Icons\\INV_Misc_QuestionMark", ["buffs"] = {}}
+        for i in BRVars.Options.conditions do
+            BRVars.BuffGroups[grp].conditions[i] = BRVars.Options.conditions[i]
+        end
     end
     if name ~= nil then
-        BRVars.BuffGroups[grp].buffs[name] = {}
+        BRVars.BuffGroups[grp].buffs[name] = ""
     end
     if print then BuffReminder.PrintGroup(grp) end
     BuffReminder.Update()
@@ -331,6 +365,7 @@ function BuffReminder.ShowHelp()
     DEFAULT_CHAT_FRAME:AddMessage("\124cffcbeb1c\124h/br config \124cffabb7ff\- opens the configuration dialog.")
     DEFAULT_CHAT_FRAME:AddMessage("\124cffcbeb1c\124h/br [lock|unlock] \124cffabb7ff\- locks or unlocks the icon frame for user placement.")
     DEFAULT_CHAT_FRAME:AddMessage("\124cffcbeb1c\124h/br NUKE \124cffabb7ff\- clears all of your settings.")
+    DEFAULT_CHAT_FRAME:AddMessage("\124cffcbeb1c\124h/br reseticons \124cffabb7ff\- clears the icon cache.")
     DEFAULT_CHAT_FRAME:AddMessage("\124cffcbeb1c\124h/br size <number> \124cffabb7ff\- changes the icon size (min 10, max 400).")
     DEFAULT_CHAT_FRAME:AddMessage("\124cffcbeb1c\124h/br sound [sound name]\124cffabb7ff\- sets the warning sound or turns it off if no name given. ex: /br sound RaidWarning")
     DEFAULT_CHAT_FRAME:AddMessage("\124cffcbeb1c\124h/br time <number> \124cffabb7ff\- sets the default early warning time setting for new buff groups.")
@@ -433,6 +468,8 @@ function SlashCmdList.BuffReminder(msg)
                 BRVars.Options.warntime = n
                 handled = true
             end
+        elseif largs[1] == "reseticons" then
+            BuffReminder.ClearIcons()
         elseif largs[1] == "config" then
             BrGroupsConfigFrame:Show()
         end
@@ -519,38 +556,16 @@ function BuffReminder_OnEvent(event, arg1)
         local isInstance, instanceType = (IsInInstance() == 1)
         BuffReminder.player_status.instance = isInstance
     elseif event == "ADDON_LOADED" then
-        if arg1 == "BuffReminder" then
-            if BRVars.Options == nil or BRVars.Options.version ~= BuffReminder.DefaultOptions then
+            if arg1 == "BuffReminder" then
+            if BRVars.Options.version == nil or BRVars.Options.version ~= BuffReminder.DefaultOptions.version then
                 BRVars.Options = BuffReminder.DefaultOptions
             else
                 BuffReminder.SanityCheck()
             end
             BuffReminderFrame:SetWidth(BRVars.Options.size)
             BuffReminderFrame:SetHeight(BRVars.Options.size)
-            if BRVars.Options.version == nil then BRVars.Options.version = BuffReminder.DefaultOptions.version end
-            if BRVars.Options.conditions == nil then
-                BRVars.Options.conditions = BuffReminder.DefaultOptions.conditions
-            end
-            for i in BRVars.Options.conditions do
-                if BRVars.Options.conditions[i] == false then
-                    BRVars.Options.conditions[i] = 0
-                elseif BRVars.Options.conditions[i] == true then
-                    BRVars.Options.conditions[i] = 1
-                end
-            end
-            for i in BRVars.BuffGroups do
-                DEFAULT_CHAT_FRAME:AddMessage(i)
-                for j in BRVars.BuffGroups[i].conditions do
-                    if BRVars.BuffGroups[i].conditions[j] == false then
-                        BRVars.BuffGroups[i].conditions[j] = 0
-                    elseif BRVars.BuffGroups[i].conditions[j] == true then
-                        BRVars.BuffGroups[i].conditions[j] = 1
-                    end
-                end
-            end
         end
     end
-    -- fix old config
     BuffReminder.Update() -- force icon update
 end
 --------------------------------------------------------------------------------------------------
@@ -561,11 +576,20 @@ function BuffReminder.SanityCheck()
     if BRVars.Options.enchants.main == nil then BRVars.Options.enchants.main = BuffReminder.DefaultOptions.enchants.main end
     if BRVars.Options.enchants.off == nil then BRVars.Options.enchants.off = BuffReminder.DefaultOptions.enchants.off end
     for i in BRVars.Options.conditions do
-        if BRVars.Options.conditions[i] == nil then BRVars.Options.conditions[i] = BuffReminder.DefaultOptions.conditions[i] end
+        if BRVars.Options.conditions[i] == nil or type(BRVars.Options.conditions[i]) ~= "number" or
+            BRVars.Options.conditions[i] < 0 or BRVars.Options.conditions[i] > 2 then
+            BRVars.Options.conditions[i] = BuffReminder.DefaultOptions.conditions[i]
+        end
     end
     for i in BRVars.BuffGroups do
+        if BRVars.BuffGroups[i].conditions == nile then BRVars.BuffGroups[i].conditions = {} end
         for j in BuffReminder.DefaultOptions.conditions do
             if BRVars.BuffGroups[i].conditions[j] == nil then BRVars.BuffGroups[i].conditions[j] = BuffReminder.DefaultOptions.conditions[j] end
+        end
+        for j in BRVars.BuffGroups[i].buffs do
+            if type(BRVars.BuffGroups[i].buffs[j]) == "table" then
+                BRVars.BuffGroups[i].buffs[j] = ""
+            end
         end
     end
 end

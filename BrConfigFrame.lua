@@ -31,10 +31,8 @@ function BuffReminder.AddGroupClicked()
         BuffReminder.AddBuffToGroup(txt, nil)
         BRConfigLayoutGroupEdit:SetText("")
         BRConfigLayoutGroupEdit:SetText("")
-        BuffReminder.DelBuffDropInit(txt)
-        BuffReminder.GetSelected(txt)
+        BuffReminder.SetOptions(txt)
         curGroupSel = txt
-        BuffReminder.Update()
     end
 end
 
@@ -75,7 +73,7 @@ end
 function BuffReminder.SelGroupDrop_OnClick(arg1)
     curGroupSel = arg1
     if BRVars.BuffGroups[arg1] ~= nil then
-        BuffReminder.GetSelected(arg1)
+        BuffReminder.SetOptions(arg1)
         BuffReminder.DelBuffDropInit()
     else
         BuffReminder.DisableChecks()
@@ -98,9 +96,8 @@ function BuffReminder.DelBuffDrop_OnClick(arg1)
     BuffReminder.Update()
 end
 
-function BuffReminder.GetSelected(group)
+function BuffReminder.SetOptions(group)
     BRConfigLayoutHeaderString:SetText(group)
-    BuffReminder.EnableChecks()
     BuffReminder.CheckSetState(GConditionsAlwaysCheck, BRVars.BuffGroups[group].conditions["always"])
     BuffReminder.CheckSetState(GConditionsRestingCheck, BRVars.BuffGroups[group].conditions["resting"])
     BuffReminder.CheckSetState(GConditionsTaxiCheck, BRVars.BuffGroups[group].conditions["taxi"])
@@ -109,6 +106,7 @@ function BuffReminder.GetSelected(group)
     BuffReminder.CheckSetState(GConditionsRaidCheck, BRVars.BuffGroups[group].conditions["raid"])
     BuffReminder.CheckSetState(GConditionsInstanceCheck, BRVars.BuffGroups[group].conditions["instance"])
     BrTimeEdit:SetText(BRVars.BuffGroups[group].warntime)
+    BuffReminder.EnableChecks()
 end
 
 function BuffReminder.DisableChecks()
