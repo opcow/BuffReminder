@@ -104,6 +104,7 @@ function BuffReminder.SetOptions(group)
     BuffReminder.CheckSetState(GConditionsDeadCheck, BRVars.BuffGroups[group].conditions["dead"])
     BuffReminder.CheckSetState(GConditionsPartyCheck, BRVars.BuffGroups[group].conditions["party"])
     BuffReminder.CheckSetState(GConditionsRaidCheck, BRVars.BuffGroups[group].conditions["raid"])
+    BuffReminder.CheckSetState(GConditionsCombatCheck, BRVars.BuffGroups[group].conditions["combat"])
     BuffReminder.CheckSetState(GConditionsInstanceCheck, BRVars.BuffGroups[group].conditions["instance"])
     BrTimeEdit:SetText(BRVars.BuffGroups[group].warntime)
     BuffReminder.EnableChecks()
@@ -117,6 +118,7 @@ function BuffReminder.DisableChecks()
     GConditionsDeadCheck:Disable()
     GConditionsPartyCheck:Disable()
     GConditionsRaidCheck:Disable()
+    GConditionsCombatCheck:Disable()
     GConditionsInstanceCheck:Disable()
 end
 
@@ -127,6 +129,7 @@ function BuffReminder.EnableChecks()
     GConditionsDeadCheck:Enable()
     GConditionsPartyCheck:Enable()
     GConditionsRaidCheck:Enable()
+    GConditionsCombatCheck:Enable()
     GConditionsInstanceCheck:Enable()
 end
 
