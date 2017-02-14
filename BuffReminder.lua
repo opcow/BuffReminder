@@ -552,10 +552,8 @@ function BuffReminder_OnEvent(event, arg1)
     elseif event == "PLAYER_UPDATE_RESTING" then
         BuffReminder.player_status.resting = (IsResting() == 1)
     elseif event == "PLAYER_REGEN_ENABLED" then
-    DEFAULT_CHAT_FRAME:AddMessage("+++ PLAYER_REGEN_ENABLED")
         BuffReminder.player_status.combat = false
     elseif event == "PLAYER_REGEN_DISABLED" then
-    DEFAULT_CHAT_FRAME:AddMessage("+++ PLAYER_REGEN_DISABLED")
         BuffReminder.player_status.combat = true
     elseif event == "PLAYER_ENTERING_WORLD" then
         BuffReminder.player_status.resting = (IsResting() == 1)
