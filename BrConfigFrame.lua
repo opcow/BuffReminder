@@ -133,21 +133,21 @@ function BuffReminder.EnableChecks()
     GConditionsInstanceCheck:Enable()
 end
 
-function BuffReminder.SetGroupWarnTime(n)
+function BuffReminder.SetGroupWarnTime(t)
     if t ~= nil then
-        BRVars.BuffGroups[curGroupSel].warntime = n
+        BRVars.BuffGroups[curGroupSel].warntime = t
     end
 end
 
-function BuffReminder.SetDefaultWarnTime(n)
-    if n ~= nil then
-        BRVars.Options.warntime = n
+function BuffReminder.SetDefaultWarnTime(t)
+    if t ~= nil then
+        BRVars.Options.warntime = t
     end
 end
 
-function BuffReminder.SetWarnCharges(n)
-    if n ~= nil then
-        BRVars.Options.warncharges = n
+function BuffReminder.SetWarnCharges(t)
+    if t ~= nil then
+        BRVars.Options.warncharges = t
     end
 end
 
