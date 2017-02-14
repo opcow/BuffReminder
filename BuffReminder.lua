@@ -19,6 +19,7 @@ BuffReminder = {
     },
     ["update_time"] = 0,
 }
+
 BRVars = {}
 BRVars.BuffGroups = {}
 BRVars.Options = {}
@@ -578,30 +579,64 @@ function BuffReminder_OnEvent(event, arg1)
     BuffReminder.Update() -- force icon update
 end
 --------------------------------------------------------------------------------------------------
-function BuffReminder.SanityCheck()
-    for i in BuffReminder.DefaultOptions do
-        if BRVars.Options[i] == nil then BRVars.Options[i] = BuffReminder.DefaultOptions[i] end
-    end
-    for i in BuffReminder.DefaultOptions.conditions do
-        if BRVars.Options.conditions[i] == nil then BRVars.Options.conditions[i] = BuffReminder.DefaultOptions.conditions[i] end
-    end
-    if BRVars.Options.enchants.main == nil then BRVars.Options.enchants.main = BuffReminder.DefaultOptions.enchants.main end
-    if BRVars.Options.enchants.off == nil then BRVars.Options.enchants.off = BuffReminder.DefaultOptions.enchants.off end
-    for i in BRVars.Options.conditions do
-        if BRVars.Options.conditions[i] == nil or type(BRVars.Options.conditions[i]) ~= "number" or
-            BRVars.Options.conditions[i] < 0 or BRVars.Options.conditions[i] > 2 then
-            BRVars.Options.conditions[i] = BuffReminder.DefaultOptions.conditions[i]
+local function printOptions(opts)
+    for k, v in pairs(opts) do
+        if type(v) ~= "table" then
+            DEFAULT_CHAT_FRAME:AddMessage(k .. " = " .. v)
+        else
+            DEFAULT_CHAT_FRAME:AddMessage(k .. " = ")
+            for k2, v2 in pairs(v) do
+                DEFAULT_CHAT_FRAME:AddMessage("   " .. k2 .. " = " .. tostring(v2))
+            end
         end
     end
+end
+
+-- copy missing or mistyped options from defaults
+function BuffReminder.CopyOptions(cpy)
+    for k1, v1 in pairs(BuffReminder.DefaultOptions) do
+        if type(v1) ~= "table" then
+            if cpy[k1] == nil or type(cpy[k1]) ~= type(v1) then
+                cpy[k1] = v1
+            end
+        else
+            if type(cpy[k1]) ~= table then cpy[k1] = {} end
+            for k2, v2 in pairs(v1) do
+                if cpy[k1][k2] == nil or type(cpy[k1][k2]) ~= type(v2) then
+                    cpy[k1][k2] = v2
+                end
+            end
+        end
+    end
+end
+
+-- remove unused options
+function BuffReminder.CleanOptions(opts)
+    for k1, v1 in pairs(opts) do
+        if BuffReminder.DefaultOptions[k1] == nil then
+            opts[k1] = nil
+        elseif type(v1) == "table" then
+            for k2, v2 in pairs(v1) do
+                if BuffReminder.DefaultOptions[k1][k2] == nil then opts[k1][k2] = nil end
+            end
+        end
+    end
+end
+
+function BuffReminder.SanityCheck()
+    BuffReminder.CopyOptions(BRVars.Options)
+    BuffReminder.CleanOptions(BRVars.Options)
     for i in BRVars.BuffGroups do
-        if BRVars.BuffGroups[i].conditions == nile then BRVars.BuffGroups[i].conditions = {} end
+        if BRVars.BuffGroups[i].conditions == nil then BRVars.BuffGroups[i].conditions = {} end
         for j in BuffReminder.DefaultOptions.conditions do
             if BRVars.BuffGroups[i].conditions[j] == nil then BRVars.BuffGroups[i].conditions[j] = BuffReminder.DefaultOptions.conditions[j] end
         end
+        -- fixup old config for new buff/icon key/value
         for j in BRVars.BuffGroups[i].buffs do
             if type(BRVars.BuffGroups[i].buffs[j]) == "table" then
                 BRVars.BuffGroups[i].buffs[j] = ""
             end
         end
     end
+    BRVars.Options.version = BuffReminder.DefaultOptions.version
 end
