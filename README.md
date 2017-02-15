@@ -9,7 +9,7 @@ A World of Warcraft 1.12 (Vanilla WoW) addon that displays user placeable icons 
 **Saved variable format has changed in version 1.2. Saved configurations will be lost if you upgrade.**
 
 #### New
-- Experimental: Lua script conditional
+- Experimental: Lua script conditional.
 - A script should return a value that can evaluate as true or false.
 - Example: return UnitMana("player") < 2000
 
