@@ -1,7 +1,5 @@
 ﻿-- Author      : mcrane
 -- Create Date : 1/6/2017 7:45:06 AM
-local curGroupSel
-
 function BuffReminder.GroupsConfigFrame_OnShow()
     BuffReminder.CheckSetState(DefConditionsAlwaysCheck, BRVars.Options.conditions["always"])
     BuffReminder.CheckSetState(DefConditionsRestingCheck, BRVars.Options.conditions["resting"])
@@ -26,21 +24,21 @@ function BuffReminder.GroupsConfigFrame_OnShow()
 end
 
 function BuffReminder.AddGroupClicked()
-    local txt = BRConfigLayoutGroupEdit:GetText()
+    local txt = BRConfigFrameLayoutGroupEdit:GetText()
     if txt ~= nil and txt ~= "" then
         BuffReminder.AddBuffToGroup(txt, nil)
-        BRConfigLayoutGroupEdit:SetText("")
-        BRConfigLayoutGroupEdit:SetText("")
+        BRConfigFrameLayoutGroupEdit:SetText("")
+        BRConfigFrameLayoutGroupEdit:SetText("")
         BuffReminder.SetOptions(txt)
-        curGroupSel = txt
+        BuffReminder.cur_group = txt
     end
 end
 
 function BuffReminder.AddBuffClicked()
-    local txt = BRConfigLayoutGroupEdit:GetText()
-    if txt ~= nil and txt ~= "" and curGroupSel ~= nil then
-        BuffReminder.AddBuffToGroup(curGroupSel, txt)
-        BRConfigLayoutGroupEdit:SetText("")
+    local txt = BRConfigFrameLayoutGroupEdit:GetText()
+    if txt ~= nil and txt ~= "" and BuffReminder.cur_group ~= nil then
+        BuffReminder.AddBuffToGroup(BuffReminder.cur_group, txt)
+        BRConfigFrameLayoutGroupEdit:SetText("")
     end
 end
 
@@ -62,8 +60,8 @@ end
 
 function BuffReminder.DelBuffDropInit()
     local info = {}
-    if BRVars.BuffGroups[curGroupSel] ~= nil then
-        for i in BRVars.BuffGroups[curGroupSel].buffs do
+    if BRVars.BuffGroups[BuffReminder.cur_group] ~= nil then
+        for i in BRVars.BuffGroups[BuffReminder.cur_group].buffs do
             info.text, info.checked, info.notCheckable, info.keepShownOnClick, info.arg1, info.func = i, false, false, false, i, BuffReminder.DelBuffDrop_OnClick
             UIDropDownMenu_AddButton(info)
         end
@@ -71,7 +69,7 @@ function BuffReminder.DelBuffDropInit()
 end
 
 function BuffReminder.SelGroupDrop_OnClick(arg1)
-    curGroupSel = arg1
+    BuffReminder.cur_group = arg1
     if BRVars.BuffGroups[arg1] ~= nil then
         BuffReminder.SetOptions(arg1)
         BuffReminder.DelBuffDropInit()
@@ -82,22 +80,22 @@ end
 
 function BuffReminder.DelGroupDrop_OnClick(arg1)
     BRVars.BuffGroups[arg1] = nil
-    BRConfigLayoutHeaderString:SetText("Buff Groups")
+    BRConfigFrameLayoutHeaderString:SetText("Buff Groups")
     BuffReminder.DisableChecks()
-    curGroupSel = nil
+    BuffReminder.cur_group = nil
     BuffReminder.Update()
 end
 
 function BuffReminder.DelBuffDrop_OnClick(arg1)
-    if curGroupSel ~= nil then
-        BRVars.BuffGroups[curGroupSel].buffs[arg1] = nil
+    if BuffReminder.cur_group ~= nil then
+        BRVars.BuffGroups[BuffReminder.cur_group].buffs[arg1] = nil
     end
     BuffReminder.DelBuffDropInit()
     BuffReminder.Update()
 end
 
 function BuffReminder.SetOptions(group)
-    BRConfigLayoutHeaderString:SetText(group)
+    BRConfigFrameLayoutHeaderString:SetText(group)
     BuffReminder.CheckSetState(GConditionsAlwaysCheck, BRVars.BuffGroups[group].conditions["always"])
     BuffReminder.CheckSetState(GConditionsRestingCheck, BRVars.BuffGroups[group].conditions["resting"])
     BuffReminder.CheckSetState(GConditionsTaxiCheck, BRVars.BuffGroups[group].conditions["taxi"])
@@ -111,7 +109,7 @@ function BuffReminder.SetOptions(group)
 end
 
 function BuffReminder.DisableChecks()
-    curGroupSel = nil
+    BuffReminder.cur_group = nil
     GConditionsAlwaysCheck:Disable()
     GConditionsRestingCheck:Disable()
     GConditionsTaxiCheck:Disable()
@@ -120,6 +118,7 @@ function BuffReminder.DisableChecks()
     GConditionsRaidCheck:Disable()
     GConditionsCombatCheck:Disable()
     GConditionsInstanceCheck:Disable()
+    GConditionsScriptButton:Disable()
 end
 
 function BuffReminder.EnableChecks()
@@ -131,11 +130,12 @@ function BuffReminder.EnableChecks()
     GConditionsRaidCheck:Enable()
     GConditionsCombatCheck:Enable()
     GConditionsInstanceCheck:Enable()
+    GConditionsScriptButton:Enable()
 end
 
 function BuffReminder.SetGroupWarnTime(t)
     if t ~= nil then
-        BRVars.BuffGroups[curGroupSel].warntime = t
+        BRVars.BuffGroups[BuffReminder.cur_group].warntime = t
     end
 end
 
@@ -170,7 +170,7 @@ function BuffReminder.Check_Clicked()
     else
         BuffReminder.CheckSetState(this, this.state + 1)
     end
-    BRVars.BuffGroups[curGroupSel].conditions[string.lower(this:GetText())] = this.state
+    BRVars.BuffGroups[BuffReminder.cur_group].conditions[string.lower(this:GetText())] = this.state
     BuffReminder.Update()
 end
 
@@ -210,10 +210,10 @@ function BuffReminder.GroupsConfigFrame_Toggle(mouseButton)
             brtexture:SetTexture("Interface\\AddOns\\BuffReminder\\Media\\cross")
         end
     elseif mouseButton == "LeftButton" then
-        if BRConfig:IsShown() then
-            BRConfig:Hide();
+        if BRConfigFrame:IsShown() then
+            BRConfigFrame:Hide();
         else
-            BRConfig:Show();
+            BRConfigFrame:Show();
         end
     else
         BuffReminder.hide_all = not BuffReminder.hide_all

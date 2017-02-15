@@ -1,0 +1,111 @@
+<Ui xmlns="http://www.blizzard.com/wow/ui/" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://www.blizzard.com/wow/ui/
+..\FrameXML\UI.xsd">
+	<Script file="ScriptEd.lua" />
+	<Frame name="BrScriptFrame" inherits="BasicFrameTemplate" parent="BRConfigFrame" toplevel="true" enableMouse="true" hidden="true">
+		<Size>
+			<AbsDimension x="400" y="400" />
+		</Size>
+		<Anchors>
+			<Anchor point="CENTER">
+				<Offset x="0" y="0" />
+			</Anchor>
+		</Anchors>
+		<TitleRegion setAllPoints="true">
+			<Size>
+				<AbsDimension x="0" y="0" />
+			</Size>
+			<Anchors>
+				<Anchor point="TOPLEFT" />
+				<Anchor point="BOTTOMRIGHT" />
+			</Anchors>
+		</TitleRegion>
+		<Backdrop bgFile="Interface\DialogFrame\UI-DialogBox-Background" edgeFile="Interface\DialogFrame\UI-DialogBox-Border" tile="true">
+			<BackgroundInsets>
+				<AbsInset left="11" right="12" top="12" bottom="11" />
+			</BackgroundInsets>
+			<TileSize>
+				<AbsValue val="32" />
+			</TileSize>
+			<EdgeSize>
+				<AbsValue val="32" />
+			</EdgeSize>
+		</Backdrop>
+		<Frames>
+			<ScrollFrame name="BrScriptFrameScroll" inherits="UIPanelScrollFrameTemplate" toplevel="true">
+				<Anchors>
+					<Anchor point="TOPLEFT">
+						<Offset>
+							<AbsDimension x="20" y="-30" />
+						</Offset>
+					</Anchor>
+					<Anchor point="BOTTOMRIGHT">
+						<Offset>
+							<AbsDimension x="-60" y="30" />
+						</Offset>
+					</Anchor>
+				</Anchors>
+				<Size>
+					<AbsDimension x="100" y="300" />
+				</Size>
+				<ScrollChild>
+					<EditBox name="BrScriptEditor" letters="99999" multiLine="true" autoFocus="true" enableMouse="true">
+						<Size x="320" y="800" />
+						<Scripts>
+							<OnLoad>
+								this:SetAutoFocus(true);
+								this:SetTextInsets(0, 8, 0, 0);
+							</OnLoad>
+						</Scripts>
+						<FontString inherits="ChatFontNormal" />
+					</EditBox>
+				</ScrollChild>
+			</ScrollFrame>
+			<Button name="$parentAcceptButton" inherits="GameMenuButtonTemplate" text="Accept">
+				<Size x="90" y="24" />
+				<Anchors>
+					<Anchor point="BOTTOM">
+						<Offset x="-80" y="18" />
+					</Anchor>
+				</Anchors>
+				<Scripts>
+					<OnClick>
+						BrScriptFrame:Hide();
+						BuffReminder.SaveScript();
+					</OnClick>
+				</Scripts>
+			</Button>
+			<Button name="$parentCancelButton" inherits="GameMenuButtonTemplate" text="Cancel">
+				<Size x="90" y="24" />
+				<Anchors>
+					<Anchor point="BOTTOM">
+						<Offset x="80" y="18" />
+					</Anchor>
+				</Anchors>
+				<Scripts>
+					<OnShow>
+						BrScriptEditor:SetText(BRVars.BuffGroups[BuffReminder.cur_group].script);
+					</OnShow>
+					<OnClick>
+						BrScriptFrame:Hide();
+						BrScriptEditor:SetText("");
+					</OnClick>
+				</Scripts>
+			</Button>
+		</Frames>
+		<Layers>
+			<Layer level="BACKGROUND">
+				<Texture>
+					<Color r="0.2" g="0.2" b="0" a="0.95" />
+					<Anchors>
+						<Anchor point="TOPLEFT">
+							<Offset x="6" y="-6" />
+						</Anchor>
+						<Anchor point="BOTTOMRIGHT">
+							<Offset x="-6" y="6" />
+						</Anchor>
+					</Anchors>
+				</Texture>
+			</Layer>
+		</Layers>
+	</Frame>
+</Ui>

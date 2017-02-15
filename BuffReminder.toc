@@ -7,3 +7,5 @@ BuffReminder.lua
 BuffReminder.xml
 BrConfigFrame.lua
 BrConfigFrame.xml
+ScriptEd.lua
+ScriptEd.xml

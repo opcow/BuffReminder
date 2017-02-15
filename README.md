@@ -8,6 +8,11 @@ A World of Warcraft 1.12 (Vanilla WoW) addon that displays user placeable icons 
 ## :exclamation: Warning :exclamation:
 **Saved variable format has changed in version 1.2. Saved configurations will be lost if you upgrade.**
 
+#### New
+- Experimental: Lua script conditional
+- A script should return a value that can evaluate as true or false.
+- Example: return UnitMana("player") < 2000
+
 #### Notes
 - The config dialog is opened by left-clicking the BR icon.
 - Buffs you want to monitor must be added to buff groups.
@@ -21,7 +26,7 @@ A World of Warcraft 1.12 (Vanilla WoW) addon that displays user placeable icons 
 - If you've used a previous version and you get errors then you may need to NUKE your config (see gen opts).
 
 ## Config Dialog
-![config dialog image](http://i.imgur.com/1PU8UOd.png)
+![config dialog image](http://i.imgur.com/PHo0saR.png)
 
 ##Command Line Configuration
 Group commands:

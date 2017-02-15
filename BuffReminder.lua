@@ -18,6 +18,8 @@ BuffReminder = {
         ["combat"] = false,
     },
     ["update_time"] = 0,
+    ["scripts"] = {},
+    ["script_res"] = {},
 }
 
 BRVars = {}
@@ -111,14 +113,15 @@ function BuffReminder.MakeIcons()
                 break
             end
         end
-        if not skipIcon then
+        if not skipIcon and not BuffReminder.script_res[i] then
             BuffReminder.MakeIcon(index, BuffReminder.missing_groups[i])
             index = index + 1
         end
     end
     skipIcon = false
     for i in BuffReminder.player_status do
-        if (BRVars.Options.conditions.always ~= 2) and ((BRVars.Options.conditions.always == 1) or (BuffReminder.player_status[i] and (BRVars.Options.conditions[i] == 1)) or (not BuffReminder.player_status[i] and BRVars.Options.conditions[i] == 2)) then
+        if (BRVars.Options.conditions.always ~= 2) and ((BRVars.Options.conditions.always == 1) or (BuffReminder.player_status[i] and
+            (BRVars.Options.conditions[i] == 1)) or (not BuffReminder.player_status[i] and BRVars.Options.conditions[i] == 2)) then
             skipIcon = true
             break
         end
@@ -263,6 +266,19 @@ function BuffReminder.GetEnchants()
         end
         BuffReminder.enchants.main = (hasMainHandEnchant == 1) and (mainHandExpiration > BRVars.Options.warntime * 1000) and ((mainHandCharges == 0) or (mainHandCharges > BRVars.Options.warncharges))
         BuffReminder.enchants.off = (hasOffHandEnchant == 1) and (offHandExpiration > BRVars.Options.warntime * 1000) and ((offHandCharges == 0) or (offHandCharges > BRVars.Options.warncharges))
+    end
+    return changed
+end
+
+function BuffReminder.GetScriptResults()
+    local res
+    local changed = false
+    for k, v in pairs(BuffReminder.scripts) do
+        res = v()
+        if BuffReminder.script_res[k] ~= res then
+            BuffReminder.script_res[k] = res
+            changed = true
+        end
     end
     return changed
 end
@@ -518,9 +534,10 @@ function BuffReminder_OnUpdate(elapsed)
     BuffReminder.update_time = BuffReminder.update_time + elapsed
     if BuffReminder.update_time >= 0.5 then
         BuffReminder.update_time = 0
+        local resChanged = BuffReminder.GetScriptResults()
         local buffsChanged = BuffReminder.GetBuffs()
         local enchantsChanged = BuffReminder.GetEnchants()
-        if buffsChanged or enchantsChanged then
+        if resChanged or buffsChanged or enchantsChanged then
             BuffReminder.Update()
         end
     end
@@ -566,7 +583,7 @@ function BuffReminder_OnEvent(event, arg1)
         local isInstance, instanceType = (IsInInstance() == 1)
         BuffReminder.player_status.instance = isInstance
     elseif event == "ADDON_LOADED" then
-            if arg1 == "BuffReminder" then
+        if arg1 == "BuffReminder" then
             if BRVars.Options.version == nil or BRVars.Options.version ~= BuffReminder.DefaultOptions.version then
                 BRVars.Options = BuffReminder.DefaultOptions
             else
@@ -574,6 +591,12 @@ function BuffReminder_OnEvent(event, arg1)
             end
             BuffReminderFrame:SetWidth(BRVars.Options.size)
             BuffReminderFrame:SetHeight(BRVars.Options.size)
+            for k, v in pairs(BRVars.BuffGroups) do
+                if v.script ~= "" then
+                    BuffReminder.scripts[k] = loadstring(v.script)
+                end
+                BuffReminder.script_res[k] = false
+            end
         end
     end
     BuffReminder.Update() -- force icon update
@@ -631,6 +654,7 @@ function BuffReminder.SanityCheck()
         for j in BuffReminder.DefaultOptions.conditions do
             if BRVars.BuffGroups[i].conditions[j] == nil then BRVars.BuffGroups[i].conditions[j] = BuffReminder.DefaultOptions.conditions[j] end
         end
+        if BRVars.BuffGroups[i].script == nil then BRVars.BuffGroups[i].script = "" end
         -- fixup old config for new buff/icon key/value
         for j in BRVars.BuffGroups[i].buffs do
             if type(BRVars.BuffGroups[i].buffs[j]) == "table" then

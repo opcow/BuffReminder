@@ -30,9 +30,7 @@
 		</Shadow>
 		<Anchors>
 			<Anchor point="TOP">
-				<Offset>
-					<AbsDimension x="0" y="0" />
-				</Offset>
+				<Offset x="0" y="0" />
 			</Anchor>
 		</Anchors>
 	</FontString>
@@ -45,19 +43,15 @@
 		</Shadow>
 	</FontString>
 	<!-- END TEMPLATES -->
-	<Frame name="BRConfig" inherits="BasicFrameTemplate" parent="UIParent" toplevel="true" enableMouse="true" hidden="true">
-		<Size>
-			<AbsDimension x="472" y="440" />
-		</Size>
+	<Frame name="BRConfigFrame" inherits="BasicFrameTemplate" parent="UIParent" toplevel="true" enableMouse="true" hidden="true">
+		<Size x="472" y="440" />
 		<Anchors>
 			<Anchor point="CENTER">
 				<Offset x="0" y="0" />
 			</Anchor>
 		</Anchors>
 		<TitleRegion setAllPoints="true">
-			<Size>
-				<AbsDimension x="0" y="0" />
-			</Size>
+			<Size x="0" y="0" />
 			<Anchors>
 				<Anchor point="TOPLEFT" />
 				<Anchor point="BOTTOMRIGHT" />
@@ -66,16 +60,12 @@
 		<Frames>
 			<!-- BEGIN GROUP SECTION -->
 			<Frame name="$parentLayout" inherits="BasicFrameTemplate">
-				<Size>
-					<AbsDimension x="1" y="1" />
-				</Size>
+				<Size x="1" y="1" />
 				<Frames>
 					<Button name="$parentSelGroupDrop" inherits="UIDropDownMenuTemplate">
 						<Anchors>
 							<Anchor point="TOPLEFT">
-								<Offset>
-									<AbsDimension x="10" y="-16" />
-								</Offset>
+								<Offset x="10" y="-16" />
 							</Anchor>
 						</Anchors>
 						<Scripts>
@@ -89,9 +79,7 @@
 					<Button name="$parentDelGroupDrop" inherits="UIDropDownMenuTemplate">
 						<Anchors>
 							<Anchor point="TOPLEFT">
-								<Offset>
-									<AbsDimension x="150" y="-16" />
-								</Offset>
+								<Offset x="150" y="-16" />
 							</Anchor>
 						</Anchors>
 						<Scripts>
@@ -105,9 +93,7 @@
 					<Button name="$parentDelBuffDrop" inherits="UIDropDownMenuTemplate">
 						<Anchors>
 							<Anchor point="TOPLEFT">
-								<Offset>
-									<AbsDimension x="290" y="-16" />
-								</Offset>
+								<Offset x="290" y="-16" />
 							</Anchor>
 						</Anchors>
 						<Scripts>
@@ -119,43 +105,33 @@
 						</Scripts>
 					</Button>
 					<Button name="$parentAddGroupBtn" inherits="GameMenuButtonTemplate" text="Add Group">
-						<Size>
-							<AbsDimension x="90" y="20" />
-						</Size>
+						<Size x="90" y="20" />
 						<Anchors>
 							<Anchor point="TOPLEFT">
-								<Offset>
-									<AbsDimension x="26" y="-54" />
-								</Offset>
+								<Offset x="26" y="-54" />
 							</Anchor>
 						</Anchors>
 						<Scripts>
-								<OnClick>
-									BuffReminder.AddGroupClicked();
-								</OnClick>
+							<OnClick>
+								BuffReminder.AddGroupClicked();
+							</OnClick>
 						</Scripts>
 					</Button>
 					<Button name="$parentAddBuffBtn" inherits="GameMenuButtonTemplate" text="Add Buff">
-						<Size>
-							<AbsDimension x="90" y="20" />
-						</Size>
+						<Size x="90" y="20" />
 						<Anchors>
 							<Anchor point="TOPLEFT">
-								<Offset>
-									<AbsDimension x="120" y="-54" />
-								</Offset>
+								<Offset x="120" y="-54" />
 							</Anchor>
 						</Anchors>
 						<Scripts>
-								<OnClick>
-									BuffReminder.AddBuffClicked();
-								</OnClick>
+							<OnClick>
+								BuffReminder.AddBuffClicked();
+							</OnClick>
 						</Scripts>
 					</Button>
 					<EditBox name="$parentGroupEdit" inherits="InputBoxTemplate" letters="80">
-						<Size>
-							<AbsDimension x="225" y="32" />
-						</Size>
+						<Size x="225" y="32" />
 						<Scripts>
 							<OnLoad>
 								this:SetAutoFocus(false);
@@ -164,9 +140,7 @@
 						</Scripts>
 						<Anchors>
 							<Anchor point="TOPLEFT">
-								<Offset>
-									<AbsDimension x="220" y="-48" />
-								</Offset>
+								<Offset x="220" y="-48" />
 							</Anchor>
 						</Anchors>
 					</EditBox>
@@ -244,13 +218,24 @@
 							</Anchor>
 						</Anchors>
 					</CheckButton>
-					<EditBox name="BrTimeEdit" inherits="InputBoxTemplate" letters="6" numeric="true">
-						<Size>
-							<AbsDimension x="60" y="32" />
-						</Size>
+					<Button name="$parentScriptButton" inherits="GameMenuButtonTemplate" text="Script">
+						<Size x="60" y="20" />
 						<Anchors>
 							<Anchor point="TOPLEFT">
-								<Offset x="300" y="-45" />
+								<Offset x="166" y="-51" />
+							</Anchor>
+						</Anchors>
+						<Scripts>
+							<OnClick>
+								BrScriptFrame:Show();
+							</OnClick>
+						</Scripts>
+					</Button>
+					<EditBox name="BrTimeEdit" inherits="InputBoxTemplate" letters="6" numeric="true">
+						<Size x="60" y="32" />
+						<Anchors>
+							<Anchor point="TOPLEFT">
+								<Offset x="360" y="-45" />
 							</Anchor>
 						</Anchors>
 						<Scripts>
@@ -265,9 +250,7 @@
 						</Scripts>
 					</EditBox>
 				</Frames>
-				<Size>
-					<AbsDimension x="1" y="1" />
-				</Size>
+				<Size x="1" y="1" />
 				<Anchors>
 					<Anchor point="TOPLEFT">
 						<Offset x="16" y="-110" />
@@ -287,7 +270,7 @@
 						<FontString name="$parentTimeString" text="Early Warning Time:" inherits="BrFontStringTemplate">
 							<Anchors>
 								<Anchor point="TOPLEFT">
-									<Offset x="190" y="-57" />
+									<Offset x="250" y="-57" />
 								</Anchor>
 							</Anchors>
 						</FontString>
@@ -354,9 +337,7 @@
 						</Anchors>
 					</CheckButton>
 					<EditBox name="BrSoundEdit" inherits="InputBoxTemplate" letters="80" numeric="false">
-						<Size>
-							<AbsDimension x="180" y="32" />
-						</Size>
+						<Size x="180" y="32" />
 						<Anchors>
 							<Anchor point="TOPLEFT">
 								<Offset x="100" y="-84" />
@@ -373,9 +354,7 @@
 						</Scripts>
 					</EditBox>
 					<EditBox name="BrDefTimeEdit" inherits="InputBoxTemplate" letters="6" numeric="true">
-						<Size>
-							<AbsDimension x="60" y="32" />
-						</Size>
+						<Size x="60" y="32" />
 						<Anchors>
 							<Anchor point="TOPLEFT">
 								<Offset x="300" y="-45" />
@@ -406,9 +385,7 @@
 						</Scripts>
 						<Anchors>
 							<Anchor point="BOTTOMLEFT">
-								<Offset>
-									<AbsDimension x="2" y="-150" />
-								</Offset>
+								<Offset x="2" y="-150" />
 							</Anchor>
 						</Anchors>
 					</CheckButton>
@@ -427,16 +404,12 @@
 						</Scripts>
 						<Anchors>
 							<Anchor point="BOTTOMLEFT">
-								<Offset>
-									<AbsDimension x="142" y="-150" />
-								</Offset>
+								<Offset x="142" y="-150" />
 							</Anchor>
 						</Anchors>
 					</CheckButton>
 					<EditBox name="BrChargesEdit" inherits="InputBoxTemplate" letters="2" numeric="true">
-						<Size>
-							<AbsDimension x="30" y="32" />
-						</Size>
+						<Size x="30" y="32" />
 						<Anchors>
 							<Anchor point="TOPLEFT">
 								<Offset x="334" y="-118" />
@@ -454,14 +427,10 @@
 						</Scripts>
 					</EditBox>
 					<Slider name="$parentSizeSlider" inherits="OptionsSliderTemplate" minValue="10" maxValue="400" valuestep="2">
-						<Size>
-							<AbsDimension x="300" y="16" />
-						</Size>
+						<Size x="300" y="16" />
 						<Anchors>
 							<Anchor point="BOTTOMLEFT">
-								<Offset>
-									<AbsDimension x="8" y="-182" />
-								</Offset>
+								<Offset x="8" y="-182" />
 							</Anchor>
 						</Anchors>
 						<Scripts>
@@ -482,14 +451,10 @@
 						</Scripts>
 					</Slider>
 					<Slider name="$parentAlphaSlider" inherits="OptionsSliderTemplate" minValue="0" maxValue="1" valuestep=".1">
-						<Size>
-							<AbsDimension x="100" y="16" />
-						</Size>
+						<Size x="100" y="16" />
 						<Anchors>
 							<Anchor point="BOTTOMLEFT">
-								<Offset>
-									<AbsDimension x="320" y="-182" />
-								</Offset>
+								<Offset x="320" y="-182" />
 							</Anchor>
 						</Anchors>
 						<Scripts>
@@ -506,9 +471,7 @@
 						</Scripts>
 					</Slider>
 				</Frames>
-				<Size>
-					<AbsDimension x="1" y="1" />
-				</Size>
+				<Size x="1" y="1" />
 				<Anchors>
 					<Anchor point="TOPLEFT">
 						<Offset x="16" y="-200" />
@@ -546,19 +509,15 @@
 			</Frame>
 			<!-- End Defaults -->
 			<Button name="$parentDoneButton" inherits="GameMenuButtonTemplate" text="Done">
-				<Size>
-					<AbsDimension x="90" y="24" />
-				</Size>
+				<Size x="90" y="24" />
 				<Anchors>
 					<Anchor point="BOTTOM">
-						<Offset>
-							<AbsDimension x="0" y="18" />
-						</Offset>
+						<Offset x="0" y="18" />
 					</Anchor>
 				</Anchors>
 				<Scripts>
 					<OnClick>
-						BRConfig:Hide();
+						BRConfigFrame:Hide();
 					</OnClick>
 				</Scripts>
 			</Button>
@@ -598,14 +557,10 @@
 	</Frame>
 	<!-- Floating Config Button -->
 	<Button name="BrGroupsConfigButton" parent="UIParent" frameStrata="LOW" toplevel="true" movable="true" enableMouse="true">
-		<Size>
-			<AbsDimension x="24" y="24" />
-		</Size>
+		<Size x="24" y="24" />
 		<Anchors>
 			<Anchor point="CENTER">
-				<Offset>
-					<AbsDimension x="0" y="0" />
-				</Offset>
+				<Offset x="0" y="0" />
 			</Anchor>
 		</Anchors>
 		<Layers>
