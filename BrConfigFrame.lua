@@ -1,5 +1,28 @@
 ﻿-- Author      : mcrane
 -- Create Date : 1/6/2017 7:45:06 AM
+
+
+
+StaticPopupDialogs["BUFFREMINDER_CONFIRM"] = {
+  text = "",
+  button1 = "Yes",
+  button2 = "No",
+  OnAccept = function()
+    BRVars.BuffGroups[BuffReminder.del_group] = nil
+    if BuffReminder.del_group == BuffReminder.cur_group then
+        BRConfigFrameLayoutHeaderString:SetText("Buff Groups")
+        BuffReminder.DisableChecks()
+        BuffReminder.cur_group = nil
+    end
+    BuffReminder.Update()
+  end,
+  timeout = 0,
+  whileDead = true,
+  hideOnEscape = true,
+  preferredIndex = 3,
+}
+
+
 function BuffReminder.GroupsConfigFrame_OnShow()
     BuffReminder.CheckSetState(DefConditionsAlwaysCheck, BRVars.Options.conditions["always"])
     BuffReminder.CheckSetState(DefConditionsRestingCheck, BRVars.Options.conditions["resting"])
@@ -79,11 +102,9 @@ function BuffReminder.SelGroupDrop_OnClick(arg1)
 end
 
 function BuffReminder.DelGroupDrop_OnClick(arg1)
-    BRVars.BuffGroups[arg1] = nil
-    BRConfigFrameLayoutHeaderString:SetText("Buff Groups")
-    BuffReminder.DisableChecks()
-    BuffReminder.cur_group = nil
-    BuffReminder.Update()
+    BuffReminder.del_group = arg1
+    StaticPopupDialogs["BUFFREMINDER_CONFIRM"].text = "Delete " .. arg1 .. " group?"
+    StaticPopup_Show ("BUFFREMINDER_CONFIRM")
 end
 
 function BuffReminder.DelBuffDrop_OnClick(arg1)

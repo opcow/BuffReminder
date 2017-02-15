@@ -106,9 +106,9 @@ function BuffReminder.MakeIcons()
     local index = 1
     for i in BuffReminder.missing_groups do
         local skipIcon = false
-        for j in BuffReminder.player_status do
-            if (BRVars.BuffGroups[i].conditions.always ~= 2) and ((BRVars.BuffGroups[i].conditions.always == 1) or (BuffReminder.player_status[j] and
-                (BRVars.BuffGroups[i].conditions[j] == 1)) or (not BuffReminder.player_status[j] and BRVars.BuffGroups[i].conditions[j] == 2)) then
+        for k, v in pairs(BuffReminder.player_status) do
+            if (BRVars.BuffGroups[i].conditions.always ~= 2) and ((BRVars.BuffGroups[i].conditions.always == 1) or (v and
+                (BRVars.BuffGroups[i].conditions[k] == 1)) or (not v and BRVars.BuffGroups[i].conditions[k] == 2)) then
                 skipIcon = true
                 break
             end
@@ -119,9 +119,9 @@ function BuffReminder.MakeIcons()
         end
     end
     skipIcon = false
-    for i in BuffReminder.player_status do
-        if (BRVars.Options.conditions.always ~= 2) and ((BRVars.Options.conditions.always == 1) or (BuffReminder.player_status[i] and
-            (BRVars.Options.conditions[i] == 1)) or (not BuffReminder.player_status[i] and BRVars.Options.conditions[i] == 2)) then
+    for k, v in pairs(BuffReminder.player_status) do
+        if (BRVars.Options.conditions.always ~= 2) and ((BRVars.Options.conditions.always == 1) or (v and
+            (BRVars.Options.conditions[k] == 1)) or (not v and BRVars.Options.conditions[k] == 2)) then
             skipIcon = true
             break
         end
