@@ -26,6 +26,8 @@ BRVars = {}
 BRVars.BuffGroups = {}
 BRVars.Options = {}
 
+BuffReminder.dbg = false
+
 BuffReminder.DefaultOptions = {
     ["version"] = "1.2",
     ["warnsound"] = nil,
@@ -163,19 +165,19 @@ function BuffReminder.FindBuffGroupByName(buff)
     return nil
 end
 
--- search groups for matching buff icon
+-- search groups for matching buff icon (icon, buff button number)
 function BuffReminder.FindGroupByIcon(icon, n)
     for i in BRVars.BuffGroups do
-        for j in BRVars.BuffGroups[i].buffs do
-            -- if this buff has no icon caches then cache t if matched
-            if BRVars.BuffGroups[i].buffs[j] == "" then
+        for k, v in pairs(BRVars.BuffGroups[i].buffs) do
+            -- if this buff has no icon cache then cache it if matched
+            if BRVars.BuffGroups[i].buffs[k] == "" then
                 local name = BuffReminder.GetPlayerBuffName(n)
-                if name == j then
-                    BRVars.BuffGroups[i].buffs[j] = icon
-                    return i, j
+                if name == k then
+                    v = icon
+                    return i, k
                 end
-            elseif BRVars.BuffGroups[i].buffs[j] == icon then
-                return i, j
+            elseif v == icon then
+                return i, k
             end
         end
     end
@@ -206,7 +208,10 @@ function BuffReminder.GetBuffs()
         local time = GetPlayerBuffTimeLeft(i)
         local icon = GetPlayerBuffTexture(i)
         local group, name = BuffReminder.FindGroupByIcon(icon, i)
-
+        if BuffReminder.dbg then
+            DEFAULT_CHAT_FRAME:AddMessage("Index: " .. tostring(buffIndex) .. " Time: " .. tostring(time) .. " Icon: " .. icon )
+            DEFAULT_CHAT_FRAME:AddMessage("Group: " .. tostring(group) .. " Name: " .. tostring(name))
+        end
         -- if the buff isn't found in the buff groups or time is low then don't add it
         if group ~= nil and (time > BRVars.BuffGroups[group].warntime or time == 0) then
             BuffReminder.new_buffs[name] = icon
@@ -232,25 +237,17 @@ function BuffReminder.GetMissinGroups()
     end
 end
 
-function BuffReminder.GetMissinBuffs()
-    BuffReminder.missing_buffs = {}
-    for i in BuffReminder.watched_buffs do
-        if BuffReminder.current_buffs[i] == nil then
-            BuffReminder.missing_buffs[i] = BuffReminder.FindBuffGroup(i)
-        end
-    end
-end
-
 -- get a table of all watched buffs
 function BuffReminder.GetWatchedBuffs()
     BuffReminder.watched_buffs = {}
-    for i in BRVars.BuffGroups do
-        for j in BRVars.BuffGroups[i].buffs do
-            BuffReminder.watched_buffs[j] = BRVars.BuffGroups[i].buffs[j]
+    for k, v in BRVars.BuffGroups do
+        for j in v.buffs do
+            BuffReminder.watched_buffs[j] = v.buffs[j]
         end
     end
 end
 
+-- try to get the buff name from the buff icon tooltip
 function BuffReminder.GetPlayerBuffName(n)
     TooltipScanner:ClearLines()
     TooltipScanner:SetPlayerBuff(n)
@@ -282,17 +279,31 @@ function BuffReminder.GetScriptResults()
     end
     return changed
 end
+-- debug helpers ----------------------------------------------------------------------------
+function BuffReminder.list_current()
+    for k, v in BuffReminder.current_buffs do
+        DEFAULT_CHAT_FRAME:AddMessage(k .. " --> " .. v)
+    end
+end
+
+function BuffReminder.list_missing()
+    for k, v in BuffReminder.missing_buffs do
+        DEFAULT_CHAT_FRAME:AddMessage(k .. " --> " .. v)
+    end
+end
 -- slash command functions ------------------------------------------------------------------
+-- reset the icons to unknown state
 function BuffReminder.ClearIcons()
-    for i in BRVars.BuffGroups do
-        BRVars.BuffGroups[i].icon = "Interface\\Icons\\INV_Misc_QuestionMark"
-        for j in BRVars.BuffGroups[i].buffs do
-            BRVars.BuffGroups[i].buffs[j] = ""
+    for k, v in pairs(BRVars.BuffGroups) do
+        v.icon = "Interface\\Icons\\INV_Misc_QuestionMark" -- set group icon to ?
+        for j in v.buffs do
+            v.buffs[j] = "" -- erase cached buff icon
         end
     end
     BuffReminder.Update()
 end
 
+-- check for existence of a group
 function BuffReminder.GroupExists(group)
     if BRVars.BuffGroups[group] == nil then
         DEFAULT_CHAT_FRAME:AddMessage('\124cffffff00\124hGroup "' .. tostring(group) .. '" does not exist.')
@@ -305,6 +316,7 @@ function BuffReminder.GroupExists(group)
     return true
 end
 
+-- print a list of groups and buffs
 function BuffReminder.PrintBuffs()
     for i in BRVars.BuffGroups do
         DEFAULT_CHAT_FRAME:AddMessage('\124cffffff00\124hGroup: ' .. tostring(i))
@@ -580,8 +592,8 @@ function BuffReminder_OnEvent(event, arg1)
         BuffReminder.player_status.party = (GetNumPartyMembers() > 0)
         BuffReminder.player_status.raid = (GetNumRaidMembers() > 0)
         BuffReminder.player_status.combat = false
-        local isInstance, instanceType = (IsInInstance() == 1)
-        BuffReminder.player_status.instance = isInstance
+        local isInstance, instanceType = IsInInstance()
+        BuffReminder.player_status.instance = (isInstance == 1)
     elseif event == "ADDON_LOADED" then
         if arg1 == "BuffReminder" then
             if BRVars.Options.version == nil or BRVars.Options.version ~= BuffReminder.DefaultOptions.version then
@@ -623,7 +635,10 @@ function BuffReminder.CopyOptions(cpy)
                 cpy[k1] = v1
             end
         else
-            if type(cpy[k1]) ~= table then cpy[k1] = {} end
+            if type(cpy[k1]) ~= "table" then
+                DEFAULT_CHAT_FRAME:AddMessage(k1 .. " type is " .. type(cpy[k1]))
+                cpy[k1] = {}
+            end
             for k2, v2 in pairs(v1) do
                 if cpy[k1][k2] == nil or type(cpy[k1][k2]) ~= type(v2) then
                     cpy[k1][k2] = v2

@@ -1,8 +1,6 @@
 ﻿-- Author      : mcrane
 -- Create Date : 1/6/2017 7:45:06 AM
 
-
-
 StaticPopupDialogs["BUFFREMINDER_CONFIRM"] = {
   text = "",
   button1 = "Yes",
@@ -30,6 +28,7 @@ function BuffReminder.GroupsConfigFrame_OnShow()
     BuffReminder.CheckSetState(DefConditionsDeadCheck, BRVars.Options.conditions["dead"])
     BuffReminder.CheckSetState(DefConditionsPartyCheck, BRVars.Options.conditions["party"])
     BuffReminder.CheckSetState(DefConditionsRaidCheck, BRVars.Options.conditions["raid"])
+    BuffReminder.CheckSetState(DefConditionsInstanceCheck, BRVars.Options.conditions["instance"])
     BuffReminder.CheckSetState(DefConditionsInstanceCheck, BRVars.Options.conditions["instance"])
     if BRVars.Options.warntime == nil then
         BrDefTimeEdit:SetText(brDefaultOptions.warntime)
