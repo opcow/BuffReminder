@@ -502,7 +502,7 @@ function SlashCmdList.BuffReminder(msg)
         elseif largs[1] == "reseticons" then
             BuffReminder.ClearIcons()
         elseif largs[1] == "config" then
-            BrGroupsConfigFrame:Show()
+            BRConfigFrame:Show()
         end
     end
     
