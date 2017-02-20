@@ -3,6 +3,9 @@
 ## Version: 1.2
 ## Notes: Adds icons to remind you when important buffs are missing.
 ## SavedVariablesPerCharacter: BRVars
+localization.de.lua
+localization.fr.lua
+localization.lua
 BuffReminder.lua
 BuffReminder.xml
 BrConfigFrame.lua

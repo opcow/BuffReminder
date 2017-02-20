@@ -1,5 +1,5 @@
-﻿-- Author      : mcrane
--- Create Date : 1/6/2017 7:45:06 AM
+﻿-- BuffConfigFrame.lua
+-- Author      : mcrane
 
 StaticPopupDialogs["BUFFREMINDER_CONFIRM"] = {
   text = "",
@@ -28,8 +28,9 @@ function BuffReminder.GroupsConfigFrame_OnShow()
     BuffReminder.CheckSetState(DefConditionsDeadCheck, BRVars.Options.conditions["dead"])
     BuffReminder.CheckSetState(DefConditionsPartyCheck, BRVars.Options.conditions["party"])
     BuffReminder.CheckSetState(DefConditionsRaidCheck, BRVars.Options.conditions["raid"])
+    BuffReminder.CheckSetState(DefConditionsCombatCheck, BRVars.Options.conditions["combat"])
     BuffReminder.CheckSetState(DefConditionsInstanceCheck, BRVars.Options.conditions["instance"])
-    BuffReminder.CheckSetState(DefConditionsInstanceCheck, BRVars.Options.conditions["instance"])
+    BuffReminder.CheckSetState(DefConditionsMountedCheck, BRVars.Options.conditions["mounted"])
     if BRVars.Options.warntime == nil then
         BrDefTimeEdit:SetText(brDefaultOptions.warntime)
     else
@@ -124,6 +125,7 @@ function BuffReminder.SetOptions(group)
     BuffReminder.CheckSetState(GConditionsRaidCheck, BRVars.BuffGroups[group].conditions["raid"])
     BuffReminder.CheckSetState(GConditionsCombatCheck, BRVars.BuffGroups[group].conditions["combat"])
     BuffReminder.CheckSetState(GConditionsInstanceCheck, BRVars.BuffGroups[group].conditions["instance"])
+    BuffReminder.CheckSetState(GConditionsMountedCheck, BRVars.BuffGroups[group].conditions["mounted"])
     BrTimeEdit:SetText(BRVars.BuffGroups[group].warntime)
     BuffReminder.EnableChecks()
 end
@@ -138,6 +140,7 @@ function BuffReminder.DisableChecks()
     GConditionsRaidCheck:Disable()
     GConditionsCombatCheck:Disable()
     GConditionsInstanceCheck:Disable()
+    GConditionsMountedCheck:Disable()
     GConditionsScriptButton:Disable()
 end
 
@@ -150,6 +153,7 @@ function BuffReminder.EnableChecks()
     GConditionsRaidCheck:Enable()
     GConditionsCombatCheck:Enable()
     GConditionsInstanceCheck:Enable()
+    GConditionsMountedCheck:Enable()
     GConditionsScriptButton:Enable()
 end
 

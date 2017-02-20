@@ -1,3 +1,6 @@
+-- BuffReminder.lua
+-- Author      : mcrane
+
 BuffReminder = {
     ["hide_all"] = false,
     ["button_space"] = 2,
@@ -16,10 +19,12 @@ BuffReminder = {
         ["resting"] = true,
         ["taxi"] = true,
         ["combat"] = false,
+        ["mounted"] = false,
     },
     ["update_time"] = 0,
     ["scripts"] = {},
     ["script_res"] = {},
+    ["status_updated"] = false,
 }
 
 BRVars = {}
@@ -48,6 +53,7 @@ BuffReminder.DefaultOptions = {
         ["resting"] = 1,
         ["taxi"] = 1,
         ["combat"] = 0,
+        ["mounted"] = 1,
     },
 }
 -- util functions
@@ -202,9 +208,9 @@ end
 -- creates a list of current buffs which are also watched buffs
 function BuffReminder.GetBuffs()
     BuffReminder.new_buffs = {}
-    for i = 0, 15 do
-        local buffIndex, untilCancelled = GetPlayerBuff(i, "HELPFUL")
-        if buffIndex == -1 then break end
+    for i = 0, 23 do
+        local buffIndex, untilCancelled = GetPlayerBuff(i, "HELPFUL|PASSIVE")
+        if buffIndex < 0 then break end
         local time = GetPlayerBuffTimeLeft(i)
         local icon = GetPlayerBuffTexture(i)
         local group, name = BuffReminder.FindGroupByIcon(icon, i)
@@ -217,10 +223,29 @@ function BuffReminder.GetBuffs()
             BuffReminder.new_buffs[name] = icon
             BRVars.BuffGroups[group].icon = icon
         end
+        -- see if we're mounted by checking speed increased buff
+        local speed
+        if untilCancelled == 1 then
+            TooltipScanner:ClearLines()
+			TooltipScanner:SetPlayerBuff(buffIndex)
+			if (TooltipScannerTextLeft2:IsShown()) then
+				text = TooltipScannerTextLeft2:GetText()
+				if (text) then
+                    _, _, speed = string.find(text, BUFFREMINDER_SPEED_INCREASED)
+                end
+            end
+        end
+        local mounted = BuffReminder.player_status.mounted
+        if speed then
+            BuffReminder.player_status.mounted = true
+        else
+            BuffReminder.player_status.mounted = false
+        end
+        if mounted ~= BuffReminder.player_status.mounted then BuffReminder.status_updated = true end
     end
-    local updated = BuffReminder.BuffsUpdated(BuffReminder.new_buffs)
+    BuffReminder.status_updated = BuffReminder.status_updated or BuffReminder.BuffsUpdated(BuffReminder.new_buffs)
     BuffReminder.current_buffs = BuffReminder.new_buffs
-    return updated
+    return
 end
 
 function BuffReminder.GetMissinGroups()
@@ -251,7 +276,11 @@ end
 function BuffReminder.GetPlayerBuffName(n)
     TooltipScanner:ClearLines()
     TooltipScanner:SetPlayerBuff(n)
-    return TooltipScannerTextLeft1:GetText()
+    if (TooltipScannerTextLeft1:IsShown()) then
+        return TooltipScannerTextLeft1:GetText()
+    else
+        return nil
+    end
 end
 
 function BuffReminder.GetEnchants()
@@ -501,8 +530,10 @@ function SlashCmdList.BuffReminder(msg)
             end
         elseif largs[1] == "reseticons" then
             BuffReminder.ClearIcons()
+            handled = true
         elseif largs[1] == "config" then
             BRConfigFrame:Show()
+            handled = true
         end
     end
     
@@ -547,9 +578,9 @@ function BuffReminder_OnUpdate(elapsed)
     if BuffReminder.update_time >= 0.5 then
         BuffReminder.update_time = 0
         local resChanged = BuffReminder.GetScriptResults()
-        local buffsChanged = BuffReminder.GetBuffs()
+        BuffReminder.GetBuffs()
         local enchantsChanged = BuffReminder.GetEnchants()
-        if resChanged or buffsChanged or enchantsChanged then
+        if resChanged or enchantsChanged or BuffReminder.status_updated then
             BuffReminder.Update()
         end
     end

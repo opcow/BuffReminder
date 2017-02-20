@@ -1,6 +1,6 @@
 
+-- ScriptEd.lua
 -- Author      : mcrane
--- Create Date : 1/6/2017 7:45:06 AM
 
 function BuffReminder.SaveScript()
     local text = BrScriptEditor:GetText()
