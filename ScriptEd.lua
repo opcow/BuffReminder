@@ -1,18 +1,22 @@
 
 -- ScriptEd.lua
 -- Author      : mcrane
+BuffReminder.edit_target = {}
+
+function BuffReminder.BrScriptEditor_OnShow()
+	this:SetText(BuffReminder.edit_target.script);
+end
 
 function BuffReminder.SaveScript()
     local text = BrScriptEditor:GetText()
     if BuffReminder.cur_group ~= nil then
-        --myfunc = loadstring(text)
         --DEFAULT_CHAT_FRAME:AddMessage(myfunc())
         if text ~= nil then
-            BRVars.BuffGroups[BuffReminder.cur_group].script = text
-            BuffReminder.scripts[BuffReminder.cur_group] = loadstring(text)
+            BuffReminder.edit_target.script = text
+            BuffReminder.scripts[BuffReminder.load_target]  = loadstring(text)
         else
-            BRVars.BuffGroups[BuffReminder.cur_group].script = ""
-            BuffReminder.scripts[BuffReminder.cur_group] = nil
+            BuffReminder.edit_target.script = ""
+            BuffReminder.load_target = nil
         end
     end
 end

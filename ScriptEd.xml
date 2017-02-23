@@ -52,11 +52,13 @@
 						<Size x="320" y="800" />
 						<Scripts>
 							<OnLoad>
-								this:SetAutoFocus(true);
+								this:SetAutoFocus(false);
 								this:SetTextInsets(0, 8, 0, 0);
 							</OnLoad>
 							<OnShow>
+								this:SetTextInsets(0, 8, 0, 0);
 								this:SetFocus();
+								BuffReminder.BrScriptEditor_OnShow();
 							</OnShow>
 						</Scripts>
 						<FontString inherits="ChatFontNormal" />
@@ -85,9 +87,6 @@
 					</Anchor>
 				</Anchors>
 				<Scripts>
-					<OnShow>
-						BrScriptEditor:SetText(BRVars.BuffGroups[BuffReminder.cur_group].script);
-					</OnShow>
 					<OnClick>
 						BrScriptFrame:Hide();
 						BrScriptEditor:SetText("");

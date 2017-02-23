@@ -4,7 +4,8 @@
 BuffReminder = {
     ["hide_all"] = false,
     ["button_space"] = 2,
-    ["current_buffs"] = {},
+    ["all_buffs"] = {},     -- all buffs even if not monitored, key is icon
+    ["current_buffs"] = {}, -- only contains buffs that we monitor, key is name
     ["new_buffs"] = {},
     ["watched_buffs"] = {},
     ["missing_buffs"] = {},
@@ -23,7 +24,9 @@ BuffReminder = {
     },
     ["update_time"] = 0,
     ["scripts"] = {},
+    ["def_script"] = nil,
     ["script_res"] = {},
+    ["def_script_res"] = false,
     ["status_updated"] = false,
 }
 
@@ -40,6 +43,7 @@ BuffReminder.DefaultOptions = {
     ["warntime"] = 60,
     ["warncharges"] = 5,
     ["alpha"] = 1.0,
+    ["script"] = "",
     ["enchants"] = {
         ["main"] = false,
         ["off"] = false,
@@ -134,7 +138,7 @@ function BuffReminder.MakeIcons()
             break
         end
     end
-    if not skipIcon then
+    if not skipIcon and not BuffReminder.def_script_res then
         if BRVars.Options.enchants.main and (not BuffReminder.enchants.main) then
             local t = GetInventoryItemTexture("player", 16)
             if t ~= nil then
@@ -217,10 +221,12 @@ function BuffReminder.GetBuffs()
         end
     end
 
+    BuffReminder.all_buffs = {}
     for i = 0, 15 do
         local icon = GetPlayerBuffTexture(i)
         if icon == nil then break end
         local time = GetPlayerBuffTimeLeft(i)
+        BuffReminder.all_buffs[icon] = time
         local group, name = BuffReminder.FindGroupByIcon(icon, i)
         -- if the buff isn't found in the buff groups or time is low then don't add it
         if group ~= nil and (time > BRVars.BuffGroups[group].warntime or time == 0) then
@@ -231,7 +237,7 @@ function BuffReminder.GetBuffs()
     BuffReminder.status_updated = BuffReminder.status_updated or BuffReminder.BuffsUpdated(BuffReminder.new_buffs)
     BuffReminder.current_buffs = BuffReminder.new_buffs
 
-        -- see if we're mounted by checking speed increased buff
+    -- see if we're mounted by checking speed increased buff
     local speed
     for i = 0, 15 do
         local buffIndex, untilCancelled = GetPlayerBuff(i, "HELPFUL|PASSIVE")
@@ -311,6 +317,13 @@ function BuffReminder.GetScriptResults()
         res = v()
         if BuffReminder.script_res[k] ~= res then
             BuffReminder.script_res[k] = res
+            changed = true
+        end
+    end
+    if BuffReminder.def_script ~= nil then
+        res = BuffReminder.def_script()
+        if BuffReminder.def_script_res ~= res then
+            BuffReminder.def_script_res = res
             changed = true
         end
     end
@@ -647,6 +660,9 @@ function BuffReminder_OnEvent(event, arg1)
                     BuffReminder.scripts[k] = loadstring(v.script)
                 end
                 BuffReminder.script_res[k] = false
+            end
+            if BRVars.Options.script ~= "" then
+                BuffReminder.def_script = loadstring(BRVars.Options.script)
             end
         end
     end

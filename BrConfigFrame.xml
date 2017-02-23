@@ -234,6 +234,8 @@
 						</Anchors>
 						<Scripts>
 							<OnClick>
+							    BuffReminder.edit_target = BRVars.BuffGroups[BuffReminder.cur_group];
+    							BuffReminder.load_target = BuffReminder.cur_group;
 								BrScriptFrame:Show();
 							</OnClick>
 						</Scripts>
@@ -440,6 +442,21 @@
 							</OnEnterPressed>
 						</Scripts>
 					</EditBox>
+					<Button name="$parentScriptButton" inherits="GameMenuButtonTemplate" text="Script">
+						<Size x="45" y="20" />
+						<Anchors>
+							<Anchor point="TOPLEFT">
+								<Offset x="376" y="-124" />
+							</Anchor>
+						</Anchors>
+						<Scripts>
+							<OnClick>
+							    BuffReminder.edit_target = BRVars.Options;
+    							BuffReminder.load_target = BuffReminder.cur_group;
+								BrScriptFrame:Show();
+							</OnClick>
+						</Scripts>
+					</Button>
 					<Slider name="$parentSizeSlider" inherits="OptionsSliderTemplate" minValue="10" maxValue="400" valuestep="2">
 						<Size x="300" y="16" />
 						<Anchors>
