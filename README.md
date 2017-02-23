@@ -26,7 +26,7 @@ A World of Warcraft 1.12 (Vanilla WoW) addon that displays user placeable icons 
 - If you've used a previous version and you get errors then you may need to NUKE your config (see gen opts).
 
 ## Config Dialog
-![config dialog image](http://i.imgur.com/PHo0saR.png)
+![config dialog image](http://i.imgur.com/XmMvP0U.png)
 
 ##Command Line Configuration
 Group commands:
