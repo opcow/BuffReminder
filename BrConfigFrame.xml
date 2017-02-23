@@ -452,7 +452,7 @@
 						<Scripts>
 							<OnClick>
 							    BuffReminder.edit_target = BRVars.Options;
-    							BuffReminder.load_target = BuffReminder.cur_group;
+    							BuffReminder.load_target = BuffReminder.default;
 								BrScriptFrame:Show();
 							</OnClick>
 						</Scripts>

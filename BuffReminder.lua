@@ -24,9 +24,8 @@ BuffReminder = {
     },
     ["update_time"] = 0,
     ["scripts"] = {},
-    ["def_script"] = nil,
     ["script_res"] = {},
-    ["def_script_res"] = false,
+    ["default"] = { ["script_res"] = false},
     ["status_updated"] = false,
 }
 
@@ -138,7 +137,7 @@ function BuffReminder.MakeIcons()
             break
         end
     end
-    if not skipIcon and not BuffReminder.def_script_res then
+    if not skipIcon and not BuffReminder.default.script_res then
         if BRVars.Options.enchants.main and (not BuffReminder.enchants.main) then
             local t = GetInventoryItemTexture("player", 16)
             if t ~= nil then
@@ -320,10 +319,10 @@ function BuffReminder.GetScriptResults()
             changed = true
         end
     end
-    if BuffReminder.def_script ~= nil then
-        res = BuffReminder.def_script()
-        if BuffReminder.def_script_res ~= res then
-            BuffReminder.def_script_res = res
+    if BuffReminder.default.script ~= nil then
+        res = BuffReminder.default.script()
+        if BuffReminder.default.script_res ~= res then
+            BuffReminder.default.script_res = res
             changed = true
         end
     end
@@ -662,7 +661,7 @@ function BuffReminder_OnEvent(event, arg1)
                 BuffReminder.script_res[k] = false
             end
             if BRVars.Options.script ~= "" then
-                BuffReminder.def_script = loadstring(BRVars.Options.script)
+                BuffReminder.default.script = loadstring(BRVars.Options.script)
             end
         end
     end

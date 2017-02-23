@@ -16,7 +16,7 @@ function BuffReminder.SaveScript()
             BuffReminder.scripts[BuffReminder.load_target]  = loadstring(text)
         else
             BuffReminder.edit_target.script = ""
-            BuffReminder.load_target = nil
+            BuffReminder.scripts[BuffReminder.load_target] = nil
         end
     end
 end
