@@ -208,23 +208,34 @@ end
 -- creates a list of current buffs which are also watched buffs
 function BuffReminder.GetBuffs()
     BuffReminder.new_buffs = {}
-    for i = 0, 23 do
-        local buffIndex, untilCancelled = GetPlayerBuff(i, "HELPFUL|PASSIVE")
-        if buffIndex < 0 then break end
-        local time = GetPlayerBuffTimeLeft(i)
-        local icon = GetPlayerBuffTexture(i)
-        local group, name = BuffReminder.FindGroupByIcon(icon, i)
-        if BuffReminder.dbg then
-            DEFAULT_CHAT_FRAME:AddMessage("Index: " .. tostring(buffIndex) .. " Time: " .. tostring(time) .. " Icon: " .. icon )
-            DEFAULT_CHAT_FRAME:AddMessage("Group: " .. tostring(group) .. " Name: " .. tostring(name))
+    if BuffReminder.dbg then
+        for i = 0, 16 do
+            local texture = GetPlayerBuffTexture(i)
+            local tl = GetPlayerBuffTimeLeft(i)
+            if texture == nil then break end
+            DEFAULT_CHAT_FRAME:AddMessage("Icon: " .. tostring(texture) .. ", time: " .. tostring(tl))
         end
+    end
+
+    for i = 0, 15 do
+        local icon = GetPlayerBuffTexture(i)
+        if icon == nil then break end
+        local time = GetPlayerBuffTimeLeft(i)
+        local group, name = BuffReminder.FindGroupByIcon(icon, i)
         -- if the buff isn't found in the buff groups or time is low then don't add it
         if group ~= nil and (time > BRVars.BuffGroups[group].warntime or time == 0) then
             BuffReminder.new_buffs[name] = icon
             BRVars.BuffGroups[group].icon = icon
         end
+    end
+    BuffReminder.status_updated = BuffReminder.status_updated or BuffReminder.BuffsUpdated(BuffReminder.new_buffs)
+    BuffReminder.current_buffs = BuffReminder.new_buffs
+
         -- see if we're mounted by checking speed increased buff
-        local speed
+    local speed
+    for i = 0, 15 do
+        local buffIndex, untilCancelled = GetPlayerBuff(i, "HELPFUL|PASSIVE")
+        if buffIndex < 0 then break end
         if untilCancelled == 1 then
             TooltipScanner:ClearLines()
 			TooltipScanner:SetPlayerBuff(buffIndex)
@@ -235,17 +246,14 @@ function BuffReminder.GetBuffs()
                 end
             end
         end
-        local mounted = BuffReminder.player_status.mounted
-        if speed then
-            BuffReminder.player_status.mounted = true
-        else
-            BuffReminder.player_status.mounted = false
-        end
-        if mounted ~= BuffReminder.player_status.mounted then BuffReminder.status_updated = true end
     end
-    BuffReminder.status_updated = BuffReminder.status_updated or BuffReminder.BuffsUpdated(BuffReminder.new_buffs)
-    BuffReminder.current_buffs = BuffReminder.new_buffs
-    return
+    local mounted = BuffReminder.player_status.mounted
+    if speed then
+        BuffReminder.player_status.mounted = true
+    else
+        BuffReminder.player_status.mounted = false
+    end
+    if mounted ~= BuffReminder.player_status.mounted then BuffReminder.status_updated = true end
 end
 
 function BuffReminder.GetMissinGroups()
