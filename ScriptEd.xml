@@ -55,6 +55,9 @@
 								this:SetAutoFocus(true);
 								this:SetTextInsets(0, 8, 0, 0);
 							</OnLoad>
+							<OnShow>
+								this:SetFocus();
+							</OnShow>
 						</Scripts>
 						<FontString inherits="ChatFontNormal" />
 					</EditBox>

@@ -386,7 +386,7 @@ end
 
 function BuffReminder.AddBuffToGroup(grp, name, print)
     if BRVars.BuffGroups[grp] == nil then
-        BRVars.BuffGroups[grp] = {["conditions"] = {}, ["warntime"] = BRVars.Options.warntime, ["icon"] = "Interface\\Icons\\INV_Misc_QuestionMark", ["buffs"] = {}}
+        BRVars.BuffGroups[grp] = {["conditions"] = {}, ["warntime"] = BRVars.Options.warntime, ["icon"] = "Interface\\Icons\\INV_Misc_QuestionMark", ["script"] = "", ["buffs"] = {}}
         for i in BRVars.Options.conditions do
             BRVars.BuffGroups[grp].conditions[i] = BRVars.Options.conditions[i]
         end
