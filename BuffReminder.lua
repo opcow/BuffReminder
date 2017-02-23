@@ -313,7 +313,7 @@ function BuffReminder.GetScriptResults()
     local res
     local changed = false
     for k, v in pairs(BuffReminder.scripts) do
-        res = v()
+        res = v.script()
         if BuffReminder.script_res[k] ~= res then
             BuffReminder.script_res[k] = res
             changed = true
@@ -656,7 +656,8 @@ function BuffReminder_OnEvent(event, arg1)
             BuffReminderFrame:SetHeight(BRVars.Options.size)
             for k, v in pairs(BRVars.BuffGroups) do
                 if v.script ~= "" then
-                    BuffReminder.scripts[k] = loadstring(v.script)
+                    BuffReminder.scripts[k] = {}
+                    BuffReminder.scripts[k].script = loadstring(v.script)
                 end
                 BuffReminder.script_res[k] = false
             end

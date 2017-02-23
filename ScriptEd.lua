@@ -9,14 +9,12 @@ end
 
 function BuffReminder.SaveScript()
     local text = BrScriptEditor:GetText()
-    if BuffReminder.cur_group ~= nil then
-        --DEFAULT_CHAT_FRAME:AddMessage(myfunc())
-        if text ~= nil then
-            BuffReminder.edit_target.script = text
-            BuffReminder.scripts[BuffReminder.load_target]  = loadstring(text)
-        else
-            BuffReminder.edit_target.script = ""
-            BuffReminder.scripts[BuffReminder.load_target] = nil
-        end
+    --DEFAULT_CHAT_FRAME:AddMessage(myfunc())
+    if text ~= nil then
+        BuffReminder.edit_target.script = text
+        BuffReminder.load_target.script = loadstring(text)
+    else
+        BuffReminder.edit_target.script = ""
+        BuffReminder.load_target.script = nil
     end
 end

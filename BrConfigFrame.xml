@@ -442,7 +442,7 @@
 							</OnEnterPressed>
 						</Scripts>
 					</EditBox>
-					<Button name="$parentScriptButton" inherits="GameMenuButtonTemplate" text="Script">
+					<Button name="$parentDefScriptButton" inherits="GameMenuButtonTemplate" text="Script">
 						<Size x="45" y="20" />
 						<Anchors>
 							<Anchor point="TOPLEFT">
