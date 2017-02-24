@@ -142,6 +142,7 @@ function BuffReminder.DisableChecks()
     GConditionsInstanceCheck:Disable()
     GConditionsMountedCheck:Disable()
     GConditionsScriptButton:Disable()
+    BRConfigFrameLayoutAddBuffBtn:Disable()
 end
 
 function BuffReminder.EnableChecks()
@@ -155,6 +156,7 @@ function BuffReminder.EnableChecks()
     GConditionsInstanceCheck:Enable()
     GConditionsMountedCheck:Enable()
     GConditionsScriptButton:Enable()
+    BRConfigFrameLayoutAddBuffBtn:Enable()
 end
 
 function BuffReminder.SetGroupWarnTime(t)
