@@ -15,6 +15,8 @@ BuffReminder = {
     ["player_status"] = {
         ["dead"] = false,
         ["instance"] = false,
+        ["raid_inst"] = false,
+        ["pvp_inst"] = false,
         ["party"] = false,
         ["raid"] = false,
         ["resting"] = true,
@@ -23,6 +25,7 @@ BuffReminder = {
         ["mounted"] = false,
     },
     ["update_time"] = 0,
+    ["delay"] = 1,
     ["scripts"] = {},
     ["script_res"] = {},
     ["default"] = { ["script_res"] = false},
@@ -212,7 +215,7 @@ end
 function BuffReminder.GetBuffs()
     BuffReminder.new_buffs = {}
     if BuffReminder.dbg then
-        for i = 0, 16 do
+        for i = 0, 31 do
             local texture = GetPlayerBuffTexture(i)
             local tl = GetPlayerBuffTimeLeft(i)
             if texture == nil then break end
@@ -221,7 +224,7 @@ function BuffReminder.GetBuffs()
     end
 
     BuffReminder.all_buffs = {}
-    for i = 0, 15 do
+    for i = 0, 31 do
         local icon = GetPlayerBuffTexture(i)
         if icon == nil then break end
         local time = GetPlayerBuffTimeLeft(i)
@@ -238,7 +241,7 @@ function BuffReminder.GetBuffs()
 
     -- see if we're mounted by checking speed increased buff
     local speed
-    for i = 0, 15 do
+    for i = 0, 31 do
         local buffIndex, untilCancelled = GetPlayerBuff(i, "HELPFUL|PASSIVE")
         if buffIndex < 0 then break end
         if untilCancelled == 1 then
@@ -595,7 +598,7 @@ end
 --------------------------------------------------------------------------------------------------
 function BuffReminder_OnUpdate(elapsed)
     BuffReminder.update_time = BuffReminder.update_time + elapsed
-    if BuffReminder.update_time >= 0.5 then
+    if BuffReminder.update_time >= BuffReminder.delay then
         BuffReminder.update_time = 0
         local resChanged = BuffReminder.GetScriptResults()
         BuffReminder.GetBuffs()
@@ -644,7 +647,11 @@ function BuffReminder_OnEvent(event, arg1)
         BuffReminder.player_status.raid = (GetNumRaidMembers() > 0)
         BuffReminder.player_status.combat = false
         local isInstance, instanceType = IsInInstance()
-        BuffReminder.player_status.instance = (isInstance == 1)
+
+        BuffReminder.player_status.instance = (instanceType == "party")
+        BuffReminder.player_status.raid_inst = (instanceType == "raid")
+        BuffReminder.player_status.pvp_inst = (instanceType == "pvp")
+        DEFAULT_CHAT_FRAME:AddMessage(tostring(instanceType))
     elseif event == "ADDON_LOADED" then
         if arg1 == "BuffReminder" then
             if BRVars.Options.version == nil or BRVars.Options.version ~= BuffReminder.DefaultOptions.version then
