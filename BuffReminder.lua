@@ -215,7 +215,7 @@ end
 function BuffReminder.GetBuffs()
     BuffReminder.new_buffs = {}
     if BuffReminder.dbg then
-        for i = 0, 31 do
+        for i = 0, 29 do
             local texture = GetPlayerBuffTexture(i)
             local tl = GetPlayerBuffTimeLeft(i)
             if texture == nil then break end
@@ -224,7 +224,7 @@ function BuffReminder.GetBuffs()
     end
 
     BuffReminder.all_buffs = {}
-    for i = 0, 31 do
+    for i = 0, 29 do
         local icon = GetPlayerBuffTexture(i)
         if icon == nil then break end
         local time = GetPlayerBuffTimeLeft(i)
