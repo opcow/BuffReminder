@@ -1,5 +1,5 @@
 
-#BuffReminder
+# BuffReminder
 A World of Warcraft 1.12 (Vanilla WoW) addon that displays user placeable icons on your screen when buffs have expired or are soon to expire.
 
 ![example icon image](http://i.imgur.com/i6dGRIO.png)
