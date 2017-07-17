@@ -28,7 +28,7 @@ A World of Warcraft 1.12 (Vanilla WoW) addon that displays user placeable icons 
 ## Config Dialog
 ![config dialog image](http://i.imgur.com/XmMvP0U.png)
 
-##Command Line Configuration
+## Command Line Configuration
 Group commands:
 
 	/br group <groupname> add <buffname> - adds a buff to a group. If the group doesn't exist it will be created
