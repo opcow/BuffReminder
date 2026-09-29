@@ -1,46 +1,47 @@
 -- BuffReminder.lua
 -- Author      : mcrane
+--
+-- WoW: Forever port. Buffs are read out of combat, when aura data is readable. In combat the
+-- client turns aura data into secret values, so the addon keeps the last snapshot and predicts
+-- expiry from the expiration times it recorded before the pull, then re-reads after combat.
+
+local ADDON_NAME = ...
+local MEDIA = "Interface\\AddOns\\" .. ADDON_NAME .. "\\media\\"
+local QUESTION_MARK = "Interface\\Icons\\INV_Misc_QuestionMark"
+local TICK = 1          -- seconds between status/timer checks
+local ICON_SPACING = 2
+
+-- clients without secret values never have secrets
+local issecretvalue = issecretvalue or function() return false end
 
 BuffReminder = {
-    ["hide_all"] = false,
-    ["button_space"] = 2,
-    ["all_buffs"] = {},     -- all buffs even if not monitored, key is icon
-    ["current_buffs"] = {}, -- only contains buffs that we monitor, key is name
-    ["new_buffs"] = {},
-    ["watched_buffs"] = {},
-    ["missing_buffs"] = {},
-    ["missing_groups"] = {},
-    ["icons"] = {},
-    ["enchants"] = {},
-    ["player_status"] = {
-        ["dead"] = false,
-        ["instance"] = false,
-        ["raid_inst"] = false,
-        ["pvp_inst"] = false,
-        ["party"] = false,
-        ["raid"] = false,
-        ["resting"] = true,
-        ["taxi"] = true,
-        ["combat"] = false,
-        ["mounted"] = false,
+    icons = {},             -- pooled icon frames
+    groupState = {},        -- [group] = { present, expires (0 = permanent), duration } from the last readable scan
+    enchants = {},          -- [slot] = { present, expires, charges }
+    scripts = {},           -- [group] = compiled condition script
+    scriptRes = {},         -- [group] = last script result, true hides the icon
+    scriptErrReported = {}, -- [function] = true once its runtime error has been printed
+    defaultScript = nil,
+    defaultScriptRes = false,
+    shown = {},             -- icon keys shown by the last refresh, for the warning sound
+    hideAll = false,
+    needScan = true,
+    elapsed = 0,
+    status = {
+        dead = false,
+        instance = false,
+        party = false,
+        raid = false,
+        resting = false,
+        taxi = false,
+        combat = false,
+        mounted = false,
     },
-    ["update_time"] = 0,
-    ["delay"] = 1,
-    ["scripts"] = {},
-    ["script_res"] = {},
-    ["default"] = { ["script_res"] = false},
-    ["status_updated"] = false,
 }
+local BR = BuffReminder
 
-BRVars = {}
-BRVars.BuffGroups = {}
-BRVars.Options = {}
-
-BuffReminder.dbg = false
-
-BuffReminder.DefaultOptions = {
-    ["version"] = "1.2",
-    ["warnsound"] = nil,
+BR.DefaultOptions = {
+    ["version"] = "2.0",
     ["size"] = 30,
     ["warntime"] = 60,
     ["warncharges"] = 5,
@@ -50,6 +51,8 @@ BuffReminder.DefaultOptions = {
         ["main"] = false,
         ["off"] = false,
     },
+    -- 0 = ignored, 1 = hide the icon while true, 2 = hide the icon while false
+    -- always: 0 = use the other conditions, 1 = never show, 2 = always show
     ["conditions"] = {
         ["always"] = 0,
         ["dead"] = 1,
@@ -62,682 +65,807 @@ BuffReminder.DefaultOptions = {
         ["mounted"] = 1,
     },
 }
--- util functions
-local function getArgs(m)
-    local _, count = string.gsub(m, [["]], "")
-    if math.mod(count, 2) ~= 0 then
-        DEFAULT_CHAT_FRAME:AddMessage("Unfinished quote in command.")
-        return nil, 0
+-- options that are valid but have no default value
+local EXTRA_OPTIONS = { ["warnsound"] = true, ["position"] = true }
+
+local CONDITIONS = { "dead", "instance", "party", "raid", "resting", "taxi", "combat", "mounted" }
+local STATE_TEXT = { [0] = "ignored", [1] = "hide if true", [2] = "hide if false" }
+local ALWAYS_TEXT = { [0] = "normal", [1] = "disabled", [2] = "always shown" }
+local ENCHANT_SLOTS = { main = 16, off = 17 }
+
+-- util functions ---------------------------------------------------------------------------
+local function Echo(msg)
+    DEFAULT_CHAT_FRAME:AddMessage("|cffcbeb1c" .. msg .. "|r")
+end
+
+local function Print(msg)
+    DEFAULT_CHAT_FRAME:AddMessage("|cfff4f9a7BuffReminder:|r " .. msg)
+end
+
+local function DeepCopy(t)
+    local c = {}
+    for k, v in pairs(t) do
+        c[k] = type(v) == "table" and DeepCopy(v) or v
     end
-    
-    for i in string.gfind(m, '(".-")') do
-        m = string.gsub(m, i, string.gsub(string.gsub(i, "%s", "%%%%space%%%%"), '"', ""))
-    end
-    
+    return c
+end
+
+-- split a command line into words, "quoted text" counts as one word
+local function GetArgs(msg)
     local args = {}
+    local pos = 1
+    while true do
+        local s = msg:find("%S", pos)
+        if not s then break end
+        local e
+        if msg:sub(s, s) == '"' then
+            e = msg:find('"', s + 1, true)
+            if not e then
+                Print("Unfinished quote in command.")
+                return nil
+            end
+            table.insert(args, msg:sub(s + 1, e - 1))
+        else
+            e = (msg:find("%s", s) or #msg + 1) - 1
+            table.insert(args, msg:sub(s, e))
+        end
+        pos = e + 1
+    end
     local largs = {}
-    local r
-    local argc = 0
-    for v in string.gfind(m, "(%S+)") do
-        r, _ = string.gsub(v, "%%space%%", " ")
-        table.insert(args, r)
-        table.insert(largs, string.lower(r))
-        argc = argc + 1
-    end
-    return args, largs, argc
+    for i, a in ipairs(args) do largs[i] = a:lower() end
+    return args, largs
 end
 
-
-local function tableLen(t)
-    local count = 0
-    for _ in pairs(t) do count = count + 1 end
-    return count
+-- raw text following the word "script", so Lua code keeps its quotes and spacing
+local function ScriptText(msg)
+    local _, e = msg:lower():find("%sscript%f[%s%z]")
+    if not e then
+        _, e = msg:lower():find("^%s*script%f[%s%z]")
+    end
+    return e and msg:sub(e + 1):match("^%s*(.-)%s*$") or ""
 end
 
-local function toNum(n)
-    local n = tonumber(n)
-    if n == nil then DEFAULT_CHAT_FRAME:AddMessage("Invalid number given.") end
-    return n
-end
--------------------------------------------------------------------------------
-function BuffReminder.MakeIcon(index, texture)
-    BuffReminder.icons[index] = CreateFrame("Frame", nil, BuffReminderFrame)
-    BuffReminder.icons[index]:SetFrameStrata("BACKGROUND")
-    BuffReminder.icons[index]:SetWidth(BRVars.Options.size)
-    BuffReminder.icons[index]:SetHeight(BRVars.Options.size)
-
-    tex = BuffReminder.icons[index]:CreateTexture(nil, "ARTWORK")
-    tex:SetTexture(texture)
-    tex:SetAlpha(BRVars.Options.alpha)
-    tex:SetAllPoints(BuffReminder.icons[index])
-    BuffReminder.icons[index].texture = tex
+local function ToNum(n)
+    local v = tonumber(n)
+    if v == nil then Print("Invalid number given.") end
+    return v
 end
 
-function BuffReminder.MakeIcons()
-    for i in BuffReminder.icons do
-        BuffReminder.icons[i]:Hide()
-    end
-    local index = 1
-    for i in BuffReminder.missing_groups do
-        local skipIcon = false
-        for k, v in pairs(BuffReminder.player_status) do
-            if (BRVars.BuffGroups[i].conditions.always ~= 2) and ((BRVars.BuffGroups[i].conditions.always == 1) or (v and
-                (BRVars.BuffGroups[i].conditions[k] == 1)) or (not v and BRVars.BuffGroups[i].conditions[k] == 2)) then
-                skipIcon = true
-                break
-            end
-        end
-        if not skipIcon and not BuffReminder.script_res[i] then
-            BuffReminder.MakeIcon(index, BuffReminder.missing_groups[i])
-            index = index + 1
-        end
-    end
-    skipIcon = false
-    for k, v in pairs(BuffReminder.player_status) do
-        if (BRVars.Options.conditions.always ~= 2) and ((BRVars.Options.conditions.always == 1) or (v and
-            (BRVars.Options.conditions[k] == 1)) or (not v and BRVars.Options.conditions[k] == 2)) then
-            skipIcon = true
-            break
-        end
-    end
-    if not skipIcon and not BuffReminder.default.script_res then
-        if BRVars.Options.enchants.main and (not BuffReminder.enchants.main) then
-            local t = GetInventoryItemTexture("player", 16)
-            if t ~= nil then
-                BuffReminder.MakeIcon(index, t)
-                index = index + 1
-            end
-        end
-        if BRVars.Options.enchants.off and (not BuffReminder.enchants.off) then
-            local t = GetInventoryItemTexture("player", 17)
-            if t ~= nil then
-                BuffReminder.MakeIcon(index, t)
-                index = index + 1
-            end
-        end
-    end
-
-    local count = index - 1
-    local pitch = BRVars.Options.size + BuffReminder.button_space * 2
-    local c = (pitch * (count - 1)) / 2
-    for i = count, 1, -1 do
-        BuffReminder.icons[i]:SetPoint("CENTER", c, 0)
-        BuffReminder.icons[i]:Show()
-        c = c - pitch
-    end
+local function FormatTime(s)
+    if s <= 0 then return "" end
+    if s >= 3600 then return ("%dh"):format(math.ceil(s / 3600)) end
+    if s >= 60 then return ("%dm"):format(math.ceil(s / 60)) end
+    return ("%d"):format(math.ceil(s))
 end
 
--- search groups for matching buff name
-function BuffReminder.FindBuffGroupByName(buff)
-    for i in BRVars.BuffGroups do
-        if BRVars.BuffGroups[i].buffs[buff] ~= nil then
-            return i
-        end
+-- sound kit id from a number, or a SOUNDKIT name ("RAID_WARNING", "raidwarning")
+local function ResolveSound(v)
+    if v == nil then return nil end
+    local n = tonumber(v)
+    if n then return n end
+    if type(v) ~= "string" or SOUNDKIT == nil then return nil end
+    local want = v:upper():gsub("_", "")
+    for name, id in pairs(SOUNDKIT) do
+        if name:gsub("_", "") == want then return id end
     end
     return nil
 end
 
--- search groups for matching buff icon (icon, buff button number)
-function BuffReminder.FindGroupByIcon(icon, n)
-    for i in BRVars.BuffGroups do
-        for k, v in pairs(BRVars.BuffGroups[i].buffs) do
-            -- if this buff has no icon cache then cache it if matched
-            if BRVars.BuffGroups[i].buffs[k] == "" then
-                local name = BuffReminder.GetPlayerBuffName(n)
-                if name == k then
-                    v = icon
-                    return i, k
-                end
-            elseif v == icon then
-                return i, k
-            end
-        end
+local function SpellTexture(buff)
+    if C_Spell and C_Spell.GetSpellTexture then
+        local ok, tex = pcall(C_Spell.GetSpellTexture, tonumber(buff) or buff)
+        if ok and tex and not issecretvalue(tex) then return tex end
     end
     return nil
 end
 
--- check if buffs have changd since last update
-function BuffReminder.BuffsUpdated(buffs)
-    for i in BuffReminder.current_buffs do
-        if buffs[i] == nil then -- lost a buff
-            return true
-        end
-    end
-    for i in buffs do
-        if BuffReminder.current_buffs[i] == nil then -- gained a buff
-            return true
-        end
+-- buff keys are names (matched case-insensitively) or spell ids
+local function BuffKey(buff)
+    return tonumber(buff) or buff:lower()
+end
+
+-- true when entry a lasts longer than entry b, permanent buffs last forever
+local function Outlasts(a, b)
+    if b.expires == 0 then return false end
+    if a.expires == 0 then return true end
+    return a.expires > b.expires
+end
+
+local function IsSuppressed(conditions)
+    if conditions.always == 2 then return false end
+    if conditions.always == 1 then return true end
+    for _, k in ipairs(CONDITIONS) do
+        local v, c = BR.status[k], conditions[k]
+        if (v and c == 1) or (not v and c == 2) then return true end
     end
     return false
 end
 
--- creates a list of current buffs which are also watched buffs
-function BuffReminder.GetBuffs()
-    BuffReminder.new_buffs = {}
-    if BuffReminder.dbg then
-        for i = 0, 29 do
-            local texture = GetPlayerBuffTexture(i)
-            local tl = GetPlayerBuffTimeLeft(i)
-            if texture == nil then break end
-            DEFAULT_CHAT_FRAME:AddMessage("Icon: " .. tostring(texture) .. ", time: " .. tostring(tl))
+-- reading auras ----------------------------------------------------------------------------
+local function AurasSecret()
+    return C_Secrets ~= nil and C_Secrets.ShouldAurasBeSecret ~= nil and C_Secrets.ShouldAurasBeSecret()
+end
+
+-- returns found[name or spellId] = longest lasting entry, plus a list of all helpful auras.
+-- errors if any aura is secret, a partial read would make present buffs look missing.
+local function ReadPlayerBuffs()
+    local found, list = {}, {}
+    local function keep(key, entry)
+        if key ~= nil and (found[key] == nil or Outlasts(entry, found[key])) then
+            found[key] = entry
         end
     end
+    for i = 1, 255 do
+        local aura = C_UnitAuras.GetAuraDataByIndex("player", i, "HELPFUL")
+        if aura == nil then break end
+        if issecretvalue(aura) or issecretvalue(aura.name) or issecretvalue(aura.spellId)
+            or issecretvalue(aura.icon) or issecretvalue(aura.duration) or issecretvalue(aura.expirationTime) then
+            error("secret aura")
+        end
+        local entry = {
+            name = aura.name,
+            spellId = aura.spellId,
+            icon = aura.icon,
+            duration = aura.duration or 0,
+            expires = aura.expirationTime or 0,
+        }
+        table.insert(list, entry)
+        keep(aura.name and aura.name:lower(), entry)
+        keep(aura.spellId, entry)
+    end
+    return found, list
+end
 
-    BuffReminder.all_buffs = {}
-    for i = 0, 29 do
-        local icon = GetPlayerBuffTexture(i)
-        if icon == nil then break end
-        local time = GetPlayerBuffTimeLeft(i)
-        BuffReminder.all_buffs[icon] = time
-        local group, name = BuffReminder.FindGroupByIcon(icon, i)
-        -- if the buff isn't found in the buff groups or time is low then don't add it
-        if group ~= nil and (time > BRVars.BuffGroups[group].warntime or time == 0) then
-            BuffReminder.new_buffs[name] = icon
-            BRVars.BuffGroups[group].icon = icon
+-- snapshot the state of every group, returns false if auras couldn't be read
+function BR.ScanAuras()
+    if AurasSecret() then return false end
+    local ok, found = pcall(ReadPlayerBuffs)
+    if not ok then return false end
+    BR.groupState = {}
+    for g, group in pairs(BRVars.BuffGroups) do
+        local best
+        for buff in pairs(group.buffs) do
+            local e = found[BuffKey(buff)]
+            if e and (best == nil or Outlasts(e, best)) then best = e end
+        end
+        if best then
+            group.icon = best.icon or group.icon
+            BR.groupState[g] = { present = true, expires = best.expires, duration = best.duration }
+        else
+            BR.groupState[g] = { present = false }
         end
     end
-    BuffReminder.status_updated = BuffReminder.status_updated or BuffReminder.BuffsUpdated(BuffReminder.new_buffs)
-    BuffReminder.current_buffs = BuffReminder.new_buffs
+    BR.needScan = false
+    return true
+end
 
-    -- see if we're mounted by checking speed increased buff
-    local speed
-    for i = 0, 31 do
-        local buffIndex, untilCancelled = GetPlayerBuff(i, "HELPFUL|PASSIVE")
-        if buffIndex < 0 then break end
-        if untilCancelled == 1 then
-            TooltipScanner:ClearLines()
-			TooltipScanner:SetPlayerBuff(buffIndex)
-			if (TooltipScannerTextLeft2:IsShown()) then
-				text = TooltipScannerTextLeft2:GetText()
-				if (text) then
-                    _, _, speed = string.find(text, BUFFREMINDER_SPEED_INCREASED)
+function BR.ScanEnchants()
+    local r = { pcall(GetWeaponEnchantInfo) }
+    if not r[1] then return end
+    for i = 2, 9 do
+        if issecretvalue(r[i]) then return end
+    end
+    local now = GetTime()
+    local function entry(has, ms, charges)
+        if not has then return { present = false } end
+        return { present = true, expires = now + (ms or 0) / 1000, charges = charges or 0 }
+    end
+    -- hasEnchant, expirationMs, charges, enchantId for each hand
+    BR.enchants.main = entry(r[2], r[3], r[4])
+    BR.enchants.off = entry(r[6], r[7], r[8])
+end
+
+local function Flag(v, prev)
+    if issecretvalue(v) then return prev end
+    return v and true or false
+end
+
+function BR.UpdateStatus()
+    local s = BR.status
+    s.dead = Flag(UnitIsDeadOrGhost("player"), s.dead)
+    s.resting = Flag(IsResting(), s.resting)
+    s.taxi = Flag(UnitOnTaxi("player"), s.taxi)
+    s.mounted = Flag(IsMounted(), s.mounted)
+    s.party = Flag(IsInGroup(), s.party)
+    s.raid = Flag(IsInRaid(), s.raid)
+    local _, instanceType = IsInInstance()
+    if not issecretvalue(instanceType) then
+        s.instance = (instanceType == "party")
+    end
+end
+
+-- condition scripts ------------------------------------------------------------------------
+local function Compile(code, label)
+    if code == nil or code == "" then return nil end
+    local fn, err = loadstring(code, "BuffReminder " .. label)
+    if not fn then Print("Script error in " .. label .. ": " .. err) end
+    return fn
+end
+
+local function RunScript(fn, prev)
+    if not fn then return false end
+    local ok, res = pcall(fn)
+    if not ok then
+        if not BR.scriptErrReported[fn] then
+            BR.scriptErrReported[fn] = true
+            Print("Script error: " .. tostring(res))
+        end
+        return prev
+    end
+    -- a script that returns combat data may hand back a secret, keep the last known answer
+    if issecretvalue(res) then return prev end
+    return res and true or false
+end
+
+function BR.CompileScripts()
+    BR.scripts = {}
+    for g, group in pairs(BRVars.BuffGroups) do
+        BR.scripts[g] = Compile(group.script, g)
+    end
+    BR.defaultScript = Compile(BRVars.Options.script, "default")
+end
+
+function BR.RunScripts()
+    for g in pairs(BRVars.BuffGroups) do
+        BR.scriptRes[g] = RunScript(BR.scripts[g], BR.scriptRes[g])
+    end
+    BR.defaultScriptRes = RunScript(BR.defaultScript, BR.defaultScriptRes)
+end
+
+-- display ----------------------------------------------------------------------------------
+local frame = CreateFrame("Frame", "BuffReminderFrame", UIParent)
+frame:SetSize(34, 34)
+frame:SetFrameStrata("LOW")
+frame:SetMovable(true)
+frame:SetClampedToScreen(true)
+frame:EnableMouse(false)
+frame:RegisterForDrag("LeftButton")
+frame.cross = frame:CreateTexture(nil, "BACKGROUND")
+frame.cross:SetAllPoints()
+BR.frame = frame
+
+local function AcquireIcon(i)
+    local f = BR.icons[i]
+    if not f then
+        f = CreateFrame("Frame", nil, frame)
+        f.texture = f:CreateTexture(nil, "ARTWORK")
+        f.texture:SetAllPoints()
+        f.cooldown = CreateFrame("Cooldown", nil, f, "CooldownFrameTemplate")
+        f.cooldown:SetAllPoints()
+        f.cooldown:SetDrawEdge(false)
+        f.cooldown:SetHideCountdownNumbers(true)
+        f.text = f:CreateFontString(nil, "OVERLAY", "NumberFontNormal")
+        f.text:SetPoint("BOTTOM", 0, 2)
+        BR.icons[i] = f
+    end
+    return f
+end
+
+-- work out which icons should be visible, using predicted expiry while auras are secret
+function BR.Refresh()
+    local opts = BRVars.Options
+    local now = GetTime()
+    local list = {}
+
+    if not BR.hideAll then
+        for g, group in pairs(BRVars.BuffGroups) do
+            local st = BR.groupState[g]
+            -- no state means auras haven't been readable yet, don't guess
+            if st and not IsSuppressed(group.conditions) and not BR.scriptRes[g] then
+                if not st.present or (st.expires > 0 and st.expires <= now) then
+                    table.insert(list, { key = "1" .. g, icon = group.icon })
+                elseif st.expires > 0 and st.expires - now <= group.warntime then
+                    table.insert(list, { key = "1" .. g, icon = group.icon, expires = st.expires, duration = st.duration })
+                end
+            end
+        end
+
+        if not IsSuppressed(opts.conditions) and not BR.defaultScriptRes then
+            for slot, invSlot in pairs(ENCHANT_SLOTS) do
+                local e = BR.enchants[slot]
+                local tex = GetInventoryItemTexture("player", invSlot)
+                if opts.enchants[slot] and e and tex then
+                    if not e.present or e.expires <= now then
+                        table.insert(list, { key = "2" .. slot, icon = tex })
+                    elseif e.expires - now <= opts.warntime or (e.charges > 0 and e.charges <= opts.warncharges) then
+                        table.insert(list, { key = "2" .. slot, icon = tex, expires = e.expires })
+                    end
                 end
             end
         end
     end
-    local mounted = BuffReminder.player_status.mounted
-    if speed then
-        BuffReminder.player_status.mounted = true
+
+    -- groups come out of pairs in random order, sort so icons don't jump around
+    table.sort(list, function(a, b) return a.key < b.key end)
+
+    local pitch = opts.size + ICON_SPACING * 2
+    local offset = (#list - 1) * pitch / 2
+    local shown, newIcon = {}, false
+    for i, item in ipairs(list) do
+        local f = AcquireIcon(i)
+        f:SetSize(opts.size, opts.size)
+        f:SetAlpha(opts.alpha)
+        f:ClearAllPoints()
+        f:SetPoint("CENTER", frame, "CENTER", (i - 1) * pitch - offset, 0)
+        f.texture:SetTexture(item.icon or QUESTION_MARK)
+        if item.expires and item.duration and item.duration > 0 then
+            f.cooldown:SetCooldown(item.expires - item.duration, item.duration)
+        else
+            f.cooldown:Clear()
+        end
+        f.text:SetText(item.expires and FormatTime(item.expires - now) or "")
+        f:Show()
+        shown[item.key] = true
+        if not BR.shown[item.key] then newIcon = true end
+    end
+    for i = #list + 1, #BR.icons do
+        BR.icons[i]:Hide()
+    end
+    BR.shown = shown
+
+    if newIcon and opts.warnsound then
+        PlaySound(opts.warnsound, "Master")
+    end
+end
+
+function BR.Update()
+    BR.ScanAuras()
+    BR.Refresh()
+end
+
+function BR.SetLocked(locked)
+    frame:EnableMouse(not locked)
+    if locked then
+        frame.cross:SetTexture(nil)
     else
-        BuffReminder.player_status.mounted = false
-    end
-    if mounted ~= BuffReminder.player_status.mounted then BuffReminder.status_updated = true end
-end
-
-function BuffReminder.GetMissinGroups()
-    BuffReminder.missing_groups = {}
-    -- first add all groups then remove any not found
-    for i in BRVars.BuffGroups do
-        BuffReminder.missing_groups[i] = BRVars.BuffGroups[i].icon
-    end
-    for i in BuffReminder.watched_buffs do
-        if BuffReminder.current_buffs[i] ~= nil then
-            local group = BuffReminder.FindBuffGroupByName(i)
-            BuffReminder.missing_groups[group] = nil
-        end
+        frame.cross:SetTexture(MEDIA .. "cross")
     end
 end
 
--- get a table of all watched buffs
-function BuffReminder.GetWatchedBuffs()
-    BuffReminder.watched_buffs = {}
-    for k, v in BRVars.BuffGroups do
-        for j in v.buffs do
-            BuffReminder.watched_buffs[j] = v.buffs[j]
-        end
-    end
-end
-
--- try to get the buff name from the buff icon tooltip
-function BuffReminder.GetPlayerBuffName(n)
-    TooltipScanner:ClearLines()
-    TooltipScanner:SetPlayerBuff(n)
-    if (TooltipScannerTextLeft1:IsShown()) then
-        return TooltipScannerTextLeft1:GetText()
+function BR.ApplyLayout()
+    local opts = BRVars.Options
+    frame:SetSize(opts.size, opts.size)
+    frame:ClearAllPoints()
+    local p = opts.position
+    if p then
+        frame:SetPoint(p[1], UIParent, p[2], p[3], p[4])
     else
-        return nil
+        frame:SetPoint("CENTER")
     end
 end
 
-function BuffReminder.GetEnchants()
-    local changed = false
-    if BRVars.Options.enchants.main or BRVars.Options.enchants.off then
-        local hasMainHandEnchant, mainHandExpiration, mainHandCharges, hasOffHandEnchant, offHandExpiration, offHandCharges = GetWeaponEnchantInfo();
-        if (BuffReminder.enchants.main ~= hasMainHandEnchant) or (hasOffHandEnchant ~= BuffReminder.enchants.off) then
-            changed = true
-        end
-        BuffReminder.enchants.main = (hasMainHandEnchant == 1) and (mainHandExpiration > BRVars.Options.warntime * 1000) and ((mainHandCharges == 0) or (mainHandCharges > BRVars.Options.warncharges))
-        BuffReminder.enchants.off = (hasOffHandEnchant == 1) and (offHandExpiration > BRVars.Options.warntime * 1000) and ((offHandCharges == 0) or (offHandCharges > BRVars.Options.warncharges))
-    end
-    return changed
-end
+frame:SetScript("OnDragStart", function(self)
+    self:StartMoving()
+end)
 
-function BuffReminder.GetScriptResults()
-    local res
-    local changed = false
-    for k, v in pairs(BuffReminder.scripts) do
-        res = v.script()
-        if BuffReminder.script_res[k] ~= res then
-            BuffReminder.script_res[k] = res
-            changed = true
-        end
-    end
-    if BuffReminder.default.script ~= nil then
-        res = BuffReminder.default.script()
-        if BuffReminder.default.script_res ~= res then
-            BuffReminder.default.script_res = res
-            changed = true
-        end
-    end
-    return changed
-end
--- debug helpers ----------------------------------------------------------------------------
-function BuffReminder.list_current()
-    for k, v in BuffReminder.current_buffs do
-        DEFAULT_CHAT_FRAME:AddMessage(k .. " --> " .. v)
-    end
-end
+frame:SetScript("OnDragStop", function(self)
+    self:StopMovingOrSizing()
+    local point, _, relPoint, x, y = self:GetPoint(1)
+    BRVars.Options.position = { point, relPoint, x, y }
+end)
 
-function BuffReminder.list_missing()
-    for k, v in BuffReminder.missing_buffs do
-        DEFAULT_CHAT_FRAME:AddMessage(k .. " --> " .. v)
-    end
-end
 -- slash command functions ------------------------------------------------------------------
--- reset the icons to unknown state
-function BuffReminder.ClearIcons()
-    for k, v in pairs(BRVars.BuffGroups) do
-        v.icon = "Interface\\Icons\\INV_Misc_QuestionMark" -- set group icon to ?
-        for j in v.buffs do
-            v.buffs[j] = "" -- erase cached buff icon
-        end
-    end
-    BuffReminder.Update()
-end
-
--- check for existence of a group
-function BuffReminder.GroupExists(group)
+function BR.GroupExists(group)
     if BRVars.BuffGroups[group] == nil then
-        DEFAULT_CHAT_FRAME:AddMessage('\124cffffff00\124hGroup "' .. tostring(group) .. '" does not exist.')
-        DEFAULT_CHAT_FRAME:AddMessage('\124cffffff00\124hYour groups are:')
-        for i in BRVars.BuffGroups do
-            DEFAULT_CHAT_FRAME:AddMessage('\124cffffff00\124h  ' .. i)
-        end
+        Print('Group "' .. tostring(group) .. '" does not exist.')
+        BR.PrintAllGroups()
         return false
     end
     return true
 end
 
--- print a list of groups and buffs
-function BuffReminder.PrintBuffs()
-    for i in BRVars.BuffGroups do
-        DEFAULT_CHAT_FRAME:AddMessage('\124cffffff00\124hGroup: ' .. tostring(i))
-        for j in BRVars.BuffGroups[i].buffs do
-            DEFAULT_CHAT_FRAME:AddMessage("\124cffffff00\124h  " .. j)
+function BR.FindBuffGroup(buff)
+    local key = BuffKey(buff)
+    for g, group in pairs(BRVars.BuffGroups) do
+        for b in pairs(group.buffs) do
+            if BuffKey(b) == key then return g, b end
+        end
+    end
+    return nil
+end
+
+function BR.PrintAllGroups()
+    Echo("Your buff groups:")
+    for g in pairs(BRVars.BuffGroups) do
+        Echo("   " .. g)
+    end
+end
+
+function BR.PrintBuffs()
+    for g, group in pairs(BRVars.BuffGroups) do
+        Echo("Group: " .. g)
+        for b in pairs(group.buffs) do
+            Echo("   " .. b)
         end
     end
 end
 
-function BuffReminder.PrintAllGroups()
-    DEFAULT_CHAT_FRAME:AddMessage("\124cffcbeb1c\124h** buff groups **")
-    for i in BRVars.BuffGroups do
-        DEFAULT_CHAT_FRAME:AddMessage("\124cffcbeb1c\124h   " .. i)
-        local t = BRVars.BuffGroups[i].buffs
+local function PrintConditions(conds)
+    Echo("   always: " .. ALWAYS_TEXT[conds.always])
+    for _, k in ipairs(CONDITIONS) do
+        Echo(("   %s: %s"):format(k, STATE_TEXT[conds[k]]))
     end
-    DEFAULT_CHAT_FRAME:AddMessage("\124cffcbeb1c\124h** end of buff groups **")
 end
 
-function BuffReminder.PrintGroup(group)
-    DEFAULT_CHAT_FRAME:AddMessage('\124cffffff00\124hGroup: ' .. tostring(group))
-    for i in BRVars.BuffGroups[group].buffs do
-        DEFAULT_CHAT_FRAME:AddMessage("\124cffffff00\124h  " .. i)
+function BR.PrintGroup(g)
+    local group = BRVars.BuffGroups[g]
+    Echo("Group: " .. g)
+    for b in pairs(group.buffs) do
+        Echo("   buff: " .. b)
     end
-    DEFAULT_CHAT_FRAME:AddMessage("\124cffffff00\124h  ---")
-    for i in BRVars.BuffGroups[group].conditions do
-        DEFAULT_CHAT_FRAME:AddMessage("\124cffffff00\124h  hide condition " .. i .. ": \124cff80ff00\124h" .. tostring(BRVars.BuffGroups[group].conditions[i]))
-    end
-    DEFAULT_CHAT_FRAME:AddMessage("\124cffffff00\124h  early warning time: \124cff80ff00\124h" .. tostring(BRVars.BuffGroups[group].warntime))
+    PrintConditions(group.conditions)
+    Echo("   early warning time: " .. group.warntime)
+    if group.script ~= "" then Echo("   script: " .. group.script) end
 end
 
-function BuffReminder.AddBuffToGroup(grp, name, print)
-    if BRVars.BuffGroups[grp] == nil then
-        BRVars.BuffGroups[grp] = {["conditions"] = {}, ["warntime"] = BRVars.Options.warntime, ["icon"] = "Interface\\Icons\\INV_Misc_QuestionMark", ["script"] = "", ["buffs"] = {}}
-        for i in BRVars.Options.conditions do
-            BRVars.BuffGroups[grp].conditions[i] = BRVars.Options.conditions[i]
-        end
-    end
-    if name ~= nil then
-        BRVars.BuffGroups[grp].buffs[name] = ""
-    end
-    if print then BuffReminder.PrintGroup(grp) end
-    BuffReminder.Update()
+function BR.PrintDefaults()
+    local opts = BRVars.Options
+    Echo("Default conditions (weapon enchants and new groups):")
+    PrintConditions(opts.conditions)
+    Echo("   early warning time: " .. opts.warntime)
+    Echo("   enchant charges warning: " .. opts.warncharges)
+    Echo("   main hand enchant: " .. (opts.enchants.main and "on" or "off"))
+    Echo("   off hand enchant: " .. (opts.enchants.off and "on" or "off"))
+    if opts.script ~= "" then Echo("   script: " .. opts.script) end
 end
 
-function BuffReminder.ShowHelp()
-    DEFAULT_CHAT_FRAME:AddMessage("\124cfff4f9a7\124h ***** BuffReminder Help ***** ")
-    DEFAULT_CHAT_FRAME:AddMessage("\124cfff4f9a7\124hBuffs you want to monitor must be added to buff groups.")
-    DEFAULT_CHAT_FRAME:AddMessage("\124cfff4f9a7\124hMutually exclusive buffs should go into common groups.")
-    DEFAULT_CHAT_FRAME:AddMessage("\124cfff4f9a7\124hUntil a buff is seen by the addon it will have a '?' icon.")
-    
-    DEFAULT_CHAT_FRAME:AddMessage("\124cfff4f9a7\124hGroup commands:")
-    DEFAULT_CHAT_FRAME:AddMessage("\124cffcbeb1c\124h  /br group <groupname> add <buffname>")
-    DEFAULT_CHAT_FRAME:AddMessage("\124cffabb7ff\124h    Adds a buff to a group. If the group doesn't exist it will be created.")
-    DEFAULT_CHAT_FRAME:AddMessage("\124cffcbeb1c\124h  /br group <groupname> remove")
-    DEFAULT_CHAT_FRAME:AddMessage("\124cffabb7ff\124h    Removes the buff group.")
-    DEFAULT_CHAT_FRAME:AddMessage("\124cffcbeb1c\124h  /br group <groupname> disable")
-    DEFAULT_CHAT_FRAME:AddMessage("\124cffabb7ff\124h    Prevents the group's icon from being displayed when one of it's buffs are missing.")
-    DEFAULT_CHAT_FRAME:AddMessage("\124cffcbeb1c\124h  /br group <groupname> enable")
-    DEFAULT_CHAT_FRAME:AddMessage("\124cffabb7ff\124h    Allows the group's icon to be displayed when one of it's buffs are missing.")
-    DEFAULT_CHAT_FRAME:AddMessage("\124cffcbeb1c\124h  /br group <number>")
-    DEFAULT_CHAT_FRAME:AddMessage("\124cffabb7ff\124h    Sets the early warning timer for the group.")
-    DEFAULT_CHAT_FRAME:AddMessage("\124cffcbeb1c\124h  /br group [dead|instance|party|raid|resting|taxi]")
-    DEFAULT_CHAT_FRAME:AddMessage("\124cffabb7ff\124h    Toggles the given conditional for the group.")
-    DEFAULT_CHAT_FRAME:AddMessage("\124cffcbeb1c\124h  /br group")
-    DEFAULT_CHAT_FRAME:AddMessage("\124cffabb7ff\124h    Prints a listing of your buff groups.")
-    
-    DEFAULT_CHAT_FRAME:AddMessage("\124cfff4f9a7\124hBuff commands:")
-    DEFAULT_CHAT_FRAME:AddMessage("\124cffcbeb1c\124h  /br buff <buffname> remove")
-    DEFAULT_CHAT_FRAME:AddMessage("\124cffabb7ff\124h    removes a buff from being monitored.")
-    DEFAULT_CHAT_FRAME:AddMessage("\124cffcbeb1c\124h  /br buff <buffname>")
-    DEFAULT_CHAT_FRAME:AddMessage("\124cffabb7ff\124h    prints the group info of the group a buff belongs to.")
-    DEFAULT_CHAT_FRAME:AddMessage("\124cffcbeb1c\124h  /br buff")
-    DEFAULT_CHAT_FRAME:AddMessage("\124cffabb7ff\124h    prints a list of your watched buffs.")
-    
-    DEFAULT_CHAT_FRAME:AddMessage("\124cfff4f9a7\124hGeneral options:")
-    DEFAULT_CHAT_FRAME:AddMessage("\124cffcbeb1c\124h/br alpha <number> \124cffabb7ff\- changes the icon transparency (min 0.0, max 1.0).")
-    DEFAULT_CHAT_FRAME:AddMessage("\124cffcbeb1c\124h/br config \124cffabb7ff\- opens the configuration dialog.")
-    DEFAULT_CHAT_FRAME:AddMessage("\124cffcbeb1c\124h/br [lock|unlock] \124cffabb7ff\- locks or unlocks the icon frame for user placement.")
-    DEFAULT_CHAT_FRAME:AddMessage("\124cffcbeb1c\124h/br NUKE \124cffabb7ff\- clears all of your settings.")
-    DEFAULT_CHAT_FRAME:AddMessage("\124cffcbeb1c\124h/br reseticons \124cffabb7ff\- clears the icon cache.")
-    DEFAULT_CHAT_FRAME:AddMessage("\124cffcbeb1c\124h/br size <number> \124cffabb7ff\- changes the icon size (min 10, max 400).")
-    DEFAULT_CHAT_FRAME:AddMessage("\124cffcbeb1c\124h/br sound [sound name]\124cffabb7ff\- sets the warning sound or turns it off if no name given. ex: /br sound RaidWarning")
-    DEFAULT_CHAT_FRAME:AddMessage("\124cffcbeb1c\124h/br time <number> \124cffabb7ff\- sets the default early warning time setting for new buff groups.")
-    DEFAULT_CHAT_FRAME:AddMessage("\124cffabb7ff\124h ***** End of BuffReminder Help *****\124h\124r")
-end
--- end slash command functions --------------------------------------------------------------
-SLASH_BuffReminder1 = "/br"
-SLASH_BuffReminder2 = "/buffreminder"
-function SlashCmdList.BuffReminder(msg)
-    local handled = false
-    local args, largs, argc = getArgs(msg)
-    
-    if argc == 0 or largs[1] == "help" then
-        BuffReminder.ShowHelp()
+function BR.PrintAuras()
+    if AurasSecret() then
+        Print("Buffs can't be read right now (in combat).")
         return
     end
-    -- group command and subcommands
-    if largs[1] == "group" then
-        if argc == 1 then
-            BuffReminder.PrintAllGroups()
-        else
-            if largs[3] == "add" then
-                BuffReminder.AddBuffToGroup(args[2], args[4], true)
-            else
-                if not BuffReminder.GroupExists(args[2]) then return end
-                if argc >= 3 then
-                    if largs[3] == "disable" then
-                        BRVars.BuffGroups[args[2]].conditions.always = true
-                    elseif largs[3] == "enable" then
-                        BRVars.BuffGroups[args[2]].conditions.always = false
-                    elseif BRVars.BuffGroups[args[2]].conditions[args[3]] ~= nil then
-                        BRVars.BuffGroups[args[2]].conditions[args[3]] = not BRVars.BuffGroups[args[2]].conditions[args[3]]
-                    elseif largs[3] == "remove" then
-                        BRVars.BuffGroups[args[2]] = nil
-                    else
-                        local n = toNum(args[3])
-                        if n ~= nil then
-                            BRVars.BuffGroups[args[2]].warntime = n
-                        end
-                    end
-                end
-            end
-            BuffReminder.PrintGroup(args[2])
+    local ok, _, list = pcall(ReadPlayerBuffs)
+    if not ok then
+        Print("Buffs can't be read right now (in combat).")
+        return
+    end
+    local now = GetTime()
+    Echo("Your current buffs:")
+    for _, e in ipairs(list) do
+        local left = e.expires > 0 and FormatTime(e.expires - now) or "permanent"
+        Echo(("   %s (%s) %s"):format(tostring(e.name), tostring(e.spellId), left))
+    end
+end
+
+function BR.NewGroup(g)
+    local opts = BRVars.Options
+    BRVars.BuffGroups[g] = {
+        ["conditions"] = DeepCopy(opts.conditions),
+        ["warntime"] = opts.warntime,
+        ["icon"] = QUESTION_MARK,
+        ["script"] = "",
+        ["buffs"] = {},
+    }
+end
+
+function BR.AddBuffToGroup(g, buff)
+    if BRVars.BuffGroups[g] == nil then BR.NewGroup(g) end
+    local group = BRVars.BuffGroups[g]
+    if buff ~= nil then
+        group.buffs[buff] = true
+        if group.icon == QUESTION_MARK then
+            group.icon = SpellTexture(buff) or QUESTION_MARK
         end
-        handled = true
-    -- buff command and subcommands
-    elseif largs[1] == "buff" then
-        if argc == 1 then
-            BuffReminder.PrintBuffs()
-        elseif argc == 2 then
-            local g = BuffReminder.FindBuffGroup(args[2])
-            if g == nil then
-                DEFAULT_CHAT_FRAME:AddMessage("\124cffabb7ff\124hBuff " .. args[2] .. " does not exist in any buff groups.")
-            else
-                BuffReminder.PrintGroup(g)
-            end
-        elseif largs[3] == "remove" then
-            for i in BRVars.BuffGroups do
-                BRVars.BuffGroups[i].buffs[args[2]] = nil
-            end
-            DEFAULT_CHAT_FRAME:AddMessage("\124cffabb7ff\124hRemoved " .. args[2] .. " from all buff groups.")
+    end
+    BR.PrintGroup(g)
+end
+
+function BR.RemoveBuff(buff)
+    local key = BuffKey(buff)
+    for _, group in pairs(BRVars.BuffGroups) do
+        for b in pairs(group.buffs) do
+            if BuffKey(b) == key then group.buffs[b] = nil end
         end
-        handled = true
+    end
+    Print("Removed " .. buff .. " from all buff groups.")
+end
+
+-- reset the icons to unknown state, they're relearned from the next scan
+function BR.ClearIcons()
+    for _, group in pairs(BRVars.BuffGroups) do
+        group.icon = QUESTION_MARK
+        for b in pairs(group.buffs) do
+            group.icon = SpellTexture(b) or group.icon
+        end
+    end
+end
+
+-- cycle a tri-state condition, returns false if it isn't a condition
+local function CycleCondition(conds, name)
+    if conds[name] == nil then return false end
+    conds[name] = (conds[name] + 1) % 3
+    return true
+end
+
+-- group and default share the enable/disable/condition/number/script subcommands
+local function ConditionCommand(conds, word, msg, onNumber, onScript)
+    if word == "disable" then
+        conds.always = 1
+    elseif word == "enable" then
+        conds.always = 0
+    elseif word == "script" then
+        onScript(ScriptText(msg))
+    elseif CycleCondition(conds, word) then
+        -- cycled
+    elseif tonumber(word) then
+        onNumber(tonumber(word))
     else
-        if largs[1] == "unlock" then
-            BuffReminderFrame:EnableMouse(true)
-            brtexture:SetTexture("Interface\\AddOns\\BuffReminder\\Media\\cross")
-            handled = true
-        elseif largs[1] == "lock" then
-            BuffReminderFrame:EnableMouse(false)
-            brtexture:SetTexture(nil)
-            handled = true
-        elseif args[1] == "NUKE" then
-            BRVars.BuffGroups = {}
-            BRVars.Options = BuffReminder.DefaultOptions
-            handled = true
-        elseif largs[1] == "sound" then
-            if argc == 1 then
-                BRVars.Options.warnsound = nil
-            else
-                BRVars.Options.warnsound = args[2]
-                PlaySound(tostring(BRVars.Options.warnsound), "master")
-            end
-            handled = true
-        elseif largs[1] == "size" then
-            local n = toNum(args[2])
-            if n ~= nil and (n >= 10 and n <= 400) then
-                BRVars.Options.size = n
-                handled = true
-            end
-        elseif largs[1] == "alpha" then
-            local n = toNum(args[2])
-            if n ~= nil and (n >= 0 and n <= 1.0) then
-                BRVars.Options.alpha = n
-                handled = true
-            end
-        elseif largs[1] == "time" then
-            local n = toNum(args[2])
-            if n ~= nil then
-                BRVars.Options.warntime = n
-                handled = true
-            end
-        elseif largs[1] == "reseticons" then
-            BuffReminder.ClearIcons()
-            handled = true
-        elseif largs[1] == "config" then
-            BRConfigFrame:Show()
-            handled = true
-        end
+        return false
     end
-    
-    BuffReminder.Update()
-    
+    return true
+end
+
+function BR.ShowHelp()
+    Echo("***** BuffReminder Help *****")
+    Echo("Buffs you want to monitor must be added to buff groups. Mutually exclusive buffs should go into common groups.")
+    Echo("Buffs can be given by name or spell id, see /br auras.")
+    Echo("Group commands:")
+    Echo("  /br group <group> add <buff> - adds a buff, creating the group if needed")
+    Echo("  /br group <group> remove - removes the group")
+    Echo("  /br group <group> disable | enable - stops or allows the group's icon from showing")
+    Echo("  /br group <group> <always|dead|instance|party|raid|resting|taxi|combat|mounted> - cycles a condition")
+    Echo("  /br group <group> <number> - sets the early warning time in seconds")
+    Echo("  /br group <group> script [lua] - icon is hidden while the script returns true, no lua clears it")
+    Echo("  /br group [group] - lists your groups or shows one group")
+    Echo("Buff commands:")
+    Echo("  /br buff <buff> remove - stops monitoring a buff")
+    Echo("  /br buff [buff] - lists watched buffs or shows the group a buff belongs to")
+    Echo("  /br auras - lists your current buffs with their spell ids")
+    Echo("Weapon enchants and defaults:")
+    Echo("  /br enchant <main|off> - toggles the weapon enchant reminder")
+    Echo("  /br default [condition|disable|enable|<number>|script [lua]] - default conditions, also used by new groups")
+    Echo("  /br charges <number> - warns when an enchant has this many charges left")
+    Echo("General options:")
+    Echo("  /br alpha <number> - icon transparency (0.0 to 1.0)")
+    Echo("  /br size <number> - icon size (10 to 400)")
+    Echo("  /br lock | unlock - locks or unlocks the icon frame for placement")
+    Echo("  /br hide - temporarily hides or shows the icons")
+    Echo("  /br sound [id|name] - warning sound for new icons, ex: /br sound RAID_WARNING, none turns it off")
+    Echo("  /br reseticons - clears the icon cache")
+    Echo("  /br NUKE - clears all of your settings")
+end
+
+SLASH_BuffReminder1 = "/br"
+SLASH_BuffReminder2 = "/buffreminder"
+SlashCmdList.BuffReminder = function(msg)
+    local args, largs = GetArgs(msg)
+    if args == nil then return end
+    local cmd = largs[1]
+    local opts = BRVars.Options
+    local handled = true
+
+    if cmd == nil or cmd == "help" then
+        BR.ShowHelp()
+        return
+    elseif cmd == "group" then
+        local g = args[2]
+        if g == nil then
+            BR.PrintAllGroups()
+        elseif largs[3] == "add" then
+            BR.AddBuffToGroup(g, args[4])
+        elseif BR.GroupExists(g) then
+            local group = BRVars.BuffGroups[g]
+            if largs[3] == "remove" then
+                BRVars.BuffGroups[g] = nil
+                BR.groupState[g] = nil
+                BR.scripts[g] = nil
+                Print("Removed group " .. g .. ".")
+            elseif largs[3] == nil or ConditionCommand(group.conditions, largs[3], msg,
+                function(n) group.warntime = n end,
+                function(code)
+                    group.script = code
+                    BR.scripts[g] = Compile(code, g)
+                    BR.scriptRes[g] = false
+                end) then
+                BR.PrintGroup(g)
+            else
+                handled = false
+            end
+        end
+    elseif cmd == "default" then
+        if largs[2] == nil or ConditionCommand(opts.conditions, largs[2], msg,
+            function(n) opts.warntime = n end,
+            function(code)
+                opts.script = code
+                BR.defaultScript = Compile(code, "default")
+                BR.defaultScriptRes = false
+            end) then
+            BR.PrintDefaults()
+        else
+            handled = false
+        end
+    elseif cmd == "buff" then
+        if args[2] == nil then
+            BR.PrintBuffs()
+        elseif largs[3] == "remove" then
+            BR.RemoveBuff(args[2])
+        else
+            local g = BR.FindBuffGroup(args[2])
+            if g == nil then
+                Print("Buff " .. args[2] .. " does not exist in any buff groups.")
+            else
+                BR.PrintGroup(g)
+            end
+        end
+    elseif cmd == "auras" then
+        BR.PrintAuras()
+    elseif cmd == "enchant" then
+        if largs[2] == "main" or largs[2] == "off" then
+            opts.enchants[largs[2]] = not opts.enchants[largs[2]]
+            BR.PrintDefaults()
+        else
+            handled = false
+        end
+    elseif cmd == "unlock" then
+        BR.SetLocked(false)
+    elseif cmd == "lock" then
+        BR.SetLocked(true)
+    elseif cmd == "hide" then
+        BR.hideAll = not BR.hideAll
+        Print(BR.hideAll and "Icons will not be shown." or "Icons will be shown.")
+    elseif args[1] == "NUKE" then
+        BRVars.BuffGroups = {}
+        BRVars.Options = DeepCopy(BR.DefaultOptions)
+        BR.groupState = {}
+        BR.CompileScripts()
+        BR.ApplyLayout()
+        Print("All settings cleared.")
+    elseif cmd == "sound" then
+        if args[2] == nil or largs[2] == "none" then
+            opts.warnsound = nil
+        else
+            local id = ResolveSound(args[2])
+            if id then
+                opts.warnsound = id
+                PlaySound(id, "Master")
+            else
+                Print("Unknown sound " .. args[2] .. ".")
+            end
+        end
+    elseif cmd == "size" then
+        local n = ToNum(args[2])
+        handled = n ~= nil and n >= 10 and n <= 400
+        if handled then
+            opts.size = n
+            frame:SetSize(n, n)
+        end
+    elseif cmd == "alpha" then
+        local n = ToNum(args[2])
+        handled = n ~= nil and n >= 0 and n <= 1.0
+        if handled then opts.alpha = n end
+    elseif cmd == "time" then
+        local n = ToNum(args[2])
+        handled = n ~= nil
+        if handled then opts.warntime = n end
+    elseif cmd == "charges" then
+        local n = ToNum(args[2])
+        handled = n ~= nil
+        if handled then opts.warncharges = n end
+    elseif cmd == "reseticons" then
+        BR.ClearIcons()
+    elseif cmd == "config" then
+        Print("The config dialog hasn't been ported yet, use /br help for commands.")
+    else
+        handled = false
+    end
+
+    BR.Update()
+
     if not handled then
-        DEFAULT_CHAT_FRAME:AddMessage("\124cffcbeb1c\124hBuffReminder command error. Try /br help.")
+        Print("Command error. Try /br help.")
     end
 end
 
---------------------------------------------------------------------------------------------------
-function BuffReminder_OnLoad()
-    this:RegisterForDrag("LeftButton")
-    this:EnableMouse(false)
-    -- this:RegisterEvent("PLAYER_ALIVE")
-    this:RegisterEvent("PLAYER_DEAD")
-    this:RegisterEvent("PLAYER_UNGHOST")
-    this:RegisterEvent("PLAYER_AURAS_CHANGED")
-    this:RegisterEvent("PLAYER_ENTERING_WORLD")
-    this:RegisterEvent("UNIT_FLAGS")
-    this:RegisterEvent("PLAYER_UPDATE_RESTING")
-    this:RegisterEvent("PLAYER_ENTERING_WORLD")
-    this:RegisterEvent("PARTY_MEMBERS_CHANGED")
-    this:RegisterEvent("RAID_ROSTER_UPDATE")
-    this:RegisterEvent("UNIT_INVENTORY_CHANGED")
-    this:RegisterEvent("PLAYER_REGEN_ENABLED")
-    this:RegisterEvent("PLAYER_REGEN_DISABLED")
-    this:RegisterEvent("ADDON_LOADED")
-    -- this:RegisterAllEvents()
-    -- tooltip frame for getting spell name
-    lbrTooltipFrame = CreateFrame('GameTooltip', 'BrTooltip', UIParent, 'GameTooltipTemplate')
-    lbrTooltipFrame:SetOwner(UIParent, 'ANCHOR_NONE')
-    
-    if (DEFAULT_CHAT_FRAME) then
-        DEFAULT_CHAT_FRAME:AddMessage("BuffReminder AddOn loaded. Type '/br help' for config commands.")
-    end
-    UIErrorsFrame:AddMessage("BuffReminder AddOn loaded", 1.0, 1.0, 1.0, 1.0, UIERRORS_HOLD_TIME)
-end
---------------------------------------------------------------------------------------------------
-function BuffReminder_OnUpdate(elapsed)
-    BuffReminder.update_time = BuffReminder.update_time + elapsed
-    if BuffReminder.update_time >= BuffReminder.delay then
-        BuffReminder.update_time = 0
-        local resChanged = BuffReminder.GetScriptResults()
-        BuffReminder.GetBuffs()
-        local enchantsChanged = BuffReminder.GetEnchants()
-        if resChanged or enchantsChanged or BuffReminder.status_updated then
-            BuffReminder.Update()
-        end
-    end
-end
-
-function BuffReminder.Update()
-    if BuffReminder.hide_all then return end
-    BuffReminder.GetWatchedBuffs()
-    BuffReminder.GetMissinGroups()
-    BuffReminder.MakeIcons()
-end
-
-function BuffReminder_OnEvent(event, arg1)
-    if event == "UNIT_FLAGS" and arg1 == "player" then
-        if UnitOnTaxi("player") == 1 then
-            BuffReminder.player_status.taxi = true
-        else
-            BuffReminder.player_status.taxi = false
-        end
-    -- elseif event == "PLAYER_AURAS_CHANGED" then
-    --     BuffReminder.Update()
-    elseif event == "PARTY_MEMBERS_CHANGED" then
-        BuffReminder.player_status.party = (GetNumPartyMembers() > 0)
-    elseif event == "RAID_ROSTER_UPDATE" then
-        BuffReminder.player_status.raid = (GetNumRaidMembers() > 0)
-    elseif event == "PLAYER_DEAD" then
-        BuffReminder.player_status.dead = true
-    elseif event == "PLAYER_UNGHOST" then
-        BuffReminder.player_status.dead = false
-    elseif event == "PLAYER_UPDATE_RESTING" then
-        BuffReminder.player_status.resting = (IsResting() == 1)
-    elseif event == "PLAYER_REGEN_ENABLED" then
-        BuffReminder.player_status.combat = false
-    elseif event == "PLAYER_REGEN_DISABLED" then
-        BuffReminder.player_status.combat = true
-    elseif event == "PLAYER_ENTERING_WORLD" then
-        BuffReminder.player_status.resting = (IsResting() == 1)
-        BuffReminder.player_status.dead = (UnitIsDeadOrGhost("player") == 1)
-        BuffReminder.player_status.taxi = (UnitOnTaxi("player") == 1)
-        BuffReminder.player_status.party = (GetNumPartyMembers() > 0)
-        BuffReminder.player_status.raid = (GetNumRaidMembers() > 0)
-        BuffReminder.player_status.combat = false
-        local isInstance, instanceType = IsInInstance()
-
-        BuffReminder.player_status.instance = (instanceType == "party")
-        BuffReminder.player_status.raid_inst = (instanceType == "raid")
-        BuffReminder.player_status.pvp_inst = (instanceType == "pvp")
-        DEFAULT_CHAT_FRAME:AddMessage(tostring(instanceType))
-    elseif event == "ADDON_LOADED" then
-        if arg1 == "BuffReminder" then
-            if BRVars.Options.version == nil or BRVars.Options.version ~= BuffReminder.DefaultOptions.version then
-                BRVars.Options = BuffReminder.DefaultOptions
-            else
-                BuffReminder.SanityCheck()
-            end
-            BuffReminderFrame:SetWidth(BRVars.Options.size)
-            BuffReminderFrame:SetHeight(BRVars.Options.size)
-            for k, v in pairs(BRVars.BuffGroups) do
-                if v.script ~= "" then
-                    BuffReminder.scripts[k] = {}
-                    BuffReminder.scripts[k].script = loadstring(v.script)
-                end
-                BuffReminder.script_res[k] = false
-            end
-            if BRVars.Options.script ~= "" then
-                BuffReminder.default.script = loadstring(BRVars.Options.script)
-            end
-        end
-    end
-    BuffReminder.Update() -- force icon update
-end
---------------------------------------------------------------------------------------------------
-local function printOptions(opts)
-    for k, v in pairs(opts) do
-        if type(v) ~= "table" then
-            DEFAULT_CHAT_FRAME:AddMessage(k .. " = " .. v)
-        else
-            DEFAULT_CHAT_FRAME:AddMessage(k .. " = ")
+-- saved variables --------------------------------------------------------------------------
+-- fill in missing or mistyped options and upgrade 1.x settings
+function BR.SanityCheck()
+    local opts = BRVars.Options
+    for k, v in pairs(BR.DefaultOptions) do
+        if type(v) == "table" then
+            if type(opts[k]) ~= "table" then opts[k] = {} end
             for k2, v2 in pairs(v) do
-                DEFAULT_CHAT_FRAME:AddMessage("   " .. k2 .. " = " .. tostring(v2))
+                if type(opts[k][k2]) ~= type(v2) then opts[k][k2] = v2 end
+            end
+        elseif type(opts[k]) ~= type(v) then
+            opts[k] = v
+        end
+    end
+    for k, v in pairs(opts) do
+        local d = BR.DefaultOptions[k]
+        if d == nil then
+            if not EXTRA_OPTIONS[k] then opts[k] = nil end
+        elseif type(d) == "table" then
+            for k2 in pairs(v) do
+                if d[k2] == nil then v[k2] = nil end
             end
         end
     end
-end
+    -- 1.x stored sound names, the modern PlaySound takes sound kit ids
+    opts.warnsound = ResolveSound(opts.warnsound)
+    if type(opts.position) ~= "table" then opts.position = nil end
 
--- copy missing or mistyped options from defaults
-function BuffReminder.CopyOptions(cpy)
-    for k1, v1 in pairs(BuffReminder.DefaultOptions) do
-        if type(v1) ~= "table" then
-            if cpy[k1] == nil or type(cpy[k1]) ~= type(v1) then
-                cpy[k1] = v1
-            end
+    for g, group in pairs(BRVars.BuffGroups) do
+        if type(group) ~= "table" then
+            BRVars.BuffGroups[g] = nil
         else
-            if type(cpy[k1]) ~= "table" then
-                DEFAULT_CHAT_FRAME:AddMessage(k1 .. " type is " .. type(cpy[k1]))
-                cpy[k1] = {}
+            if type(group.buffs) ~= "table" then group.buffs = {} end
+            -- 1.x cached icon paths here
+            for b in pairs(group.buffs) do group.buffs[b] = true end
+            if type(group.conditions) ~= "table" then group.conditions = {} end
+            for k, v in pairs(BR.DefaultOptions.conditions) do
+                local c = group.conditions[k]
+                -- 1.x slash commands stored booleans
+                if c == true then c = 1 elseif c == false then c = 0 end
+                if type(c) ~= "number" then c = v end
+                group.conditions[k] = c
             end
-            for k2, v2 in pairs(v1) do
-                if cpy[k1][k2] == nil or type(cpy[k1][k2]) ~= type(v2) then
-                    cpy[k1][k2] = v2
-                end
-            end
+            if type(group.warntime) ~= "number" then group.warntime = opts.warntime end
+            if type(group.script) ~= "string" then group.script = "" end
+            if group.icon == nil then group.icon = QUESTION_MARK end
         end
     end
+    opts.version = BR.DefaultOptions.version
 end
 
--- remove unused options
-function BuffReminder.CleanOptions(opts)
-    for k1, v1 in pairs(opts) do
-        if BuffReminder.DefaultOptions[k1] == nil then
-            opts[k1] = nil
-        elseif type(v1) == "table" then
-            for k2, v2 in pairs(v1) do
-                if BuffReminder.DefaultOptions[k1][k2] == nil then opts[k1][k2] = nil end
-            end
-        end
-    end
+-- events -----------------------------------------------------------------------------------
+local function OnUpdate(self, elapsed)
+    BR.elapsed = BR.elapsed + elapsed
+    if BR.elapsed < TICK then return end
+    BR.elapsed = 0
+    BR.UpdateStatus()
+    if BR.needScan then BR.ScanAuras() end
+    BR.ScanEnchants()
+    BR.RunScripts()
+    BR.Refresh()
 end
 
-function BuffReminder.SanityCheck()
-    BuffReminder.CopyOptions(BRVars.Options)
-    BuffReminder.CleanOptions(BRVars.Options)
-    for i in BRVars.BuffGroups do
-        if BRVars.BuffGroups[i].conditions == nil then BRVars.BuffGroups[i].conditions = {} end
-        for j in BuffReminder.DefaultOptions.conditions do
-            if BRVars.BuffGroups[i].conditions[j] == nil then BRVars.BuffGroups[i].conditions[j] = BuffReminder.DefaultOptions.conditions[j] end
-        end
-        if BRVars.BuffGroups[i].script == nil then BRVars.BuffGroups[i].script = "" end
-        -- fixup old config for new buff/icon key/value
-        for j in BRVars.BuffGroups[i].buffs do
-            if type(BRVars.BuffGroups[i].buffs[j]) == "table" then
-                BRVars.BuffGroups[i].buffs[j] = ""
-            end
-        end
-    end
-    BRVars.Options.version = BuffReminder.DefaultOptions.version
+function BR.Init()
+    if type(BRVars) ~= "table" then BRVars = {} end
+    if type(BRVars.BuffGroups) ~= "table" then BRVars.BuffGroups = {} end
+    if type(BRVars.Options) ~= "table" then BRVars.Options = DeepCopy(BR.DefaultOptions) end
+    BR.SanityCheck()
+    BR.CompileScripts()
+    BR.ApplyLayout()
+    BR.SetLocked(true)
+
+    frame:RegisterUnitEvent("UNIT_AURA", "player")
+    frame:RegisterUnitEvent("UNIT_INVENTORY_CHANGED", "player")
+    frame:RegisterEvent("PLAYER_ENTERING_WORLD")
+    frame:RegisterEvent("PLAYER_REGEN_DISABLED")
+    frame:RegisterEvent("PLAYER_REGEN_ENABLED")
+    frame:SetScript("OnUpdate", OnUpdate)
+
+    Print("loaded. Type /br help for commands.")
 end
+
+frame:SetScript("OnEvent", function(self, event, arg1)
+    if event == "ADDON_LOADED" then
+        if arg1 == ADDON_NAME then
+            self:UnregisterEvent("ADDON_LOADED")
+            BR.Init()
+        end
+        return
+    end
+
+    if event == "UNIT_AURA" then
+        -- in combat this fails and waits for PLAYER_REGEN_ENABLED
+        BR.needScan = true
+        BR.ScanAuras()
+    elseif event == "UNIT_INVENTORY_CHANGED" then
+        BR.ScanEnchants()
+    elseif event == "PLAYER_REGEN_DISABLED" then
+        BR.status.combat = true
+    elseif event == "PLAYER_REGEN_ENABLED" then
+        BR.status.combat = false
+        BR.needScan = true
+        BR.ScanAuras()
+    elseif event == "PLAYER_ENTERING_WORLD" then
+        BR.status.combat = InCombatLockdown() and true or false
+        BR.needScan = true
+        BR.ScanAuras()
+        BR.ScanEnchants()
+    end
+    BR.UpdateStatus()
+    BR.Refresh()
+end)
+frame:RegisterEvent("ADDON_LOADED")
