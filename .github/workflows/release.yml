@@ -21,5 +21,5 @@ jobs:
 
       - uses: BigWigsMods/packager@v2
         with:
-          # zip and CurseForge name, ex: OpcowsBuffReminder-v2.1 (the default adds -forever)
-          args: -n "{package-name}-{project-version}:{package-name}-{project-version}"
+          # zip and CurseForge name, ex: OpcowsBuffReminder-v2.1-forever
+          args: -n "{package-name}-{project-version}{classic}:{package-name}-{project-version}{classic}"
