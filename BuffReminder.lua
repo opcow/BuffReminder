@@ -2,27 +2,37 @@
 -- Author      : mcrane
 --
 -- WoW: Forever port. Buffs are read out of combat, when aura data is readable. In combat the
--- client turns aura data into secret values, so the addon keeps the last snapshot and predicts
--- expiry from the expiration times it recorded before the pull, then re-reads after combat.
+-- client turns aura data into secret values and the buff list can't be walked. Each group picks
+-- how it's followed in combat:
+-- * Cooldown Manager: each watched spell is asked about directly, which the game still answers
+--   for spells it flags as never secret, then the Cooldown Manager's buff frames are read when
+--   they track the buff. Otherwise the last snapshot is kept and expiry is predicted from the
+--   expiration times recorded before the pull.
+-- * Blizzard Auras: Blizzard's own aura button shows the buff over the group's icon for the
+--   whole fight, with its exact time and stacks. Addon code can't read what it shows.
+-- A full re-read happens after combat.
 
 local ADDON_NAME = ...
 local MEDIA = "Interface\\AddOns\\" .. ADDON_NAME .. "\\media\\"
 local QUESTION_MARK = "Interface\\Icons\\INV_Misc_QuestionMark"
 local TICK = 1          -- seconds between status/timer checks
 local ICON_SPACING = 2
+local FONT_ICON_SIZE = 30   -- the icon size the game's number font looks right on
 
 -- clients without secret values never have secrets
 local issecretvalue = issecretvalue or function() return false end
 
 BuffReminder = {
     icons = {},             -- pooled icon frames
-    groupState = {},        -- [group] = { present, expires (0 = permanent), duration } from the last readable scan
+    groupState = {},        -- [group] = { present, expires (0 = permanent), duration, applications }
+    castAt = {},            -- [group] = when its buff was last cast, for predicting cooldowns
+    learnedIds = {},        -- [buff key] = spell id last seen on a matching aura, for combat lookups
     enchants = {},          -- [slot] = { present, expires, charges }
     scripts = {},           -- [group] = compiled condition script
     scriptRes = {},         -- [group] = last script result, true hides the icon
     scriptErrReported = {}, -- [function] = true once its runtime error has been printed
-    defaultScript = nil,
-    defaultScriptRes = false,
+    enchantScripts = {},    -- [slot] = compiled condition script of the enchant group
+    enchantScriptRes = {},  -- [slot] = last script result, true hides the icon
     shown = {},             -- icon keys shown by the last refresh, for the warning sound
     hideAll = false,
     needScan = true,
@@ -44,12 +54,22 @@ BR.DefaultOptions = {
     ["version"] = "2.0",
     ["size"] = 30,
     ["warntime"] = 60,
-    ["warncharges"] = 5,
-    ["alpha"] = 1.0,
+    ["alpha"] = 1.0,        -- opacity of an icon whose buff is missing
+    ["warnalpha"] = 1.0,    -- and of one warning that the buff is running out or low on stacks
+    ["glow"] = "none",      -- glow around icons whose buff is missing, see GLOWS
+    ["overlay"] = "none",   -- colour washed over icons whose buff is missing, see OVERLAYS
     ["script"] = "",
-    ["enchants"] = {
-        ["main"] = false,
-        ["off"] = false,
+    ["minimap"] = {
+        ["hide"] = false,
+        ["angle"] = 225,
+    },
+    -- time text, cooldown swipe and stack count on the icons, priority picks which text shows when
+    -- both apply: "time", "stacks" or "both"
+    ["icontext"] = {
+        ["time"] = true,
+        ["swipe"] = true,
+        ["stacks"] = true,
+        ["priority"] = "both",
     },
     -- 0 = ignored, 1 = hide the icon while true, 2 = hide the icon while false
     -- always: 0 = use the other conditions, 1 = never show, 2 = always show
@@ -66,18 +86,42 @@ BR.DefaultOptions = {
     },
 }
 -- options that are valid but have no default value
-local EXTRA_OPTIONS = { ["warnsound"] = true, ["position"] = true }
+local EXTRA_OPTIONS = { ["warnsound"] = true, ["position"] = true, ["bars"] = true }
 
 local CONDITIONS = { "dead", "instance", "party", "raid", "resting", "taxi", "combat", "mounted" }
-local STATE_TEXT = { [0] = "ignored", [1] = "hide if true", [2] = "hide if false" }
-local ALWAYS_TEXT = { [0] = "normal", [1] = "disabled", [2] = "always shown" }
 local ENCHANT_SLOTS = { main = 16, off = 17 }
+local ENCHANT_NAMES = { main = "Main hand enchant", off = "Off hand enchant" }
+local TEXT_PRIORITIES = { time = true, stacks = true, both = true }
+local COMBAT_MODES = { cdm = "Cooldown Manager", blizzard = "Blizzard Auras" }
+-- how a group shows its time left, "default" follows the Options tab
+local TIMERS = { default = "Default", text = "Text", swipe = "Swipe", both = "Text and swipe", none = "None" }
+local TIMER_ORDER = { "default", "text", "swipe", "both", "none" }
+-- how a group marks a missing buff, "default" follows the Options tab
+local GLOWS = { default = "Default", none = "None", pulse = "Pulse", flash = "Flash", steady = "Steady",
+    alert = "Spell alert" }
+local GLOW_ORDER = { "default", "none", "pulse", "flash", "steady", "alert" }
+local OVERLAYS = { default = "Default", none = "None", red = "Red", orange = "Orange", yellow = "Yellow",
+    green = "Green", blue = "Blue", purple = "Purple", black = "Dark" }
+local OVERLAY_ORDER = { "default", "none", "red", "orange", "yellow", "green", "blue", "purple", "black" }
+local OVERLAY_COLORS = {
+    red = { 1, 0, 0 }, orange = { 1, 0.5, 0 }, yellow = { 1, 1, 0 }, green = { 0, 1, 0 },
+    blue = { 0.2, 0.4, 1 }, purple = { 0.7, 0.2, 1 }, black = { 0, 0, 0 },
+}
+local OVERLAY_ALPHA = 0.45
 
--- util functions ---------------------------------------------------------------------------
-local function Echo(msg)
-    DEFAULT_CHAT_FRAME:AddMessage("|cffcbeb1c" .. msg .. "|r")
+-- time text and swipe for a group, or the global setting for default ones
+local function TimerStyle(group)
+    local m = group and group.timer
+    if m == "text" then return true, false
+    elseif m == "swipe" then return false, true
+    elseif m == "both" then return true, true
+    elseif m == "none" then return false, false
+    end
+    local t = BRVars.Options.icontext
+    return t.time, t.swipe
 end
 
+-- util functions ---------------------------------------------------------------------------
 local function Print(msg)
     DEFAULT_CHAT_FRAME:AddMessage("|cfff4f9a7BuffReminder:|r " .. msg)
 end
@@ -88,47 +132,6 @@ local function DeepCopy(t)
         c[k] = type(v) == "table" and DeepCopy(v) or v
     end
     return c
-end
-
--- split a command line into words, "quoted text" counts as one word
-local function GetArgs(msg)
-    local args = {}
-    local pos = 1
-    while true do
-        local s = msg:find("%S", pos)
-        if not s then break end
-        local e
-        if msg:sub(s, s) == '"' then
-            e = msg:find('"', s + 1, true)
-            if not e then
-                Print("Unfinished quote in command.")
-                return nil
-            end
-            table.insert(args, msg:sub(s + 1, e - 1))
-        else
-            e = (msg:find("%s", s) or #msg + 1) - 1
-            table.insert(args, msg:sub(s, e))
-        end
-        pos = e + 1
-    end
-    local largs = {}
-    for i, a in ipairs(args) do largs[i] = a:lower() end
-    return args, largs
-end
-
--- raw text following the word "script", so Lua code keeps its quotes and spacing
-local function ScriptText(msg)
-    local _, e = msg:lower():find("%sscript%f[%s%z]")
-    if not e then
-        _, e = msg:lower():find("^%s*script%f[%s%z]")
-    end
-    return e and msg:sub(e + 1):match("^%s*(.-)%s*$") or ""
-end
-
-local function ToNum(n)
-    local v = tonumber(n)
-    if v == nil then Print("Invalid number given.") end
-    return v
 end
 
 local function FormatTime(s)
@@ -208,6 +211,7 @@ local function ReadPlayerBuffs()
             icon = aura.icon,
             duration = aura.duration or 0,
             expires = aura.expirationTime or 0,
+            applications = not issecretvalue(aura.applications) and aura.applications or 0,
         }
         table.insert(list, entry)
         keep(aura.name and aura.name:lower(), entry)
@@ -216,21 +220,49 @@ local function ReadPlayerBuffs()
     return found, list
 end
 
+-- buffs had before, by lower case name, so they can be picked later. The oldest are dropped.
+local SEEN_MAX = 200
+local function RememberSeen(list)
+    local seen, t, added = BRVars.Seen, time(), false
+    for _, e in ipairs(list) do
+        if type(e.name) == "string" then
+            local key = e.name:lower()
+            if not seen[key] then added = true end
+            seen[key] = { name = e.name, id = e.spellId, icon = e.icon, t = t }
+        end
+    end
+    if not added then return end
+    local keys = {}
+    for k in pairs(seen) do table.insert(keys, k) end
+    if #keys <= SEEN_MAX then return end
+    table.sort(keys, function(a, b) return seen[a].t > seen[b].t end)
+    for i = SEEN_MAX + 1, #keys do seen[keys[i]] = nil end
+end
+
 -- snapshot the state of every group, returns false if auras couldn't be read
 function BR.ScanAuras()
-    if AurasSecret() then return false end
-    local ok, found = pcall(ReadPlayerBuffs)
+    if AurasSecret() then
+        BR.LiveScan()
+        return false
+    end
+    local ok, found, list = pcall(ReadPlayerBuffs)
     if not ok then return false end
+    RememberSeen(list)
     BR.groupState = {}
     for g, group in pairs(BRVars.BuffGroups) do
         local best
         for buff in pairs(group.buffs) do
-            local e = found[BuffKey(buff)]
-            if e and (best == nil or Outlasts(e, best)) then best = e end
+            local key = BuffKey(buff)
+            local e = found[key]
+            if e then
+                BR.learnedIds[key] = e.spellId
+                if best == nil or Outlasts(e, best) then best = e end
+            end
         end
         if best then
             group.icon = best.icon or group.icon
-            BR.groupState[g] = { present = true, expires = best.expires, duration = best.duration }
+            BR.groupState[g] = { present = true, expires = best.expires, duration = best.duration,
+                applications = best.applications }
         else
             BR.groupState[g] = { present = false }
         end
@@ -239,7 +271,297 @@ function BR.ScanAuras()
     return true
 end
 
+-- in-combat reads --------------------------------------------------------------------------
+-- The buff list can't be walked in combat, but a single spell can still be looked up. The
+-- answer is trusted for spells the game flags as never secret. Everything else falls back to
+-- the Cooldown Manager's buff frames, then to the prediction from the last snapshot.
+local function Num(v)
+    if not issecretvalue(v) and type(v) == "number" then return v end
+end
+
+local function NeverSecret(id)
+    if not (C_Secrets and C_Secrets.GetSpellAuraSecrecy and Enum and Enum.SecrecyLevel) then return false end
+    local ok, level = pcall(C_Secrets.GetSpellAuraSecrecy, id)
+    return ok and not issecretvalue(level) and level == Enum.SecrecyLevel.NeverSecret
+end
+
+-- spell ids of every rank in the player's spellbook, by lower case name. Cleared when the
+-- spellbook changes.
+local function BookIds(name)
+    if not BR.book then
+        BR.book = {}
+        if C_SpellBook and C_SpellBook.GetNumSpellBookSkillLines then
+            pcall(function()
+                local bank = Enum and Enum.SpellBookSpellBank and Enum.SpellBookSpellBank.Player or 0
+                for line = 1, C_SpellBook.GetNumSpellBookSkillLines() do
+                    local info = C_SpellBook.GetSpellBookSkillLineInfo(line)
+                    if info then
+                        for i = info.itemIndexOffset + 1, info.itemIndexOffset + info.numSpellBookItems do
+                            local item = C_SpellBook.GetSpellBookItemInfo(i, bank)
+                            local id, n = item and Num(item.spellID), item and item.name
+                            if id and type(n) == "string" and not issecretvalue(n) then
+                                n = n:lower()
+                                BR.book[n] = BR.book[n] or {}
+                                table.insert(BR.book[n], id)
+                            end
+                        end
+                    end
+                end
+            end)
+        end
+    end
+    return BR.book[name:lower()] or {}
+end
+
+-- spell ids to look a buff up by: the id itself, or for a name the id last seen on the aura,
+-- the id of the player's own spell with that name and every rank of it in the spellbook
+local function SpellIds(buff)
+    local id = tonumber(buff)
+    if id then return { id } end
+    local ids, seen = {}, {}
+    local function add(v)
+        if v and not seen[v] then
+            seen[v] = true
+            table.insert(ids, v)
+        end
+    end
+    add(BR.learnedIds[BuffKey(buff)])
+    if C_Spell and C_Spell.GetSpellInfo then
+        local ok, info = pcall(C_Spell.GetSpellInfo, buff)
+        add(ok and type(info) == "table" and Num(info.spellID) or nil)
+    end
+    for _, v in ipairs(BookIds(buff)) do add(v) end
+    return ids
+end
+
+-- cooldowns --------------------------------------------------------------------------------
+-- A buff that's your own spell can't be put back while the spell is cooling down, ex:
+-- Berserking, so its group isn't shown until it's ready.
+local GCD = 1.5
+
+-- your own spell's id for a buff, the highest rank, or nil if it isn't a spell you have
+local function OwnSpellId(buff)
+    local name = buff
+    if tonumber(buff) then
+        if not (C_Spell and C_Spell.GetSpellName) then return nil end
+        local ok, n = pcall(C_Spell.GetSpellName, tonumber(buff))
+        if not ok or type(n) ~= "string" or issecretvalue(n) then return nil end
+        name = n
+    end
+    local best
+    for _, id in ipairs(BookIds(name)) do
+        if not best or id > best then best = id end
+    end
+    return best
+end
+
+-- when the spell's cooldown ends, 0 when it's ready, nil when it can't be read
+local function CooldownEnd(id)
+    local start, dur
+    if C_Spell and C_Spell.GetSpellCooldown then
+        local ok, cd = pcall(C_Spell.GetSpellCooldown, id)
+        if not ok or type(cd) ~= "table" or issecretvalue(cd) then return nil end
+        start, dur = Num(cd.startTime), Num(cd.duration)
+    elseif GetSpellCooldown then
+        local ok, s, d = pcall(GetSpellCooldown, id)
+        if not ok then return nil end
+        start, dur = Num(s), Num(d)
+    end
+    if not start or not dur then return nil end
+    -- the global cooldown doesn't count
+    if dur <= GCD then return 0 end
+    return start + dur
+end
+
+-- true when every buff in the group is your spell and none of them can be cast yet. A buff
+-- that isn't your spell, like food, can always be had. When the cooldown can't be read, it's
+-- predicted from when the buff was last cast and the spell's base cooldown.
+local function GroupCooling(group, castAt, now)
+    local any = false
+    for buff in pairs(group.buffs) do
+        local id = OwnSpellId(buff)
+        if not id then return false end
+        local ends = CooldownEnd(id)
+        if ends == nil and castAt and GetSpellBaseCooldown then
+            local ok, base = pcall(GetSpellBaseCooldown, id)
+            base = ok and Num(base)
+            if base and base / 1000 > GCD then ends = castAt + base / 1000 end
+        end
+        if not ends or ends <= now then return false end
+        any = true
+    end
+    return any
+end
+
+-- group state from aura data, filling unreadable fields from the previous state
+local function LiveEntry(aura, prev)
+    if not aura or issecretvalue(aura) then return nil end
+    local was = prev and prev.present
+    return {
+        present = true,
+        expires = Num(aura.expirationTime) or (was and prev.expires) or 0,
+        duration = Num(aura.duration) or (was and prev.duration) or 0,
+        applications = Num(aura.applications) or (was and prev.applications) or nil,
+    }
+end
+
+-- returns a present entry, false when the buff is surely missing, or nil if unknown
+local function LookupBuff(buff, prev)
+    local ids = SpellIds(buff)
+    local sure = #ids > 0
+    for _, id in ipairs(ids) do
+        local ok, aura = pcall(C_UnitAuras.GetUnitAuraBySpellID, "player", id)
+        if not ok then
+            sure = false
+        elseif aura then
+            local e = LiveEntry(aura, prev)
+            if e then return e end
+            sure = false
+        elseif not NeverSecret(id) then
+            -- a secret aura answers nil just like a missing one
+            sure = false
+        end
+    end
+    -- by name catches other ranks of the spell
+    if not tonumber(buff) and C_UnitAuras.GetAuraDataBySpellName then
+        local ok, aura = pcall(C_UnitAuras.GetAuraDataBySpellName, "player", buff, "HELPFUL")
+        local e = ok and LiveEntry(aura, prev)
+        if e then return e end
+    end
+    if sure then return false end
+    return nil
+end
+
+-- "missing" when this client or class has no Cooldown Manager, "off" when it's turned off
+local function CDMState()
+    if not (C_CooldownViewer and C_CooldownViewer.GetCooldownViewerCooldownInfo) then return "missing" end
+    if C_CooldownViewer.IsCooldownViewerAvailable then
+        local ok, available = pcall(C_CooldownViewer.IsCooldownViewerAvailable)
+        if ok and available == false then return "missing" end
+    end
+    if C_CVar and C_CVar.GetCVarBool then
+        local ok, on = pcall(C_CVar.GetCVarBool, "cooldownViewerEnabled")
+        if ok and on == false then return "off" end
+    end
+    return "on"
+end
+
+-- spell id -> buff frame of the Cooldown Manager, empty when it's turned off
+local function CDMFrames()
+    local map = {}
+    if CDMState() ~= "on" then return map end
+    pcall(function()
+        for _, name in ipairs({ "BuffIconCooldownViewer", "BuffBarCooldownViewer" }) do
+            local viewer = _G[name]
+            local pool = viewer and viewer.itemFramePool
+            if pool and pool.EnumerateActive then
+                for f in pool:EnumerateActive() do
+                    local function add(id)
+                        id = Num(id)
+                        if id and id > 0 then map[id] = f end
+                    end
+                    local cid = Num(f.cooldownID)
+                    local info = cid and C_CooldownViewer.GetCooldownViewerCooldownInfo(cid)
+                    if type(info) == "table" then
+                        add(info.spellID); add(info.overrideSpellID); add(info.linkedSpellID)
+                        if type(info.linkedSpellIDs) == "table" then
+                            for _, id in ipairs(info.linkedSpellIDs) do add(id) end
+                        end
+                    end
+                    add(f.auraSpellID)
+                end
+            end
+        end
+    end)
+    return map
+end
+
+-- same answers as LookupBuff, from a Cooldown Manager buff frame
+local function CDMLookup(frames, buff, prev)
+    for _, id in ipairs(SpellIds(buff)) do
+        local f = frames[id]
+        if f then
+            local cached = LiveEntry(f.auraDataCached, prev)
+            local inst, active = f.auraInstanceID, f.isActive
+            if not issecretvalue(inst) and inst == nil and not cached then return false end
+            if cached then return cached end
+            if not issecretvalue(active) and type(active) == "boolean" then
+                if not active then return false end
+                local e = LiveEntry({}, prev)
+                -- the manager's own timer for the aura, when its remaining time is readable
+                if (issecretvalue(inst) or type(inst) == "number") and C_UnitAuras.GetAuraDuration then
+                    local ok, rem = pcall(function()
+                        return C_UnitAuras.GetAuraDuration("player", inst):GetRemainingDuration()
+                    end)
+                    rem = ok and Num(rem)
+                    if rem then e.expires = GetTime() + rem end
+                end
+                return e
+            end
+        end
+    end
+    return nil
+end
+
+-- update the groups whose state can be read in combat, the rest keep their prediction
+function BR.LiveScan()
+    if not C_UnitAuras.GetUnitAuraBySpellID then return end
+    local frames
+    for g, group in pairs(BRVars.BuffGroups) do
+        local prev = BR.groupState[g]
+        local best, sure = nil, next(group.buffs) ~= nil
+        for buff in pairs(group.buffs) do
+            local e = LookupBuff(buff, prev)
+            if e == nil then
+                frames = frames or CDMFrames()
+                e = CDMLookup(frames, buff, prev)
+            end
+            if e then
+                if best == nil or Outlasts(e, best) then best = e end
+            elseif e == nil then
+                sure = false
+            end
+        end
+        if best then
+            BR.groupState[g] = best
+        elseif sure then
+            BR.groupState[g] = { present = false }
+        end
+    end
+end
+
+-- a hand's temporary enchant or imbue from C_Item.GetWeaponEnchantInfo, ignoring permanent enchants.
+-- false when there's none, nil when it can't be read
+local function ReadWeaponEnchant(hand)
+    local ok, list = pcall(C_Item.GetWeaponEnchantInfo, hand)
+    if not ok or issecretvalue(list) or type(list) ~= "table" then return nil end
+    local types = Enum.ItemEnchantType
+    local found = false
+    for _, w in ipairs(list) do
+        if issecretvalue(w) or issecretvalue(w.hasEnchant) or issecretvalue(w.enchantType) then return nil end
+        if w.hasEnchant and (w.enchantType == types.Temporary or w.enchantType == types.Imbue) then
+            if issecretvalue(w.timeLeft) or issecretvalue(w.charges) then return nil end
+            found = w
+        end
+    end
+    return found
+end
+
 function BR.ScanEnchants()
+    -- the old GetWeaponEnchantInfo misses imbues like Flametongue Weapon on Forever
+    if C_Item and C_Item.GetWeaponEnchantInfo and Enum and Enum.ItemEnchantType and Enum.WeaponSlot then
+        local main = ReadWeaponEnchant(Enum.WeaponSlot.MainHand)
+        local off = ReadWeaponEnchant(Enum.WeaponSlot.OffHand)
+        if main == nil or off == nil then return end
+        local now = GetTime()
+        local function entry(w)
+            if not w then return { present = false } end
+            return { present = true, expires = now + (w.timeLeft or 0) / 1000, charges = w.charges or 0 }
+        end
+        BR.enchants.main = entry(main)
+        BR.enchants.off = entry(off)
+        return
+    end
     local r = { pcall(GetWeaponEnchantInfo) }
     if not r[1] then return end
     for i = 2, 9 do
@@ -302,26 +624,28 @@ function BR.CompileScripts()
     for g, group in pairs(BRVars.BuffGroups) do
         BR.scripts[g] = Compile(group.script, g)
     end
-    BR.defaultScript = Compile(BRVars.Options.script, "default")
+    BR.enchantScripts = {}
+    for slot, e in pairs(BRVars.Enchants) do
+        BR.enchantScripts[slot] = Compile(e.script, ENCHANT_NAMES[slot])
+    end
 end
 
 function BR.RunScripts()
     for g in pairs(BRVars.BuffGroups) do
         BR.scriptRes[g] = RunScript(BR.scripts[g], BR.scriptRes[g])
     end
-    BR.defaultScriptRes = RunScript(BR.defaultScript, BR.defaultScriptRes)
+    for slot in pairs(BRVars.Enchants) do
+        BR.enchantScriptRes[slot] = RunScript(BR.enchantScripts[slot], BR.enchantScriptRes[slot])
+    end
 end
 
 -- display ----------------------------------------------------------------------------------
+-- the parent of everything, the icons are placed by their rows' anchors
 local frame = CreateFrame("Frame", "BuffReminderFrame", UIParent)
-frame:SetSize(34, 34)
+frame:SetSize(1, 1)
+frame:SetPoint("CENTER")
 frame:SetFrameStrata("LOW")
-frame:SetMovable(true)
-frame:SetClampedToScreen(true)
 frame:EnableMouse(false)
-frame:RegisterForDrag("LeftButton")
-frame.cross = frame:CreateTexture(nil, "BACKGROUND")
-frame.cross:SetAllPoints()
 BR.frame = frame
 
 local function AcquireIcon(i)
@@ -334,11 +658,865 @@ local function AcquireIcon(i)
         f.cooldown:SetAllPoints()
         f.cooldown:SetDrawEdge(false)
         f.cooldown:SetHideCountdownNumbers(true)
+        -- the action button border, lit up and pulsing, over the icon and past its edges
+        f.glow = f:CreateTexture(nil, "ARTWORK", nil, 7)
+        f.glow:SetTexture("Interface\\Buttons\\UI-ActionButton-Border")
+        f.glow:SetBlendMode("ADD")
+        f.glow:SetPoint("CENTER")
+        f.glow:Hide()
+        local pulse = f.glow.CreateAnimationGroup and f.glow:CreateAnimationGroup()
+        if pulse then
+            f.fade = pulse:CreateAnimation("Alpha")
+            f.fade:SetFromAlpha(1)
+            f.fade:SetToAlpha(0.3)
+            f.fade:SetDuration(0.6)
+            pulse:SetLooping("BOUNCE")
+            f.pulse = pulse
+        end
+        -- a colour washed over the icon, under the glow
+        f.overlay = f:CreateTexture(nil, "ARTWORK", nil, 6)
+        f.overlay:SetAllPoints()
+        f.overlay:Hide()
         f.text = f:CreateFontString(nil, "OVERLAY", "NumberFontNormal")
-        f.text:SetPoint("BOTTOM", 0, 2)
+        f.text:SetPoint("TOP", 0, -2)
+        -- stack count where the default buff frame puts it
+        f.count = f:CreateFontString(nil, "OVERLAY", "NumberFontNormal")
+        f.count:SetPoint("BOTTOMRIGHT", -2, 2)
+        -- only takes the mouse while unlocked
+        f:EnableMouse(false)
+        f:RegisterForDrag("LeftButton")
+        f:SetScript("OnDragStart", function(self) BR.IconDragStart(self) end)
+        f:SetScript("OnDragStop", function() BR.IconDragStop() end)
+        f:SetScript("OnEnter", function(self) BR.IconTooltip(self) end)
+        f:SetScript("OnLeave", function() GameTooltip:Hide() end)
         BR.icons[i] = f
     end
     return f
+end
+
+-- Blizzard Auras ---------------------------------------------------------------------------
+-- Addon code can't read a secret aura in combat, but Blizzard's own aura button can show it. A
+-- group set to Blizzard Auras gets a CustomAuraContainer with one slot, which Blizzard fills while
+-- one of the group's spells is on you, drawing its icon, time and stacks exactly. Nothing tells
+-- the addon whether the button is showing, so in combat the group's icon is always shown under it
+-- and shows through when the buff is gone. The container and its button refuse changes in combat
+-- and while auras are secret, so they're made, filtered and styled only outside both.
+local live = {}     -- [group] = { holder, container, button, cd, count, ids, style, err }
+local LIVE_SLOT = "buff"
+
+local function LiveIds(group)
+    local ids, list = {}, {}
+    for buff in pairs(group.buffs) do
+        for _, id in ipairs(SpellIds(buff)) do
+            if not ids[id] then
+                ids[id] = true
+                table.insert(list, id)
+            end
+        end
+    end
+    table.sort(list)
+    return ids, table.concat(list, ",")
+end
+
+-- count text for every number, red at or under the low stack warning. Without one Blizzard
+-- doesn't print a count of 1.
+local function CountFormatter(warn)
+    if not (C_StringUtil and C_StringUtil.CreateNumericRuleFormatter) then return nil end
+    local ok, fm = pcall(function()
+        local fm = C_StringUtil.CreateNumericRuleFormatter()
+        local points = { { threshold = 0, format = "%d" } }
+        if warn > 0 then
+            points = { { threshold = 0, format = "|cffff3030%d|r" }, { threshold = warn + 1, format = "%d" } }
+        end
+        fm:SetBreakpoints(points)
+        -- Blizzard formats inside its aura update, make sure it can't fail there
+        for n = 0, warn + 1 do
+            local text = fm:FormatNumber(n)
+            if type(text) ~= "string" or issecretvalue(text) then error("formatted " .. n .. " as " .. tostring(text)) end
+        end
+        return fm
+    end)
+    return ok and fm or nil
+end
+
+-- the number font scaled to an icon's size, so bigger icons get bigger text
+local function ScaleFont(fs, size)
+    local font = NumberFontNormal
+    if not (font and font.GetFont) then return end
+    local file, height, flags = font:GetFont()
+    if not file or not height then return end
+    fs:SetFont(file, math.max(6, math.floor(height * size / FONT_ICON_SIZE + 0.5)), flags)
+end
+
+-- called by Blizzard once, when it makes the slot's button
+local function InitLiveButton(l, button)
+    local size = BRVars.Options.size
+    button:SetSize(size, size)
+    button:SetPoint("CENTER", button:GetParent(), "CENTER", 0, 0)
+    pcall(button.EnableMouse, button, false)
+    local tex = button:CreateTexture(nil, "ARTWORK")
+    tex:SetAllPoints()
+    button:SetIcon(tex)
+    local cd = CreateFrame("Cooldown", nil, button, "CooldownFrameTemplate")
+    cd:SetAllPoints()
+    cd:SetDrawEdge(false)
+    button:SetDurationCooldown(cd)
+    local overlay = CreateFrame("Frame", nil, button)
+    overlay:SetAllPoints()
+    overlay:SetFrameLevel(cd:GetFrameLevel() + 2)
+    l.count = overlay:CreateFontString(nil, "OVERLAY", "NumberFontNormal")
+    l.count:SetPoint("BOTTOMRIGHT", -2, 2)
+    l.cd, l.button = cd, button
+end
+
+-- size, text and count colour, when they changed
+local function StyleLive(l, group)
+    local opts = BRVars.Options
+    local size = type(group.size) == "number" and group.size or opts.size
+    local t = opts.icontext
+    local time, swipe = TimerStyle(group)
+    local showTime = time and t.priority ~= "stacks"
+    local showStacks = t.stacks and t.priority ~= "time"
+    local key = table.concat({ size, tostring(showTime), tostring(showStacks), tostring(swipe),
+        group.warnstacks }, ":")
+    if key == l.style then return end
+    local ok = pcall(function()
+        l.container:SetSize(size, size)
+        l.button:SetSize(size, size)
+        l.cd:SetHideCountdownNumbers(not showTime)
+        l.cd:SetDrawSwipe(swipe)
+        -- the cooldown's countdown at the top, like the time text on our icons, clear of the count
+        local fs = l.cd.GetCountdownFontString and l.cd:GetCountdownFontString()
+        if fs then
+            fs:SetFontObject("NumberFontNormal")
+            ScaleFont(fs, size)
+            fs:ClearAllPoints()
+            fs:SetPoint("TOP", l.button, "TOP", 0, -2)
+        end
+        ScaleFont(l.count, size)
+        l.count:SetAlpha(showStacks and 1 or 0)
+        local fm = CountFormatter(group.warnstacks)
+        l.button:SetApplicationCount(l.count, fm and { formatter = fm } or nil)
+    end)
+    if ok then l.style = key end
+end
+
+-- make, refilter and restyle the containers of Blizzard Auras groups, out of combat only
+function BR.UpdateLive()
+    if InCombatLockdown() or AurasSecret() then return end
+    for g, group in pairs(BRVars.BuffGroups) do
+        local l = live[g]
+        if group.combat == "blizzard" and not (l and l.err) then
+            local ids, key = LiveIds(group)
+            if not l and key ~= "" then
+                l = { holder = CreateFrame("Frame", nil, frame) }
+                live[g] = l
+                l.holder:SetSize(BRVars.Options.size, BRVars.Options.size)
+                l.holder:SetPoint("CENTER")
+                l.holder:SetFrameLevel(frame:GetFrameLevel() + 10)
+                l.holder:SetAlpha(0)
+                local ok, err = pcall(function()
+                    local c = CreateFrame("AuraContainer", nil, l.holder, "CustomAuraContainerTemplate")
+                    c:SetPoint("CENTER")
+                    c:SetSize(BRVars.Options.size, BRVars.Options.size)
+                    c:SetFrameLevel(l.holder:GetFrameLevel() + 1)
+                    c:SetUnit("player")
+                    pcall(c.EnableMouse, c, false)
+                    l.container = c
+                    c:AddAuraSlot(LIVE_SLOT, "HELPFUL", {
+                        candidateFilters = { includeSpellIDs = ids },
+                        initializeFrame = function(button) InitLiveButton(l, button) end,
+                    })
+                end)
+                if ok then
+                    l.ids = key
+                else
+                    l.err = tostring(err)
+                end
+            elseif l and l.container and key ~= "" and key ~= l.ids then
+                if pcall(l.container.SetAuraSlotCandidateFilters, l.container, LIVE_SLOT, { includeSpellIDs = ids }) then
+                    l.ids = key
+                end
+            end
+            if l and l.button then StyleLive(l, group) end
+        end
+    end
+end
+
+local function LiveReady(g)
+    local l = live[g]
+    return l ~= nil and l.container ~= nil and not l.err
+end
+
+-- how a group is followed in combat, and whether that's worth a warning
+function BR.CombatStatus(g)
+    local group = BRVars.BuffGroups[g]
+    if not next(group.buffs) then return "No buffs yet.", false end
+    if group.combat == "blizzard" then
+        local l = live[g]
+        if l and l.err then return "Blizzard Auras don't work on this client, it's predicted in combat.", true end
+        local _, key = LiveIds(group)
+        if key == "" then return "Spell id not known yet. Have the buff once, or add it by spell id.", true end
+        if not LiveReady(g) then return "Blizzard Auras are set up after combat.", false end
+        return "Blizzard's aura button shows it all fight, with exact time and stacks.", false
+    end
+    local secret, unknown = {}, false
+    for buff in pairs(group.buffs) do
+        local ids = SpellIds(buff)
+        if #ids == 0 then unknown = true end
+        for _, id in ipairs(ids) do
+            if not NeverSecret(id) then secret[buff] = ids end
+        end
+    end
+    if not next(secret) then
+        if unknown then return "Not seen yet, it's predicted in combat until it is.", false end
+        return "The game shows this buff to addons, it's read live in combat.", false
+    end
+    local state = CDMState()
+    if state == "missing" then return "The Cooldown Manager isn't available, it's predicted in combat.", true end
+    if state == "off" then return "The Cooldown Manager is turned off, it's predicted in combat.", true end
+    local frames = CDMFrames()
+    for _, ids in pairs(secret) do
+        local tracked = false
+        for _, id in ipairs(ids) do
+            if frames[id] then tracked = true end
+        end
+        if not tracked then return "The Cooldown Manager doesn't track it, it's predicted in combat.", true end
+    end
+    return "The Cooldown Manager tracks it, it's read live in combat.", false
+end
+
+-- tell the user once about groups that are only predicted in combat
+local noticed = {}
+function BR.CombatNotices(only)
+    for g, group in pairs(BRVars.BuffGroups) do
+        if (only == nil or only == g) and group.conditions.always ~= 1 then
+            local text, warn = BR.CombatStatus(g)
+            if warn and noticed[g] ~= text then
+                noticed[g] = text
+                local hint = ""
+                if group.combat == "cdm" then
+                    hint = " Add it to the Cooldown Manager's buffs, or switch the group to Blizzard Auras on the Buff groups tab (/br)."
+                end
+                Print(('"%s": %s%s'):format(g, text, hint))
+            end
+        end
+    end
+end
+
+function BR.SetCombatMode(g, mode)
+    BRVars.BuffGroups[g].combat = mode
+    noticed[g] = nil
+    BR.UpdateLive()
+    BR.CombatNotices(g)
+end
+
+-- icon placement -------------------------------------------------------------------------------
+-- Icons snap together on a grid. BRVars.Options.bars holds the sets of snapped icons,
+-- { left, top, cells = { { key, c, r, ha, va }, ... } }: c counts columns to the right and r rows
+-- down from the top left cell, which is always 0, 0, and left, top is the set's top left corner
+-- from the screen center. Each column is as wide and each row as tall as its biggest icon, and a
+-- smaller icon sits in its cell by ha (-1 left, 0 center, 1 right) and va (-1 top, 0 middle,
+-- 1 bottom), picked by where it was dropped. A straight row or column closes up and centres the
+-- icons it's showing, like the 1.x row did, any other shape keeps its gaps. Unlocked, every icon
+-- shows so it can be placed: dragging moves the whole set, Shift-drag pulls one icon out, like
+-- taking a button off an action bar, and a set dropped touching another snaps onto its grid.
+-- Dropped into a row or column it pushes the rest along.
+local anchors = {}      -- [set index] = frame covering the set, what's dragged
+local dragging          -- the set being dragged
+
+-- the default icon's size with its spacing
+local function Pitch()
+    return BRVars.Options.size + ICON_SPACING * 2
+end
+
+-- the group behind an icon, a buff group or an enchant group
+local function KeyGroup(key)
+    if key:sub(1, 1) == "1" then return BRVars.BuffGroups[key:sub(2)] end
+    return BRVars.Enchants[key:sub(2)]
+end
+
+-- an icon's size, groups can have their own
+local function KeySize(key)
+    local group = KeyGroup(key)
+    if group and type(group.size) == "number" then return group.size end
+    return BRVars.Options.size
+end
+
+local function KeyPitch(key)
+    return KeySize(key) + ICON_SPACING * 2
+end
+
+-- every icon that can show: the buff groups and the enchant groups that aren't turned off
+local function PlaceableKeys()
+    local keys = {}
+    for g in pairs(BRVars.BuffGroups) do keys["1" .. g] = true end
+    for slot, e in pairs(BRVars.Enchants) do
+        if e.conditions.always ~= 1 then keys["2" .. slot] = true end
+    end
+    return keys
+end
+
+-- columns and rows a set spans
+local function Size(bar)
+    local w, h = 0, 0
+    for _, cell in ipairs(bar.cells) do
+        w, h = math.max(w, cell.c + 1), math.max(h, cell.r + 1)
+    end
+    return w, h
+end
+
+-- "row", "column", "single" or nil for any other shape
+local function Shape(bar)
+    local w, h = Size(bar)
+    if w <= 1 and h <= 1 then return "single" end
+    if h == 1 and #bar.cells == w then return "row" end
+    if w == 1 and #bar.cells == h then return "column" end
+end
+
+-- where each column and row starts and how big it is, and the size of the whole set
+local function Geometry(bar)
+    local w, h = Size(bar)
+    local g = { cx = {}, cw = {}, ry = {}, rh = {} }
+    for _, cell in ipairs(bar.cells) do
+        local p = KeyPitch(cell.key)
+        g.cw[cell.c] = math.max(g.cw[cell.c] or 0, p)
+        g.rh[cell.r] = math.max(g.rh[cell.r] or 0, p)
+    end
+    local x, y = 0, 0
+    for c = 0, w - 1 do
+        g.cw[c] = g.cw[c] or Pitch()
+        g.cx[c], x = x, x + g.cw[c]
+    end
+    for r = 0, h - 1 do
+        g.rh[r] = g.rh[r] or Pitch()
+        g.ry[r], y = y, y + g.rh[r]
+    end
+    g.w, g.h = math.max(x, Pitch()), math.max(y, Pitch())
+    return g
+end
+
+-- an icon's centre from the screen centre, with every icon of its set showing
+local function CellCenter(bar, g, cell)
+    local p = KeyPitch(cell.key)
+    local cw, rh = g.cw[cell.c], g.rh[cell.r]
+    return bar.left + g.cx[cell.c] + cw / 2 + (cell.ha or 0) * (cw - p) / 2,
+        bar.top - g.ry[cell.r] - rh / 2 - (cell.va or 0) * (rh - p) / 2
+end
+
+local function TopLeftCell(bar)
+    local best
+    for _, cell in ipairs(bar.cells) do
+        if not best or cell.r < best.r or (cell.r == best.r and cell.c < best.c) then best = cell end
+    end
+    return best
+end
+
+-- remember where one of a set's icons is, so Normalize can keep it there
+local function Pin(bar, cell)
+    cell = cell or TopLeftCell(bar)
+    if not cell then return end
+    local x, y = CellCenter(bar, Geometry(bar), cell)
+    return { cell = cell, x = x, y = y }
+end
+
+-- move the top left cell back to 0, 0, keeping the pinned icon where it was
+local function Normalize(bar, pin)
+    if #bar.cells == 0 then return end
+    local c0, r0 = math.huge, math.huge
+    for _, cell in ipairs(bar.cells) do
+        c0, r0 = math.min(c0, cell.c), math.min(r0, cell.r)
+    end
+    for _, cell in ipairs(bar.cells) do
+        cell.c, cell.r = cell.c - c0, cell.r - r0
+    end
+    if pin then
+        local x, y = CellCenter(bar, Geometry(bar), pin.cell)
+        bar.left, bar.top = bar.left + pin.x - x, bar.top + pin.y - y
+    end
+end
+
+local function Occupied(bar)
+    local used = {}
+    for _, cell in ipairs(bar.cells) do used[cell.c .. "," .. cell.r] = true end
+    return used
+end
+
+-- a free cell for a new icon: the end of a row or column, else the first gap, else a new row
+local function FreeCell(bar)
+    local w, h = Size(bar)
+    local shape = Shape(bar)
+    if #bar.cells == 0 then return 0, 0 end
+    if shape == "row" or shape == "single" then return w, 0 end
+    if shape == "column" then return 0, h end
+    local used = Occupied(bar)
+    for r = 0, h - 1 do
+        for c = 0, w - 1 do
+            if not used[c .. "," .. r] then return c, r end
+        end
+    end
+    return 0, h
+end
+
+-- drop gone icons and empty sets, new icons join the first set, true when anything changed
+local function SyncBars()
+    local opts = BRVars.Options
+    if type(opts.bars) ~= "table" or #opts.bars == 0 then
+        opts.bars = { { left = 0, top = 0, cells = {} } }
+    end
+    local bars, keys, changed = opts.bars, PlaceableKeys(), false
+    for i = #bars, 1, -1 do
+        local b = bars[i]
+        local gone = {}
+        for j = #b.cells, 1, -1 do
+            local k = b.cells[j].key
+            -- also drops a key that's placed twice
+            if keys[k] then
+                keys[k] = nil
+            else
+                gone[j] = true
+            end
+        end
+        if next(gone) then
+            changed = true
+            local shape = Shape(b)
+            local keep
+            for j, cell in ipairs(b.cells) do
+                if not gone[j] and (not keep or cell.r < keep.r or (cell.r == keep.r and cell.c < keep.c)) then
+                    keep = cell
+                end
+            end
+            local pin = keep and Pin(b, keep)
+            for j = #b.cells, 1, -1 do
+                if gone[j] then table.remove(b.cells, j) end
+            end
+            -- a row or column closes up
+            if shape == "row" or shape == "column" then
+                table.sort(b.cells, function(p, q) return p.c + p.r < q.c + q.r end)
+                for n, cell in ipairs(b.cells) do
+                    if shape == "row" then cell.c = n - 1 else cell.r = n - 1 end
+                end
+            end
+            Normalize(b, pin)
+        end
+        if #b.cells == 0 and #bars > 1 then table.remove(bars, i) end
+    end
+    local new = {}
+    for k in pairs(keys) do table.insert(new, k) end
+    table.sort(new)
+    local first = bars[1]
+    local empty = #first.cells == 0
+    for _, k in ipairs(new) do
+        local c, r = FreeCell(first)
+        -- lined up like the nearest icon in its row and in its column
+        local inRow, inCol
+        for _, cell in ipairs(first.cells) do
+            if cell.r == r and (not inRow or math.abs(cell.c - c) < math.abs(inRow.c - c)) then inRow = cell end
+            if cell.c == c and (not inCol or math.abs(cell.r - r) < math.abs(inCol.r - r)) then inCol = cell end
+        end
+        table.insert(first.cells, { key = k, c = c, r = r, va = inRow and inRow.va, ha = inCol and inCol.ha })
+        changed = true
+    end
+    -- a new set starts centred on its position, like the old single row
+    if empty and #new > 0 then
+        local g = Geometry(first)
+        first.left, first.top = first.left - g.w / 2, first.top + g.h / 2
+    end
+    return changed
+end
+
+function BR.ApplyLayout()
+    local opts = BRVars.Options
+    SyncBars()
+    for i, bar in ipairs(opts.bars) do
+        local a = anchors[i]
+        if not a then
+            a = CreateFrame("Frame", nil, frame)
+            a:SetMovable(true)
+            a:SetClampedToScreen(true)
+            anchors[i] = a
+        end
+        -- covers every cell, what's clamped to the screen while dragging
+        local g = Geometry(bar)
+        a:SetSize(g.w, g.h)
+        a:ClearAllPoints()
+        a:SetPoint("CENTER", UIParent, "CENTER", bar.left + g.w / 2, bar.top - g.h / 2)
+        a:Show()
+    end
+    for i = #opts.bars + 1, #anchors do anchors[i]:Hide() end
+end
+
+local function BarIndex(bar)
+    for i, b in ipairs(BRVars.Options.bars) do
+        if b == bar then return i end
+    end
+end
+
+-- where each showing icon of a set goes, as offsets from its anchor's centre
+local function PlaceIcons(bar, showing)
+    local g = Geometry(bar)
+    local shape = Shape(bar)
+    local out = {}
+    if shape == "row" or shape == "column" then
+        local list, total = {}, 0
+        for _, cell in ipairs(bar.cells) do
+            if showing[cell.key] then
+                table.insert(list, cell)
+                total = total + KeyPitch(cell.key)
+            end
+        end
+        table.sort(list, function(p, q) return p.c + p.r < q.c + q.r end)
+        local pos = -total / 2
+        for _, cell in ipairs(list) do
+            local p = KeyPitch(cell.key)
+            local d = pos + p / 2
+            pos = pos + p
+            if shape == "column" then
+                table.insert(out, { key = cell.key, x = (cell.ha or 0) * (g.w - p) / 2, y = -d })
+            else
+                table.insert(out, { key = cell.key, x = d, y = -(cell.va or 0) * (g.h - p) / 2 })
+            end
+        end
+    else
+        local ox, oy = bar.left + g.w / 2, bar.top - g.h / 2
+        for _, cell in ipairs(bar.cells) do
+            if showing[cell.key] then
+                local x, y = CellCenter(bar, g, cell)
+                table.insert(out, { key = cell.key, x = x - ox, y = y - oy })
+            end
+        end
+    end
+    return out
+end
+
+-- does set d fit on t's grid moved by oc, or columns and rows, touching it without overlapping
+local function Fits(t, d, oc, or_)
+    local used = Occupied(t)
+    local touches = false
+    for _, cell in ipairs(d.cells) do
+        local c, r = cell.c + oc, cell.r + or_
+        if used[c .. "," .. r] then return false end
+        if used[(c - 1) .. "," .. r] or used[(c + 1) .. "," .. r]
+            or used[c .. "," .. (r - 1)] or used[c .. "," .. (r + 1)] then
+            touches = true
+        end
+    end
+    return touches
+end
+
+-- ways to line up icons of different sizes, false keeps what they had
+local ALIGNS = { false, { 0, 0 }, { 0, -1 }, { 0, 1 }, { -1, 0 }, { 1, 0 }, { -1, -1 }, { -1, 1 }, { 1, -1 }, { 1, 1 } }
+
+local function SetAlign(cell, ha, va)
+    cell.ha = ha ~= 0 and ha or nil
+    cell.va = va ~= 0 and va or nil
+end
+
+-- t with d put in: kind "grid" moves d by a columns and b rows, "row" or "column" pushes it in at
+-- a. align lines up d and the icons sharing its rows and columns. t's top left icon stays still.
+-- Returns the new set and d's cells in it.
+local function Merge(t, d, kind, a, b, align)
+    local pin = Pin(t)
+    local m = { left = t.left, top = t.top, cells = {} }
+    local k = #d.cells
+    local ref
+    for _, cell in ipairs(t.cells) do
+        local n = { key = cell.key, c = cell.c, r = cell.r, ha = cell.ha, va = cell.va }
+        if kind == "row" and n.c >= a then n.c = n.c + k end
+        if kind == "column" and n.r >= a then n.r = n.r + k end
+        if cell == pin.cell then ref = n end
+        table.insert(m.cells, n)
+    end
+    local sorted = {}
+    for _, cell in ipairs(d.cells) do table.insert(sorted, cell) end
+    table.sort(sorted, function(p, q) return p.c + p.r < q.c + q.r end)
+    local added, cols, rows = {}, {}, {}
+    for i, cell in ipairs(sorted) do
+        local n = { key = cell.key, ha = cell.ha, va = cell.va }
+        if kind == "grid" then
+            n.c, n.r = cell.c + a, cell.r + b
+        elseif kind == "row" then
+            n.c, n.r = a + i - 1, 0
+        else
+            n.c, n.r = 0, a + i - 1
+        end
+        cols[n.c], rows[n.r] = true, true
+        added[cell] = n
+        table.insert(m.cells, n)
+    end
+    if align then
+        for _, n in ipairs(m.cells) do
+            local mine = false
+            for _, v in pairs(added) do
+                if v == n then mine = true end
+            end
+            if mine then
+                SetAlign(n, align[1], align[2])
+            else
+                -- only the alignment across the line d joined
+                SetAlign(n, cols[n.c] and align[1] or (n.ha or 0), rows[n.r] and align[2] or (n.va or 0))
+            end
+        end
+    end
+    Normalize(m, { cell = ref, x = pin.x, y = pin.y })
+    return m, added
+end
+
+-- snap a dropped set onto the set, place and alignment that puts its icons nearest where they were
+-- dropped, if that's within most of an icon
+local function SnapBar(d)
+    local bars = BRVars.Options.bars
+    local dg = Geometry(d)
+    local drop = {}
+    for _, cell in ipairs(d.cells) do drop[cell] = { CellCenter(d, dg, cell) } end
+    local limit = 0.75 * KeyPitch(TopLeftCell(d).key)
+    local dShape = Shape(d)
+    local dw, dh = Size(d)
+    local best, bestDist
+    local function Try(t, kind, a, b)
+        for _, align in ipairs(ALIGNS) do
+            local m, added = Merge(t, d, kind, a, b, align)
+            local mg = Geometry(m)
+            local sum = 0
+            for cell, n in pairs(added) do
+                local x, y = CellCenter(m, mg, n)
+                sum = sum + (x - drop[cell][1]) ^ 2 + (y - drop[cell][2]) ^ 2
+            end
+            local dist = math.sqrt(sum / #d.cells)
+            if dist < limit and (not bestDist or dist < bestDist - 0.01) then
+                best, bestDist = { t = t, m = m }, dist
+            end
+        end
+    end
+    for _, t in ipairs(bars) do
+        if t ~= d and #t.cells > 0 then
+            local tShape = Shape(t)
+            local tw, th = Size(t)
+            -- pushed in like a button onto an action bar
+            if (tShape == "row" or tShape == "single") and (dShape == "row" or dShape == "single") then
+                for at = 0, tw do Try(t, "row", at) end
+            end
+            if (tShape == "column" or tShape == "single") and (dShape == "column" or dShape == "single") then
+                for at = 0, th do Try(t, "column", at) end
+            end
+            for oc = -dw, tw do
+                for or_ = -dh, th do
+                    if Fits(t, d, oc, or_) then Try(t, "grid", oc, or_) end
+                end
+            end
+        end
+    end
+    if not best then return false end
+    local t = best.t
+    t.left, t.top, t.cells = best.m.left, best.m.top, best.m.cells
+    table.remove(bars, BarIndex(d))
+    return true
+end
+
+function BR.IconDragStart(f)
+    if BR.locked or dragging or not f.bar then return end
+    local bar = f.bar
+    if IsShiftKeyDown() and #bar.cells > 1 then
+        local idx
+        for j, cell in ipairs(bar.cells) do
+            if cell.key == f.key then idx = j end
+        end
+        if idx then
+            local cell = bar.cells[idx]
+            local x, y = CellCenter(bar, Geometry(bar), cell)
+            local shape = Shape(bar)
+            table.remove(bar.cells, idx)
+            local pin = Pin(bar)
+            -- a row or column closes up behind it, other shapes keep the gap
+            if shape == "row" or shape == "column" then
+                local along = shape == "row" and "c" or "r"
+                for _, other in ipairs(bar.cells) do
+                    if other[along] > cell[along] then other[along] = other[along] - 1 end
+                end
+            end
+            Normalize(bar, pin)
+            local half = KeyPitch(f.key) / 2
+            bar = { left = x - half, top = y + half, cells = { { key = f.key, c = 0, r = 0 } } }
+            table.insert(BRVars.Options.bars, bar)
+            BR.ApplyLayout()
+            BR.Refresh()
+        end
+    end
+    dragging = bar
+    anchors[BarIndex(bar)]:StartMoving()
+end
+
+function BR.IconDragStop()
+    local bar = dragging
+    if not bar then return end
+    dragging = nil
+    local a = anchors[BarIndex(bar)]
+    a:StopMovingOrSizing()
+    local ax, ay = a:GetCenter()
+    local ux, uy = UIParent:GetCenter()
+    if ax and ux then
+        local g = Geometry(bar)
+        bar.left, bar.top = ax - ux - g.w / 2, ay - uy + g.h / 2
+    end
+    SnapBar(bar)
+    BR.ApplyLayout()
+    BR.Refresh()
+end
+
+function BR.IconTooltip(f)
+    if BR.locked or not f.key then return end
+    local name = f.key:sub(2)
+    if f.key:sub(1, 1) == "2" then
+        name = ENCHANT_NAMES[name]
+    end
+    GameTooltip:SetOwner(f, "ANCHOR_TOP")
+    GameTooltip:SetText(name)
+    GameTooltip:AddLine("Drag to move it with the icons it's snapped to.", 1, 1, 1)
+    GameTooltip:AddLine("Shift-drag to pull it away on its own.", 1, 1, 1)
+    GameTooltip:AddLine("Drop it touching other icons, on any side, to snap to them.", 1, 1, 1)
+    GameTooltip:AddLine("Next to a bigger icon, it lines up with the top, middle or bottom (or left, center "
+        .. "or right) edge you drop it nearest.", 1, 1, 1, true)
+    GameTooltip:Show()
+end
+
+-- put every icon back in one row, where the first set is
+function BR.JoinBars()
+    local bars = BRVars.Options.bars
+    local cells = {}
+    for _, b in ipairs(bars) do
+        table.sort(b.cells, function(p, q) return p.r < q.r or (p.r == q.r and p.c < q.c) end)
+        for _, cell in ipairs(b.cells) do
+            table.insert(cells, { key = cell.key, c = #cells, r = 0 })
+        end
+    end
+    BRVars.Options.bars = { { left = bars[1].left, top = bars[1].top, cells = cells } }
+    BR.ApplyLayout()
+    BR.Refresh()
+end
+
+-- the 2.0 beta saved one frame's point, turn it into its centre's offset from the screen centre
+local function PointOffset(point, w, h)
+    local x, y = 0, 0
+    if point:find("LEFT") then x = -w / 2 elseif point:find("RIGHT") then x = w / 2 end
+    if point:find("TOP") then y = h / 2 elseif point:find("BOTTOM") then y = -h / 2 end
+    return x, y
+end
+
+local function OldPosition(p, size)
+    if type(p) ~= "table" or type(p[1]) ~= "string" or type(p[2]) ~= "string" then return 0, 0 end
+    local uw, uh = UIParent:GetWidth(), UIParent:GetHeight()
+    if type(uw) ~= "number" or type(uh) ~= "number" then return 0, 0 end
+    local rx, ry = PointOffset(p[2], uw, uh)
+    local fx, fy = PointOffset(p[1], size, size)
+    return rx + (tonumber(p[3]) or 0) - fx, ry + (tonumber(p[4]) or 0) - fy
+end
+
+-- a group's glow and overlay for a missing buff, or the Options tab's for default ones
+local function MissingStyle(group)
+    local opts = BRVars.Options
+    local glow, overlay = group and group.glow, group and group.overlay
+    if not GLOWS[glow] or glow == "default" then glow = opts.glow end
+    if not OVERLAYS[overlay] or overlay == "default" then overlay = opts.overlay end
+    return glow, overlay
+end
+
+-- the game's spell alert, the glow on an action button when a spell procs. It's made for action
+-- buttons, so it's only tried, returns false when this client doesn't have it or it failed.
+local function SpellAlert(f, show)
+    local m = ActionButtonSpellAlertManager
+    if m and m.ShowAlert and m.HideAlert then
+        return (pcall(show and m.ShowAlert or m.HideAlert, m, f))
+    end
+    local fn = show and ActionButton_ShowOverlayGlow or ActionButton_HideOverlayGlow
+    if fn then return (pcall(fn, f)) end
+    return false
+end
+
+-- glow kind from GLOWS, nil for none
+local function SetGlow(f, kind)
+    if kind == "none" then kind = nil end
+    if f.glowKind == kind then return end
+    if f.glowKind == "alert" then SpellAlert(f, false) end
+    f.glowKind = kind
+    if f.pulse then f.pulse:Stop() end
+    if kind == "alert" and SpellAlert(f, true) then kind = nil end
+    if not kind then
+        f.glow:Hide()
+        return
+    end
+    -- pulse, flash, steady, or a spell alert this client can't show
+    f.glow:SetAlpha(1)
+    f.glow:Show()
+    if f.pulse and kind ~= "steady" then
+        f.fade:SetDuration(kind == "flash" and 0.2 or 0.6)
+        f.pulse:Play()
+    end
+end
+
+local function SetOverlay(f, key)
+    local color = OVERLAY_COLORS[key]
+    if f.overlayKey == key then return end
+    f.overlayKey = key
+    if color then
+        f.overlay:SetColorTexture(color[1], color[2], color[3], OVERLAY_ALPHA)
+        f.overlay:Show()
+    else
+        f.overlay:Hide()
+    end
+end
+
+-- draw one icon, f is already placed
+local function ShowIcon(f, item, now, shown, liveShown)
+    local opts = BRVars.Options
+    local size = KeySize(item.key)
+    f:SetSize(size, size)
+    if f.fontSize ~= size then
+        f.fontSize = size
+        ScaleFont(f.text, size)
+        ScaleFont(f.count, size)
+        -- the border's button fills 36 of its 64 pixels
+        f.glow:SetSize(size * 64 / 36, size * 64 / 36)
+        -- the spell alert is sized when it's shown
+        if f.glowKind == "alert" then SetGlow(f, nil) end
+    end
+    -- a Blizzard Auras icon only shows from under Blizzard's button once the buff is gone
+    local missing = item.missing or item.placeholder or item.live
+    f:SetAlpha(missing and opts.alpha or opts.warnalpha)
+    if item.missing then
+        local glow, overlay = MissingStyle(item.group)
+        SetGlow(f, glow)
+        SetOverlay(f, overlay)
+    else
+        SetGlow(f, nil)
+        SetOverlay(f, nil)
+    end
+    f:EnableMouse(not BR.locked)
+    f.texture:SetTexture(item.icon or QUESTION_MARK)
+    f.texture:SetDesaturated(item.placeholder or false)
+    local time, swipe = TimerStyle(item.group)
+    if swipe and item.expires and item.duration and item.duration > 0 then
+        f.cooldown:SetCooldown(item.expires - item.duration, item.duration)
+    else
+        f.cooldown:Clear()
+    end
+    local timeText = time and item.expires and FormatTime(item.expires - now) or ""
+    local stackText = opts.icontext.stacks and item.stacks and tostring(item.stacks) or ""
+    if timeText ~= "" and stackText ~= "" then
+        if opts.icontext.priority == "time" then stackText = "" end
+        if opts.icontext.priority == "stacks" then timeText = "" end
+    end
+    f.text:SetText(timeText)
+    f.count:SetText(stackText)
+    f:Show()
+    if not item.placeholder then shown[item.key] = true end
+    if item.live then
+        local holder = live[item.live].holder
+        holder:ClearAllPoints()
+        holder:SetPoint("CENTER", f, "CENTER")
+        holder:SetSize(size, size)
+        holder:SetAlpha(opts.warnalpha)
+        liveShown[item.live] = true
+    end
 end
 
 -- work out which icons should be visible, using predicted expiry while auras are secret
@@ -348,58 +1526,98 @@ function BR.Refresh()
     local list = {}
 
     if not BR.hideAll then
+        local secret = AurasSecret()
         for g, group in pairs(BRVars.BuffGroups) do
             local st = BR.groupState[g]
-            -- no state means auras haven't been readable yet, don't guess
-            if st and not IsSuppressed(group.conditions) and not BR.scriptRes[g] then
-                if not st.present or (st.expires > 0 and st.expires <= now) then
-                    table.insert(list, { key = "1" .. g, icon = group.icon })
-                elseif st.expires > 0 and st.expires - now <= group.warntime then
-                    table.insert(list, { key = "1" .. g, icon = group.icon, expires = st.expires, duration = st.duration })
-                end
+            -- when the buff was cast, for predicting its spell's cooldown
+            if st and st.present and (st.duration or 0) > 0 and st.expires > 0 then
+                BR.castAt[g] = st.expires - st.duration
             end
-        end
-
-        if not IsSuppressed(opts.conditions) and not BR.defaultScriptRes then
-            for slot, invSlot in pairs(ENCHANT_SLOTS) do
-                local e = BR.enchants[slot]
-                local tex = GetInventoryItemTexture("player", invSlot)
-                if opts.enchants[slot] and e and tex then
-                    if not e.present or e.expires <= now then
-                        table.insert(list, { key = "2" .. slot, icon = tex })
-                    elseif e.expires - now <= opts.warntime or (e.charges > 0 and e.charges <= opts.warncharges) then
-                        table.insert(list, { key = "2" .. slot, icon = tex, expires = e.expires })
+            if IsSuppressed(group.conditions) or BR.scriptRes[g] then
+                -- hidden
+            elseif secret and group.combat == "blizzard" and LiveReady(g) then
+                -- Blizzard's button covers the icon while the buff is up
+                table.insert(list, { key = "1" .. g, icon = group.icon, live = g, group = group })
+            elseif st and GroupCooling(group, BR.castAt[g], now) then
+                -- can't be cast again yet
+            elseif st then
+                -- no state means auras haven't been readable yet, don't guess
+                if not st.present or (st.expires > 0 and st.expires <= now) then
+                    table.insert(list, { key = "1" .. g, icon = group.icon, group = group, missing = true })
+                else
+                    local expiring = st.expires > 0 and st.expires - now <= group.warntime
+                    local stacks = st.applications
+                    local low = group.warnstacks > 0 and stacks and stacks > 0 and stacks <= group.warnstacks
+                    if expiring or low then
+                        table.insert(list, { key = "1" .. g, icon = group.icon, group = group,
+                            expires = expiring and st.expires or nil, duration = st.duration,
+                            stacks = low and stacks or nil })
                     end
                 end
             end
         end
-    end
 
-    -- groups come out of pairs in random order, sort so icons don't jump around
-    table.sort(list, function(a, b) return a.key < b.key end)
-
-    local pitch = opts.size + ICON_SPACING * 2
-    local offset = (#list - 1) * pitch / 2
-    local shown, newIcon = {}, false
-    for i, item in ipairs(list) do
-        local f = AcquireIcon(i)
-        f:SetSize(opts.size, opts.size)
-        f:SetAlpha(opts.alpha)
-        f:ClearAllPoints()
-        f:SetPoint("CENTER", frame, "CENTER", (i - 1) * pitch - offset, 0)
-        f.texture:SetTexture(item.icon or QUESTION_MARK)
-        if item.expires and item.duration and item.duration > 0 then
-            f.cooldown:SetCooldown(item.expires - item.duration, item.duration)
-        else
-            f.cooldown:Clear()
+        for slot, invSlot in pairs(ENCHANT_SLOTS) do
+            local eg = BRVars.Enchants[slot]
+            local e = BR.enchants[slot]
+            local tex = GetInventoryItemTexture("player", invSlot)
+            if IsSuppressed(eg.conditions) or BR.enchantScriptRes[slot] or not e or not tex then
+                -- hidden, or no weapon in the hand
+            elseif not e.present or e.expires <= now then
+                table.insert(list, { key = "2" .. slot, icon = tex, group = eg, missing = true })
+            else
+                local expiring = e.expires - now <= eg.warntime
+                local low = eg.warnstacks > 0 and e.charges > 0 and e.charges <= eg.warnstacks
+                if expiring or low then
+                    table.insert(list, { key = "2" .. slot, icon = tex, group = eg,
+                        expires = expiring and e.expires or nil, stacks = low and e.charges or nil })
+                end
+            end
         end
-        f.text:SetText(item.expires and FormatTime(item.expires - now) or "")
-        f:Show()
-        shown[item.key] = true
-        if not BR.shown[item.key] then newIcon = true end
     end
-    for i = #list + 1, #BR.icons do
-        BR.icons[i]:Hide()
+
+    local byKey = {}
+    for _, item in ipairs(list) do byKey[item.key] = item end
+    if not BR.locked and not BR.hideAll then
+        -- unlocked, the icons that aren't needed show grey so they can be placed too
+        for k in pairs(PlaceableKeys()) do
+            if not byKey[k] then
+                local icon
+                if k:sub(1, 1) == "1" then
+                    icon = BRVars.BuffGroups[k:sub(2)].icon
+                else
+                    icon = GetInventoryItemTexture("player", ENCHANT_SLOTS[k:sub(2)])
+                end
+                byKey[k] = { key = k, icon = icon, placeholder = true }
+            end
+        end
+    end
+    if SyncBars() then BR.ApplyLayout() end
+    -- a drag whose icon went away never gets its OnDragStop
+    if dragging and not IsMouseButtonDown("LeftButton") then BR.IconDragStop() end
+
+    local shown, liveShown, newIcon = {}, {}, false
+    local i = 0
+    for bi, bar in ipairs(opts.bars) do
+        for _, p in ipairs(PlaceIcons(bar, byKey)) do
+            local item = byKey[p.key]
+            i = i + 1
+            local f = AcquireIcon(i)
+            f.key, f.bar = item.key, bar
+            f:ClearAllPoints()
+            f:SetPoint("CENTER", anchors[bi], "CENTER", p.x, p.y)
+            ShowIcon(f, item, now, shown, liveShown)
+            if not item.live and not item.placeholder and not BR.shown[item.key] then
+                -- a Blizzard Auras icon shows all fight, no sound for that
+                newIcon = true
+            end
+        end
+    end
+    for k = i + 1, #BR.icons do
+        BR.icons[k]:Hide()
+    end
+    for g, l in pairs(live) do
+        if not liveShown[g] then l.holder:SetAlpha(0) end
     end
     BR.shown = shown
 
@@ -414,128 +1632,27 @@ function BR.Update()
 end
 
 function BR.SetLocked(locked)
-    frame:EnableMouse(not locked)
-    if locked then
-        frame.cross:SetTexture(nil)
-    else
-        frame.cross:SetTexture(MEDIA .. "cross")
-    end
+    BR.locked = locked
+    if locked then BR.IconDragStop() end
+    if BRVars then BR.Refresh() end
 end
 
-function BR.ApplyLayout()
-    local opts = BRVars.Options
-    frame:SetSize(opts.size, opts.size)
-    frame:ClearAllPoints()
-    local p = opts.position
-    if p then
-        frame:SetPoint(p[1], UIParent, p[2], p[3], p[4])
-    else
-        frame:SetPoint("CENTER")
-    end
-end
-
-frame:SetScript("OnDragStart", function(self)
-    self:StartMoving()
-end)
-
-frame:SetScript("OnDragStop", function(self)
-    self:StopMovingOrSizing()
-    local point, _, relPoint, x, y = self:GetPoint(1)
-    BRVars.Options.position = { point, relPoint, x, y }
-end)
-
--- slash command functions ------------------------------------------------------------------
-function BR.GroupExists(group)
-    if BRVars.BuffGroups[group] == nil then
-        Print('Group "' .. tostring(group) .. '" does not exist.')
-        BR.PrintAllGroups()
-        return false
-    end
-    return true
-end
-
-function BR.FindBuffGroup(buff)
-    local key = BuffKey(buff)
-    for g, group in pairs(BRVars.BuffGroups) do
-        for b in pairs(group.buffs) do
-            if BuffKey(b) == key then return g, b end
-        end
-    end
-    return nil
-end
-
-function BR.PrintAllGroups()
-    Echo("Your buff groups:")
-    for g in pairs(BRVars.BuffGroups) do
-        Echo("   " .. g)
-    end
-end
-
-function BR.PrintBuffs()
-    for g, group in pairs(BRVars.BuffGroups) do
-        Echo("Group: " .. g)
-        for b in pairs(group.buffs) do
-            Echo("   " .. b)
-        end
-    end
-end
-
-local function PrintConditions(conds)
-    Echo("   always: " .. ALWAYS_TEXT[conds.always])
-    for _, k in ipairs(CONDITIONS) do
-        Echo(("   %s: %s"):format(k, STATE_TEXT[conds[k]]))
-    end
-end
-
-function BR.PrintGroup(g)
-    local group = BRVars.BuffGroups[g]
-    Echo("Group: " .. g)
-    for b in pairs(group.buffs) do
-        Echo("   buff: " .. b)
-    end
-    PrintConditions(group.conditions)
-    Echo("   early warning time: " .. group.warntime)
-    if group.script ~= "" then Echo("   script: " .. group.script) end
-end
-
-function BR.PrintDefaults()
-    local opts = BRVars.Options
-    Echo("Default conditions (weapon enchants and new groups):")
-    PrintConditions(opts.conditions)
-    Echo("   early warning time: " .. opts.warntime)
-    Echo("   enchant charges warning: " .. opts.warncharges)
-    Echo("   main hand enchant: " .. (opts.enchants.main and "on" or "off"))
-    Echo("   off hand enchant: " .. (opts.enchants.off and "on" or "off"))
-    if opts.script ~= "" then Echo("   script: " .. opts.script) end
-end
-
-function BR.PrintAuras()
-    if AurasSecret() then
-        Print("Buffs can't be read right now (in combat).")
-        return
-    end
-    local ok, _, list = pcall(ReadPlayerBuffs)
-    if not ok then
-        Print("Buffs can't be read right now (in combat).")
-        return
-    end
-    local now = GetTime()
-    Echo("Your current buffs:")
-    for _, e in ipairs(list) do
-        local left = e.expires > 0 and FormatTime(e.expires - now) or "permanent"
-        Echo(("   %s (%s) %s"):format(tostring(e.name), tostring(e.spellId), left))
-    end
-end
-
+-- changes made in the options window ------------------------------------------------------
 function BR.NewGroup(g)
     local opts = BRVars.Options
     BRVars.BuffGroups[g] = {
         ["conditions"] = DeepCopy(opts.conditions),
         ["warntime"] = opts.warntime,
+        ["warnstacks"] = 0,
+        ["combat"] = "cdm",
+        ["timer"] = "default",
+        ["glow"] = "default",
+        ["overlay"] = "default",
         ["icon"] = QUESTION_MARK,
-        ["script"] = "",
+        ["script"] = opts.script,
         ["buffs"] = {},
     }
+    BR.SetGroupScript(g, opts.script)
 end
 
 function BR.AddBuffToGroup(g, buff)
@@ -547,219 +1664,187 @@ function BR.AddBuffToGroup(g, buff)
             group.icon = SpellTexture(buff) or QUESTION_MARK
         end
     end
-    BR.PrintGroup(g)
 end
 
-function BR.RemoveBuff(buff)
-    local key = BuffKey(buff)
-    for _, group in pairs(BRVars.BuffGroups) do
-        for b in pairs(group.buffs) do
-            if BuffKey(b) == key then group.buffs[b] = nil end
-        end
+function BR.RemoveGroup(g)
+    BRVars.BuffGroups[g] = nil
+    BR.groupState[g] = nil
+    BR.scripts[g] = nil
+    BR.scriptRes[g] = nil
+end
+
+function BR.SetGroupScript(g, code)
+    BRVars.BuffGroups[g].script = code
+    BR.scripts[g] = Compile(code, g)
+    BR.scriptRes[g] = false
+end
+
+function BR.SetDefaultScript(code)
+    if code ~= "" then Compile(code, "default") end
+    BRVars.Options.script = code
+end
+
+function BR.SetEnchantScript(slot, code)
+    BRVars.Enchants[slot].script = code
+    BR.enchantScripts[slot] = Compile(code, ENCHANT_NAMES[slot])
+    BR.enchantScriptRes[slot] = false
+end
+
+-- an enchant group, turned off until it's wanted
+local function NewEnchant()
+    local opts = BRVars.Options
+    local conds = DeepCopy(opts.conditions)
+    conds.always = 1
+    return {
+        ["conditions"] = conds,
+        ["warntime"] = opts.warntime,
+        ["warnstacks"] = 5,
+        ["timer"] = "default",
+        ["glow"] = "default",
+        ["overlay"] = "default",
+        ["script"] = "",
+    }
+end
+
+-- nil or "none" turns the sound off, returns false for an unknown sound
+function BR.SetSound(v)
+    if v == nil or v == "" or tostring(v):lower() == "none" then
+        BRVars.Options.warnsound = nil
+        return true
     end
-    Print("Removed " .. buff .. " from all buff groups.")
-end
-
--- reset the icons to unknown state, they're relearned from the next scan
-function BR.ClearIcons()
-    for _, group in pairs(BRVars.BuffGroups) do
-        group.icon = QUESTION_MARK
-        for b in pairs(group.buffs) do
-            group.icon = SpellTexture(b) or group.icon
-        end
-    end
-end
-
--- cycle a tri-state condition, returns false if it isn't a condition
-local function CycleCondition(conds, name)
-    if conds[name] == nil then return false end
-    conds[name] = (conds[name] + 1) % 3
+    local id = ResolveSound(v)
+    if not id then return false end
+    BRVars.Options.warnsound = id
+    PlaySound(id, "Master")
     return true
 end
 
--- group and default share the enable/disable/condition/number/script subcommands
-local function ConditionCommand(conds, word, msg, onNumber, onScript)
-    if word == "disable" then
-        conds.always = 1
-    elseif word == "enable" then
-        conds.always = 0
-    elseif word == "script" then
-        onScript(ScriptText(msg))
-    elseif CycleCondition(conds, word) then
-        -- cycled
-    elseif tonumber(word) then
-        onNumber(tonumber(word))
-    else
-        return false
+function BR.ToggleHidden()
+    BR.hideAll = not BR.hideAll
+    Print(BR.hideAll and "Icons will not be shown." or "Icons will be shown.")
+    BR.Refresh()
+end
+
+function BR.Reset()
+    BRVars.BuffGroups = {}
+    BRVars.Options = DeepCopy(BR.DefaultOptions)
+    BRVars.Enchants = { main = NewEnchant(), off = NewEnchant() }
+    BR.groupState = {}
+    BR.scriptRes = {}
+    BR.CompileScripts()
+    BR.ApplyLayout()
+    BR.UpdateMinimap()
+end
+
+-- current buffs for the config UI, nil while they can't be read
+function BR.GetCurrentBuffs()
+    if AurasSecret() then return nil end
+    local ok, _, list = pcall(ReadPlayerBuffs)
+    return ok and list or nil
+end
+
+-- buffs seen before, like GetCurrentBuffs' entries
+function BR.GetSeenBuffs()
+    local list = {}
+    for _, e in pairs(BRVars.Seen) do
+        table.insert(list, { name = e.name, spellId = e.id, icon = e.icon })
     end
-    return true
+    return list
 end
 
-function BR.ShowHelp()
-    Echo("***** BuffReminder Help *****")
-    Echo("Buffs you want to monitor must be added to buff groups. Mutually exclusive buffs should go into common groups.")
-    Echo("Buffs can be given by name or spell id, see /br auras.")
-    Echo("Group commands:")
-    Echo("  /br group <group> add <buff> - adds a buff, creating the group if needed")
-    Echo("  /br group <group> remove - removes the group")
-    Echo("  /br group <group> disable | enable - stops or allows the group's icon from showing")
-    Echo("  /br group <group> <always|dead|instance|party|raid|resting|taxi|combat|mounted> - cycles a condition")
-    Echo("  /br group <group> <number> - sets the early warning time in seconds")
-    Echo("  /br group <group> script [lua] - icon is hidden while the script returns true, no lua clears it")
-    Echo("  /br group [group] - lists your groups or shows one group")
-    Echo("Buff commands:")
-    Echo("  /br buff <buff> remove - stops monitoring a buff")
-    Echo("  /br buff [buff] - lists watched buffs or shows the group a buff belongs to")
-    Echo("  /br auras - lists your current buffs with their spell ids")
-    Echo("Weapon enchants and defaults:")
-    Echo("  /br enchant <main|off> - toggles the weapon enchant reminder")
-    Echo("  /br default [condition|disable|enable|<number>|script [lua]] - default conditions, also used by new groups")
-    Echo("  /br charges <number> - warns when an enchant has this many charges left")
-    Echo("General options:")
-    Echo("  /br alpha <number> - icon transparency (0.0 to 1.0)")
-    Echo("  /br size <number> - icon size (10 to 400)")
-    Echo("  /br lock | unlock - locks or unlocks the icon frame for placement")
-    Echo("  /br hide - temporarily hides or shows the icons")
-    Echo("  /br sound [id|name] - warning sound for new icons, ex: /br sound RAID_WARNING, none turns it off")
-    Echo("  /br reseticons - clears the icon cache")
-    Echo("  /br NUKE - clears all of your settings")
+-- whether a spell reads like a buff: it lasts a while, or it's an aura or aspect kept up.
+-- The game has no flag for this, so it goes by the tooltip text.
+local function LooksLikeBuff(id, name)
+    if C_Spell.IsSpellHarmful then
+        local ok, harmful = pcall(C_Spell.IsSpellHarmful, id)
+        if ok and harmful == true then return false end
+    end
+    local desc = ""
+    if C_Spell.GetSpellDescription then
+        local ok, d = pcall(C_Spell.GetSpellDescription, id)
+        if ok and type(d) == "string" and not issecretvalue(d) then desc = d:lower() end
+    end
+    if desc:find("for %d[%d%.]* *min") or desc:find("for %d[%d%.]* *hour") or desc:find("for %d[%d%.]* *sec")
+        or desc:find("lasts %d") then
+        return true
+    end
+    name = name:lower()
+    return name:find(" aura$") ~= nil or name:find("^aspect of") ~= nil
 end
 
+-- the player's spells that look like buffs, or every active spell, one entry per name with
+-- the highest rank's id
+function BR.GetSpellbookBuffs(all)
+    local byName, list = {}, {}
+    if not (C_SpellBook and C_SpellBook.GetNumSpellBookSkillLines) then return list end
+    pcall(function()
+        local bank = Enum and Enum.SpellBookSpellBank and Enum.SpellBookSpellBank.Player or 0
+        local spellType = Enum and Enum.SpellBookItemType and Enum.SpellBookItemType.Spell
+        for line = 1, C_SpellBook.GetNumSpellBookSkillLines() do
+            local info = C_SpellBook.GetSpellBookSkillLineInfo(line)
+            if info then
+                for i = info.itemIndexOffset + 1, info.itemIndexOffset + info.numSpellBookItems do
+                    local item = C_SpellBook.GetSpellBookItemInfo(i, bank)
+                    local id, n = item and Num(item.spellID), item and item.name
+                    if id and type(n) == "string" and not issecretvalue(n) and not item.isPassive
+                        and (spellType == nil or item.itemType == spellType) then
+                        local e = byName[n]
+                        if e then
+                            if id > e.spellId then e.spellId = id end
+                        elseif all or LooksLikeBuff(id, n) then
+                            byName[n] = { name = n, spellId = id, icon = item.iconID }
+                            table.insert(list, byName[n])
+                        end
+                    end
+                end
+            end
+        end
+    end)
+    return list
+end
+
+-- sound kit names, and the name of a sound kit id
+function BR.SoundNames()
+    local names = {}
+    for name, id in pairs(SOUNDKIT or {}) do
+        if type(id) == "number" then table.insert(names, name) end
+    end
+    table.sort(names)
+    return names
+end
+
+function BR.SoundName(id)
+    for name, v in pairs(SOUNDKIT or {}) do
+        if v == id then return name end
+    end
+end
+
+-- shared with Config.lua
+BR.QUESTION_MARK = QUESTION_MARK
+BR.MEDIA = MEDIA
+BR.CONDITIONS = CONDITIONS
+BR.COMBAT_MODES = COMBAT_MODES
+BR.TIMERS, BR.TIMER_ORDER = TIMERS, TIMER_ORDER
+BR.GLOWS, BR.GLOW_ORDER, BR.OVERLAYS, BR.OVERLAY_ORDER = GLOWS, GLOW_ORDER, OVERLAYS, OVERLAY_ORDER
+BR.ENCHANT_SLOTS, BR.ENCHANT_NAMES = ENCHANT_SLOTS, ENCHANT_NAMES
+BR.Print = Print
+BR.SpellTexture = SpellTexture
+
+-- /br opens the options window, everything is set up there
 SLASH_BuffReminder1 = "/br"
 SLASH_BuffReminder2 = "/buffreminder"
-SlashCmdList.BuffReminder = function(msg)
-    local args, largs = GetArgs(msg)
-    if args == nil then return end
-    local cmd = largs[1]
-    local opts = BRVars.Options
-    local handled = true
-
-    if cmd == nil or cmd == "help" then
-        BR.ShowHelp()
-        return
-    elseif cmd == "group" then
-        local g = args[2]
-        if g == nil then
-            BR.PrintAllGroups()
-        elseif largs[3] == "add" then
-            BR.AddBuffToGroup(g, args[4])
-        elseif BR.GroupExists(g) then
-            local group = BRVars.BuffGroups[g]
-            if largs[3] == "remove" then
-                BRVars.BuffGroups[g] = nil
-                BR.groupState[g] = nil
-                BR.scripts[g] = nil
-                Print("Removed group " .. g .. ".")
-            elseif largs[3] == nil or ConditionCommand(group.conditions, largs[3], msg,
-                function(n) group.warntime = n end,
-                function(code)
-                    group.script = code
-                    BR.scripts[g] = Compile(code, g)
-                    BR.scriptRes[g] = false
-                end) then
-                BR.PrintGroup(g)
-            else
-                handled = false
-            end
-        end
-    elseif cmd == "default" then
-        if largs[2] == nil or ConditionCommand(opts.conditions, largs[2], msg,
-            function(n) opts.warntime = n end,
-            function(code)
-                opts.script = code
-                BR.defaultScript = Compile(code, "default")
-                BR.defaultScriptRes = false
-            end) then
-            BR.PrintDefaults()
-        else
-            handled = false
-        end
-    elseif cmd == "buff" then
-        if args[2] == nil then
-            BR.PrintBuffs()
-        elseif largs[3] == "remove" then
-            BR.RemoveBuff(args[2])
-        else
-            local g = BR.FindBuffGroup(args[2])
-            if g == nil then
-                Print("Buff " .. args[2] .. " does not exist in any buff groups.")
-            else
-                BR.PrintGroup(g)
-            end
-        end
-    elseif cmd == "auras" then
-        BR.PrintAuras()
-    elseif cmd == "enchant" then
-        if largs[2] == "main" or largs[2] == "off" then
-            opts.enchants[largs[2]] = not opts.enchants[largs[2]]
-            BR.PrintDefaults()
-        else
-            handled = false
-        end
-    elseif cmd == "unlock" then
-        BR.SetLocked(false)
-    elseif cmd == "lock" then
-        BR.SetLocked(true)
-    elseif cmd == "hide" then
-        BR.hideAll = not BR.hideAll
-        Print(BR.hideAll and "Icons will not be shown." or "Icons will be shown.")
-    elseif args[1] == "NUKE" then
-        BRVars.BuffGroups = {}
-        BRVars.Options = DeepCopy(BR.DefaultOptions)
-        BR.groupState = {}
-        BR.CompileScripts()
-        BR.ApplyLayout()
-        Print("All settings cleared.")
-    elseif cmd == "sound" then
-        if args[2] == nil or largs[2] == "none" then
-            opts.warnsound = nil
-        else
-            local id = ResolveSound(args[2])
-            if id then
-                opts.warnsound = id
-                PlaySound(id, "Master")
-            else
-                Print("Unknown sound " .. args[2] .. ".")
-            end
-        end
-    elseif cmd == "size" then
-        local n = ToNum(args[2])
-        handled = n ~= nil and n >= 10 and n <= 400
-        if handled then
-            opts.size = n
-            frame:SetSize(n, n)
-        end
-    elseif cmd == "alpha" then
-        local n = ToNum(args[2])
-        handled = n ~= nil and n >= 0 and n <= 1.0
-        if handled then opts.alpha = n end
-    elseif cmd == "time" then
-        local n = ToNum(args[2])
-        handled = n ~= nil
-        if handled then opts.warntime = n end
-    elseif cmd == "charges" then
-        local n = ToNum(args[2])
-        handled = n ~= nil
-        if handled then opts.warncharges = n end
-    elseif cmd == "reseticons" then
-        BR.ClearIcons()
-    elseif cmd == "config" then
-        Print("The config dialog hasn't been ported yet, use /br help for commands.")
-    else
-        handled = false
-    end
-
-    BR.Update()
-
-    if not handled then
-        Print("Command error. Try /br help.")
-    end
+SlashCmdList.BuffReminder = function()
+    BR.ToggleConfig()
 end
 
 -- saved variables --------------------------------------------------------------------------
 -- fill in missing or mistyped options and upgrade 1.x settings
 function BR.SanityCheck()
     local opts = BRVars.Options
+    -- the glow was a switch
+    if opts.glow == true then opts.glow = "pulse" elseif opts.glow == false then opts.glow = "none" end
+    -- there was one opacity for every icon, keep it for warnings too
+    if opts.warnalpha == nil and type(opts.alpha) == "number" then opts.warnalpha = opts.alpha end
     for k, v in pairs(BR.DefaultOptions) do
         if type(v) == "table" then
             if type(opts[k]) ~= "table" then opts[k] = {} end
@@ -768,6 +1853,24 @@ function BR.SanityCheck()
             end
         elseif type(opts[k]) ~= type(v) then
             opts[k] = v
+        end
+    end
+    if type(BRVars.Seen) ~= "table" then BRVars.Seen = {} end
+    for k, e in pairs(BRVars.Seen) do
+        if type(e) ~= "table" or type(e.name) ~= "string" or type(e.t) ~= "number" then BRVars.Seen[k] = nil end
+    end
+    -- 2.0 betas and 1.x had enchant switches and a charges warning, and enchants used the defaults
+    if type(BRVars.Enchants) ~= "table" then
+        local old = type(opts.enchants) == "table" and opts.enchants or {}
+        BRVars.Enchants = {}
+        for slot in pairs(ENCHANT_SLOTS) do
+            local e = NewEnchant()
+            if old[slot] == true then e.conditions.always = opts.conditions.always end
+            if type(opts.warncharges) == "number" then e.warnstacks = opts.warncharges end
+            if type(opts.script) == "string" then e.script = opts.script end
+            if TIMERS[old.timer] then e.timer = old.timer end
+            if type(old.size) == "number" and old.size > 0 then e.size = old.size end
+            BRVars.Enchants[slot] = e
         end
     end
     for k, v in pairs(opts) do
@@ -782,8 +1885,78 @@ function BR.SanityCheck()
     end
     -- 1.x stored sound names, the modern PlaySound takes sound kit ids
     opts.warnsound = ResolveSound(opts.warnsound)
-    if type(opts.position) ~= "table" then opts.position = nil end
+    -- icon placement: the 2.0 beta had one position for all the icons, then rows centred on x, y,
+    -- then a grid with x, y the top left cell's centre, all with the one icon size
+    local bars = {}
+    local pitch = opts.size + ICON_SPACING * 2
+    if type(opts.bars) == "table" then
+        for _, b in ipairs(opts.bars) do
+            if type(b) == "table" then
+                local bar = { left = b.left, top = b.top, cells = {} }
+                local used = {}
+                if type(b.cells) == "table" then
+                    for _, cell in ipairs(b.cells) do
+                        if type(cell) == "table" and type(cell.key) == "string" and type(cell.c) == "number"
+                            and type(cell.r) == "number" then
+                            local c, r = math.floor(cell.c), math.floor(cell.r)
+                            if not used[c .. "," .. r] then
+                                used[c .. "," .. r] = true
+                                local new = { key = cell.key, c = c, r = r }
+                                if cell.ha == -1 or cell.ha == 1 then new.ha = cell.ha end
+                                if cell.va == -1 or cell.va == 1 then new.va = cell.va end
+                                table.insert(bar.cells, new)
+                            end
+                        end
+                    end
+                elseif type(b.keys) == "table" then
+                    for _, k in ipairs(b.keys) do
+                        if type(k) == "string" then table.insert(bar.cells, { key = k, c = #bar.cells, r = 0 }) end
+                    end
+                    if type(b.x) == "number" and type(b.y) == "number" then
+                        bar.left, bar.top = b.x - #bar.cells * pitch / 2, b.y + pitch / 2
+                    end
+                end
+                if type(bar.left) ~= "number" or type(bar.top) ~= "number" then
+                    if type(b.x) == "number" and type(b.y) == "number" then
+                        bar.left, bar.top = b.x - pitch / 2, b.y + pitch / 2
+                    end
+                end
+                if type(bar.left) == "number" and type(bar.top) == "number" then
+                    Normalize(bar)
+                    table.insert(bars, bar)
+                end
+            end
+        end
+    end
+    if #bars == 0 then
+        -- an empty set is centred on its position when icons join it
+        local x, y = OldPosition(opts.position, opts.size)
+        bars = { { left = x, top = y, cells = {} } }
+    end
+    opts.bars = bars
+    opts.position = nil
+    if not TEXT_PRIORITIES[opts.icontext.priority] then opts.icontext.priority = "both" end
+    if not GLOWS[opts.glow] or opts.glow == "default" then opts.glow = "none" end
+    if not OVERLAYS[opts.overlay] or opts.overlay == "default" then opts.overlay = "none" end
 
+    -- what buff and enchant groups share
+    local function CheckGroup(group)
+        if type(group.conditions) ~= "table" then group.conditions = {} end
+        for k, v in pairs(BR.DefaultOptions.conditions) do
+            local c = group.conditions[k]
+            -- 1.x slash commands stored booleans
+            if c == true then c = 1 elseif c == false then c = 0 end
+            if type(c) ~= "number" then c = v end
+            group.conditions[k] = c
+        end
+        if type(group.warntime) ~= "number" then group.warntime = opts.warntime end
+        if type(group.warnstacks) ~= "number" then group.warnstacks = 0 end
+        if not TIMERS[group.timer] then group.timer = "default" end
+        if not GLOWS[group.glow] then group.glow = "default" end
+        if not OVERLAYS[group.overlay] then group.overlay = "default" end
+        if type(group.size) ~= "number" or group.size < 10 or group.size > 400 then group.size = nil end
+        if type(group.script) ~= "string" then group.script = "" end
+    end
     for g, group in pairs(BRVars.BuffGroups) do
         if type(group) ~= "table" then
             BRVars.BuffGroups[g] = nil
@@ -791,18 +1964,17 @@ function BR.SanityCheck()
             if type(group.buffs) ~= "table" then group.buffs = {} end
             -- 1.x cached icon paths here
             for b in pairs(group.buffs) do group.buffs[b] = true end
-            if type(group.conditions) ~= "table" then group.conditions = {} end
-            for k, v in pairs(BR.DefaultOptions.conditions) do
-                local c = group.conditions[k]
-                -- 1.x slash commands stored booleans
-                if c == true then c = 1 elseif c == false then c = 0 end
-                if type(c) ~= "number" then c = v end
-                group.conditions[k] = c
-            end
-            if type(group.warntime) ~= "number" then group.warntime = opts.warntime end
-            if type(group.script) ~= "string" then group.script = "" end
+            CheckGroup(group)
+            if not COMBAT_MODES[group.combat] then group.combat = "cdm" end
             if group.icon == nil then group.icon = QUESTION_MARK end
         end
+    end
+    for k in pairs(BRVars.Enchants) do
+        if not ENCHANT_SLOTS[k] then BRVars.Enchants[k] = nil end
+    end
+    for slot in pairs(ENCHANT_SLOTS) do
+        if type(BRVars.Enchants[slot]) ~= "table" then BRVars.Enchants[slot] = NewEnchant() end
+        CheckGroup(BRVars.Enchants[slot])
     end
     opts.version = BR.DefaultOptions.version
 end
@@ -813,7 +1985,9 @@ local function OnUpdate(self, elapsed)
     if BR.elapsed < TICK then return end
     BR.elapsed = 0
     BR.UpdateStatus()
-    if BR.needScan then BR.ScanAuras() end
+    -- in combat this is the live lookup, a buff can drop without an aura event we can use
+    if BR.needScan or AurasSecret() then BR.ScanAuras() end
+    BR.UpdateLive()
     BR.ScanEnchants()
     BR.RunScripts()
     BR.Refresh()
@@ -827,15 +2001,17 @@ function BR.Init()
     BR.CompileScripts()
     BR.ApplyLayout()
     BR.SetLocked(true)
+    BR.UpdateMinimap()
 
     frame:RegisterUnitEvent("UNIT_AURA", "player")
     frame:RegisterUnitEvent("UNIT_INVENTORY_CHANGED", "player")
     frame:RegisterEvent("PLAYER_ENTERING_WORLD")
     frame:RegisterEvent("PLAYER_REGEN_DISABLED")
     frame:RegisterEvent("PLAYER_REGEN_ENABLED")
+    frame:RegisterEvent("SPELLS_CHANGED")
     frame:SetScript("OnUpdate", OnUpdate)
 
-    Print("loaded. Type /br help for commands.")
+    Print("loaded. Type /br for the options.")
 end
 
 frame:SetScript("OnEvent", function(self, event, arg1)
@@ -859,11 +2035,18 @@ frame:SetScript("OnEvent", function(self, event, arg1)
         BR.status.combat = false
         BR.needScan = true
         BR.ScanAuras()
+    elseif event == "SPELLS_CHANGED" then
+        BR.book = nil
     elseif event == "PLAYER_ENTERING_WORLD" then
         BR.status.combat = InCombatLockdown() and true or false
         BR.needScan = true
         BR.ScanAuras()
         BR.ScanEnchants()
+        -- once the Cooldown Manager has made its frames
+        if not BR.noticesDue and C_Timer then
+            BR.noticesDue = true
+            C_Timer.After(10, function() BR.CombatNotices() end)
+        end
     end
     BR.UpdateStatus()
     BR.Refresh()
