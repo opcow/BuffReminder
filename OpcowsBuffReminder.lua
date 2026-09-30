@@ -10,7 +10,8 @@
 --   expiration times recorded before the pull.
 -- * Blizzard Auras: Blizzard's own aura button shows the buff over the group's icon for the
 --   whole fight, with its exact time and stacks. Addon code can't read what it shows.
--- A full re-read happens after combat.
+-- A buff you cast on yourself in combat is marked up right away, lasting as long as it did the
+-- last time it was read. A full re-read happens after combat.
 
 local ADDON_NAME = ...
 local MEDIA = "Interface\\AddOns\\" .. ADDON_NAME .. "\\media\\"
@@ -126,6 +127,12 @@ local function Print(msg)
     DEFAULT_CHAT_FRAME:AddMessage("|cfff4f9a7Opcow's Buff Reminder:|r " .. msg)
 end
 
+-- /obr debug, prints what casts and combat reads decide
+BR.debug = false
+local function Debug(msg)
+    if BR.debug then Print("|cff999999" .. msg .. "|r") end
+end
+
 local function DeepCopy(t)
     local c = {}
     for k, v in pairs(t) do
@@ -220,7 +227,8 @@ local function ReadPlayerBuffs()
     return found, list
 end
 
--- buffs had before, by lower case name, so they can be picked later. The oldest are dropped.
+-- buffs had before, by lower case name, so they can be picked later and their duration is known
+-- when they're cast in combat. The oldest are dropped.
 local SEEN_MAX = 200
 local function RememberSeen(list)
     local seen, t, added = OpcowsBuffReminderDB.Seen, time(), false
@@ -228,7 +236,7 @@ local function RememberSeen(list)
         if type(e.name) == "string" then
             local key = e.name:lower()
             if not seen[key] then added = true end
-            seen[key] = { name = e.name, id = e.spellId, icon = e.icon, t = t }
+            seen[key] = { name = e.name, id = e.spellId, icon = e.icon, duration = e.duration, t = t }
         end
     end
     if not added then return end
@@ -246,7 +254,12 @@ function BR.ScanAuras()
         return false
     end
     local ok, found, list = pcall(ReadPlayerBuffs)
-    if not ok then return false end
+    if not ok then
+        if not BR.readFailed then Debug("buffs can't be read, but the game didn't say auras are secret") end
+        BR.readFailed = true
+        return false
+    end
+    BR.readFailed = nil
     RememberSeen(list)
     BR.groupState = {}
     for g, group in pairs(OpcowsBuffReminderDB.BuffGroups) do
@@ -525,9 +538,111 @@ function BR.LiveScan()
         if best then
             BR.groupState[g] = best
         elseif sure then
+            if prev and prev.present then Debug(("combat read: %s is gone"):format(g)) end
             BR.groupState[g] = { present = false }
         end
     end
+end
+
+-- your casts -------------------------------------------------------------------------------
+-- A buff you cast on yourself is up from the moment the cast lands, and lasts as long as it did
+-- the last time it was read, so in combat its group doesn't wait for an aura that can't be read.
+-- Out of combat the aura read that follows the cast replaces this with the exact state.
+BR.sentSelf = {}        -- [spell id] = true when the last cast of it was on you, false when on someone else
+
+local function Bool(v)
+    if not issecretvalue(v) then return v and true or false end
+end
+
+-- true when the spell can only land on you or your party, ex: Ice Armor or Battle Shout
+local function Untargeted(id)
+    if not (C_Spell and C_Spell.SpellHasRange) then return false end
+    local ok, r = pcall(C_Spell.SpellHasRange, id)
+    return ok and not issecretvalue(r) and r == false
+end
+
+-- UNIT_SPELLCAST_SENT, works out whether the cast is on you so casts on other players can be
+-- told apart. nil when it can't be told.
+function BR.OnCastSent(target, id)
+    id = Num(id)
+    if not id then return end
+    local onMe
+    if type(target) == "string" and not issecretvalue(target) then
+        -- nothing aimed at, or you. Forever gives your surname as UnitName's second value and
+        -- adds it to the target after a space, ex: "Brillig Ironhoof".
+        local name, surname = UnitName("player")
+        local full = type(surname) == "string" and surname ~= "" and name .. " " .. surname or name
+        onMe = target == "" or target == name or target == full
+    else
+        -- the target is hidden: a helpful spell lands on you unless someone friendly is selected
+        local ok1, isMe = pcall(UnitIsUnit, "target", "player")
+        local ok2, assist = pcall(UnitCanAssist, "player", "target")
+        isMe, assist = ok1 and Bool(isMe), ok2 and Bool(assist)
+        if isMe ~= nil and assist ~= nil then onMe = isMe or not assist end
+    end
+    BR.sentSelf[id] = onMe
+    Debug(("sent %d, target %s, on you: %s"):format(id,
+        issecretvalue(target) and "hidden" or tostring(target), tostring(onMe)))
+end
+
+-- UNIT_SPELLCAST_SUCCEEDED, marks the groups of a buff you cast on yourself as up
+function BR.OnCast(id)
+    if not Num(id) then
+        Debug("cast with a hidden spell id")
+        return
+    end
+    local onMe = BR.sentSelf[id]
+    BR.sentSelf[id] = nil
+    if not (C_Spell and C_Spell.GetSpellName) then return end
+    local ok, name = pcall(C_Spell.GetSpellName, id)
+    if not ok or type(name) ~= "string" or issecretvalue(name) then
+        Debug(("cast %d, its name can't be read"):format(id))
+        return
+    end
+    name = name:lower()
+
+    local groups = {}
+    for g, group in pairs(OpcowsBuffReminderDB.BuffGroups) do
+        for buff in pairs(group.buffs) do
+            local key = BuffKey(buff)
+            local match = key == id or key == name
+            if not match then
+                for _, v in ipairs(SpellIds(buff)) do
+                    if v == id then match = true end
+                end
+            end
+            if match then
+                table.insert(groups, g)
+                break
+            end
+        end
+    end
+    if #groups == 0 then return end
+
+    if not (onMe or Untargeted(id)) then
+        Debug(("cast %s, not on you (%s)"):format(name, tostring(onMe)))
+        return
+    end
+    -- without a duration seen before, the time left isn't known
+    local seen = OpcowsBuffReminderDB.Seen[name]
+    local dur = seen and Num(seen.duration)
+    if not dur then
+        Debug(("cast %s, its duration hasn't been seen yet"):format(name))
+        return
+    end
+
+    local now = GetTime()
+    local e = { present = true, expires = dur > 0 and now + dur or 0, duration = dur }
+    for _, g in ipairs(groups) do
+        BR.castAt[g] = now
+        -- another buff of the group may still outlast it
+        local prev = BR.groupState[g]
+        if not (prev and prev.present and prev.expires and Outlasts(prev, e)) then
+            BR.groupState[g] = { present = true, expires = e.expires, duration = e.duration }
+            Debug(("cast %s, %s is up for %ds"):format(name, g, dur))
+        end
+    end
+    BR.Refresh()
 end
 
 -- a hand's temporary enchant or imbue from C_Item.GetWeaponEnchantInfo, ignoring permanent enchants.
@@ -896,7 +1011,7 @@ function BR.CombatNotices(only)
                 noticed[g] = text
                 local hint = ""
                 if group.combat == "cdm" then
-                    hint = " Add it to the Cooldown Manager's buffs, or switch the group to Blizzard Auras on the Buff groups tab (/br)."
+                    hint = " Add it to the Cooldown Manager's buffs, or switch the group to Blizzard Auras on the Buff groups tab (/obr)."
                 end
                 Print(('"%s": %s%s'):format(g, text, hint))
             end
@@ -1891,9 +2006,15 @@ BR.ENCHANT_SLOTS, BR.ENCHANT_NAMES = ENCHANT_SLOTS, ENCHANT_NAMES
 BR.Print = Print
 BR.SpellTexture = SpellTexture
 
--- /obr opens the options window, everything is set up there
+-- /obr opens the options window, everything is set up there. /obr debug prints what casts and
+-- combat reads decide.
 SLASH_OpcowsBuffReminder1 = "/obr"
-SlashCmdList.OpcowsBuffReminder = function()
+SlashCmdList.OpcowsBuffReminder = function(msg)
+    if msg and msg:lower():match("^%s*debug%s*$") then
+        BR.debug = not BR.debug
+        Print("debug " .. (BR.debug and "on" or "off") .. ", auras secret now: " .. tostring(AurasSecret()))
+        return
+    end
     BR.ToggleConfig()
 end
 
@@ -2075,6 +2196,8 @@ function BR.Init()
 
     frame:RegisterUnitEvent("UNIT_AURA", "player")
     frame:RegisterUnitEvent("UNIT_INVENTORY_CHANGED", "player")
+    frame:RegisterUnitEvent("UNIT_SPELLCAST_SENT", "player")
+    frame:RegisterUnitEvent("UNIT_SPELLCAST_SUCCEEDED", "player")
     frame:RegisterEvent("PLAYER_ENTERING_WORLD")
     frame:RegisterEvent("PLAYER_REGEN_DISABLED")
     frame:RegisterEvent("PLAYER_REGEN_ENABLED")
@@ -2084,15 +2207,23 @@ function BR.Init()
     pcall(frame.RegisterEvent, frame, "SPELL_DATA_LOAD_RESULT")
     frame:SetScript("OnUpdate", OnUpdate)
 
-    Print("loaded. Type /br for the options.")
+    Print("loaded. Type /obr for the options.")
 end
 
-frame:SetScript("OnEvent", function(self, event, arg1)
+frame:SetScript("OnEvent", function(self, event, arg1, arg2, arg3, arg4)
     if event == "ADDON_LOADED" then
         if arg1 == ADDON_NAME then
             self:UnregisterEvent("ADDON_LOADED")
             BR.Init()
         end
+        return
+    elseif event == "UNIT_SPELLCAST_SENT" then
+        -- unit, target, cast GUID, spell id
+        BR.OnCastSent(arg2, arg4)
+        return
+    elseif event == "UNIT_SPELLCAST_SUCCEEDED" then
+        -- unit, cast GUID, spell id
+        BR.OnCast(arg3)
         return
     end
 

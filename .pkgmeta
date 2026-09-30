@@ -1,4 +1,6 @@
 package-as: OpcowsBuffReminder
 
+manual-changelog: CHANGELOG.md
+
 ignore:
   - docs

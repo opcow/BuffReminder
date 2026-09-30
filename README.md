@@ -17,6 +17,8 @@ If a group can only be predicted, because the Cooldown Manager isn't available f
 
 **Blizzard Auras**, for buffs the Cooldown Manager can't track, like a shaman's Lightning Shield. Blizzard's own aura button is placed over the group's icon and shows the buff with its exact time and stack count for the whole fight, with the count in red at or under the group's low stack warning. When the buff drops the button disappears and the reminder icon underneath shows. Addon code can't read what Blizzard's button shows, so in combat the group's icon is always shown, not only when the buff is missing or low. Use the group's conditions to limit when that is. The button is set up out of combat and needs the buff's spell id, which is known once you've had the buff or when you add it by id.
 
+**Casting a buff in combat.** When you cast one of a group's buffs on yourself during a fight, the group is marked as up right away and its timer starts from the cast, using the buff's duration from the last time it was read out of combat. This works in either mode and doesn't need the aura to be readable. A buff that has never been read out of combat on this character has no known duration and waits for the sources above. A cast aimed at another player doesn't count. `/obr debug` prints what each cast of a group's buff decides, for when one isn't picked up.
+
 When combat ends everything is read again, which corrects any prediction.
 
 ## Low stack warning
