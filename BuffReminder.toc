@@ -7,5 +7,6 @@
 ## AddonCompartmentFuncOnEnter: BuffReminder_OnAddonCompartmentEnter
 ## AddonCompartmentFuncOnLeave: BuffReminder_OnAddonCompartmentLeave
 ## SavedVariablesPerCharacter: BRVars
+## SavedVariables: BRAccount
 BuffReminder.lua
 Config.lua

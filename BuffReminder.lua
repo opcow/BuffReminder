@@ -53,7 +53,7 @@ local BR = BuffReminder
 BR.DefaultOptions = {
     ["version"] = "2.0",
     ["size"] = 30,
-    ["warntime"] = 60,
+    ["warntime"] = 0,       -- seconds left when the icon starts showing, 0 only when the buff is gone
     ["alpha"] = 1.0,        -- opacity of an icon whose buff is missing
     ["warnalpha"] = 1.0,    -- and of one warning that the buff is running out or low on stacks
     ["glow"] = "none",      -- glow around icons whose buff is missing, see GLOWS
@@ -1734,6 +1734,62 @@ function BR.Reset()
     BR.CompileScripts()
     BR.ApplyLayout()
     BR.UpdateMinimap()
+    BR.RememberCharacter()
+end
+
+-- other characters -----------------------------------------------------------------------
+-- BRAccount is saved for the whole account. Each character keeps its settings there, so
+-- another character can copy them. The tables are this character's own, saved with it at logout.
+local function CharacterKey()
+    return ("%s - %s"):format(UnitName("player") or "?", GetRealmName() or "?")
+end
+
+function BR.RememberCharacter()
+    local _, class = UnitClass("player")
+    BRAccount.chars[CharacterKey()] = {
+        class = class,
+        time = time(),
+        BuffGroups = BRVars.BuffGroups,
+        Options = BRVars.Options,
+        Enchants = BRVars.Enchants,
+    }
+end
+
+-- the other characters, { key, class, groups }, newest first
+function BR.GetCharacters()
+    local list, me = {}, CharacterKey()
+    for key, c in pairs(BRAccount.chars) do
+        if key ~= me then
+            local n = 0
+            for _ in pairs(c.BuffGroups) do n = n + 1 end
+            table.insert(list, { key = key, class = c.class, groups = n, time = c.time })
+        end
+    end
+    table.sort(list, function(a, b) return a.time > b.time end)
+    return list
+end
+
+function BR.ForgetCharacter(key)
+    BRAccount.chars[key] = nil
+end
+
+-- replace this character's groups, enchants and options with a copy of another's
+function BR.CopyCharacter(key)
+    local c = BRAccount.chars[key]
+    if not c then return false end
+    BRVars.BuffGroups = DeepCopy(c.BuffGroups)
+    BRVars.Options = DeepCopy(c.Options)
+    BRVars.Enchants = DeepCopy(c.Enchants)
+    BR.SanityCheck()
+    BR.groupState = {}
+    BR.scriptRes = {}
+    BR.castAt = {}
+    BR.CompileScripts()
+    BR.ApplyLayout()
+    BR.UpdateMinimap()
+    BR.UpdateLive()
+    BR.RememberCharacter()
+    return true
 end
 
 -- current buffs for the config UI, nil while they can't be read
@@ -1764,8 +1820,13 @@ local function LooksLikeBuff(id, name)
         local ok, d = pcall(C_Spell.GetSpellDescription, id)
         if ok and type(d) == "string" and not issecretvalue(d) then desc = d:lower() end
     end
-    if desc:find("for %d[%d%.]* *min") or desc:find("for %d[%d%.]* *hour") or desc:find("for %d[%d%.]* *sec")
-        or desc:find("lasts %d") then
+    -- the text isn't there until the game has loaded the spell, ask for it and list it again then
+    if desc == "" and C_Spell.RequestLoadSpellData then
+        pcall(C_Spell.RequestLoadSpellData, id)
+    end
+    -- minutes and hours are buffs, seconds only when it's for that long: "every 3 sec" is a heal
+    if desc:find("%d *min") or desc:find("%d *hour") or desc:find("%d *hr")
+        or desc:find("for %d[%d%.]* *sec") or desc:find("lasts %d") then
         return true
     end
     name = name:lower()
@@ -1841,6 +1902,15 @@ end
 -- fill in missing or mistyped options and upgrade 1.x settings
 function BR.SanityCheck()
     local opts = BRVars.Options
+    -- other characters' settings, account wide
+    if type(BRAccount) ~= "table" then BRAccount = {} end
+    if type(BRAccount.chars) ~= "table" then BRAccount.chars = {} end
+    for key, c in pairs(BRAccount.chars) do
+        if type(c) ~= "table" or type(c.BuffGroups) ~= "table" or type(c.Options) ~= "table"
+            or type(c.Enchants) ~= "table" or type(c.time) ~= "number" then
+            BRAccount.chars[key] = nil
+        end
+    end
     -- the glow was a switch
     if opts.glow == true then opts.glow = "pulse" elseif opts.glow == false then opts.glow = "none" end
     -- there was one opacity for every icon, keep it for warnings too
@@ -1998,6 +2068,7 @@ function BR.Init()
     if type(BRVars.BuffGroups) ~= "table" then BRVars.BuffGroups = {} end
     if type(BRVars.Options) ~= "table" then BRVars.Options = DeepCopy(BR.DefaultOptions) end
     BR.SanityCheck()
+    BR.RememberCharacter()
     BR.CompileScripts()
     BR.ApplyLayout()
     BR.SetLocked(true)
@@ -2009,6 +2080,9 @@ function BR.Init()
     frame:RegisterEvent("PLAYER_REGEN_DISABLED")
     frame:RegisterEvent("PLAYER_REGEN_ENABLED")
     frame:RegisterEvent("SPELLS_CHANGED")
+    frame:RegisterEvent("PLAYER_LOGOUT")
+    -- a spell's text loaded, for the buff picker. Not every client has it.
+    pcall(frame.RegisterEvent, frame, "SPELL_DATA_LOAD_RESULT")
     frame:SetScript("OnUpdate", OnUpdate)
 
     Print("loaded. Type /br for the options.")
@@ -2037,6 +2111,20 @@ frame:SetScript("OnEvent", function(self, event, arg1)
         BR.ScanAuras()
     elseif event == "SPELLS_CHANGED" then
         BR.book = nil
+    elseif event == "PLAYER_LOGOUT" then
+        -- the settings may be new tables since login
+        BR.RememberCharacter()
+        return
+    elseif event == "SPELL_DATA_LOAD_RESULT" then
+        -- many load at once, list them again when they're done
+        if BR.OnSpellData and not BR.spellDataDue and C_Timer then
+            BR.spellDataDue = true
+            C_Timer.After(0.3, function()
+                BR.spellDataDue = nil
+                BR.OnSpellData()
+            end)
+        end
+        return
     elseif event == "PLAYER_ENTERING_WORLD" then
         BR.status.combat = InCombatLockdown() and true or false
         BR.needScan = true

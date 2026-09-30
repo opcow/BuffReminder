@@ -327,7 +327,7 @@ local function ConditionsPanel(parent)
     p.warn:SetPoint("LEFT", warnLabel, "RIGHT", 10, 0)
     local secs = Label(p, "sec", "GameFontHighlightSmall")
     secs:SetPoint("LEFT", p.warn, "RIGHT", 4, 0)
-    Tooltip(p.warn, "Early warning", "Show the icon with a countdown when the buff has this many seconds left.")
+    Tooltip(p.warn, "Early warning", "Show the icon with a countdown when the buff has this many seconds left. 0 shows it only once the buff is gone.")
 
     p.script = Button(p, "Script", 70, function() BR.EditScript(p.target) end)
     p.script:SetPoint("TOPRIGHT", 0, -70)
@@ -425,6 +425,20 @@ StaticPopupDialogs["BUFFREMINDER_DELETE_GROUP"] = {
     button2 = NO,
     OnAccept = function(self, data)
         BR.RemoveGroup(data)
+        Changed()
+    end,
+    timeout = 0,
+    whileDead = true,
+    hideOnEscape = true,
+    preferredIndex = 3,
+}
+
+StaticPopupDialogs["BUFFREMINDER_COPY"] = {
+    text = "Replace this character's BuffReminder settings with %s's? This deletes this character's buff groups.",
+    button1 = YES,
+    button2 = NO,
+    OnAccept = function(self, data)
+        if BR.CopyCharacter(data) then BR.Print("Settings copied from " .. data .. ".") end
         Changed()
     end,
     timeout = 0,
@@ -605,6 +619,10 @@ local function CreateGroupsPage(page)
     end)
     pickBtn:SetPoint("LEFT", addBtn, "RIGHT", 4, 0)
     Tooltip(pickBtn, "Browse buffs", "Pick from your buff spells, the buffs you have now or ones you've had before.")
+    -- spell text the game loaded late can turn up more buffs
+    BR.OnSpellData = function()
+        if picker:IsShown() and pickTab == "spells" then picker:Reload() end
+    end
     page:SetScript("OnHide", function() picker:Hide() end)
 
     local conds = ConditionsPanel(detail)
@@ -897,7 +915,10 @@ local function CreateOptionsPage(page)
     end)
     browse:SetPoint("LEFT", test, "RIGHT", 4, 0)
     Tooltip(browse, "Browse sounds", "The game's sounds. Click one to use it and hear it.")
-    page:SetScript("OnHide", function() soundPicker:Hide() end)
+    page:SetScript("OnHide", function()
+        soundPicker:Hide()
+        if page.copyPicker then page.copyPicker:Hide() end
+    end)
 
     local unlock = Check(page, "Unlock icons to move them", function(v) BR.SetLocked(not v) end)
     unlock:SetPoint("TOPLEFT", 0, -232)
@@ -972,6 +993,40 @@ local function CreateOptionsPage(page)
     local join = Button(page, "Icons in one row", 120, function() BR.JoinBars() end)
     join:SetPoint("RIGHT", reset, "LEFT", -8, 0)
     Tooltip(join, "Icons in one row", "Puts every icon back in one row, where the first set of icons is.")
+
+    local copyPicker = Picker(page, "Copy settings from", 300, 300)
+    local function CharacterRows()
+        local rows = {}
+        for _, c in ipairs(BR.GetCharacters()) do
+            local color = c.class and RAID_CLASS_COLORS and RAID_CLASS_COLORS[c.class]
+            local label = color and ("|c%s%s|r"):format(color.colorStr, c.key) or c.key
+            table.insert(rows, {
+                name = c.key,
+                text = ("%s |cff808080(%d group%s)|r"):format(label, c.groups, c.groups == 1 and "" or "s"),
+                onClick = function()
+                    copyPicker:Hide()
+                    StaticPopup_Show("BUFFREMINDER_COPY", c.key, nil, c.key)
+                end,
+                onRemove = function()
+                    BR.ForgetCharacter(c.key)
+                    copyPicker:Reload()
+                end,
+            })
+        end
+        if #rows == 0 then
+            rows[1] = { text = "|cff808080No other characters yet. Log in on one with BuffReminder and it's listed here.|r" }
+        end
+        return rows
+    end
+    local copy = Button(page, "Copy from...", 100, function(self)
+        if copyPicker:IsShown() then copyPicker:Hide() return end
+        copyPicker:Open(self, CharacterRows)
+    end)
+    copy:SetPoint("RIGHT", join, "LEFT", -8, 0)
+    page.copyPicker = copyPicker
+    Tooltip(copy, "Copy from another character",
+        "Replace this character's buff groups, weapon enchants, options and icon placement with another character's. "
+        .. "Characters are listed once they've logged in with BuffReminder. The X forgets one.")
 
     function page:Refresh()
         conds:Load(DefaultTarget())

@@ -2,7 +2,7 @@
 # BuffReminder
 A World of Warcraft: Forever addon that displays user placeable icons on your screen when buffs have expired or are soon to expire. Originally written for WoW 1.12 (Vanilla); the 1.12 version is on the `master` branch.
 
-![example icon image](http://i.imgur.com/i6dGRIO.png)
+![example icon image](docs/screen_1.png)
 
 ## Combat behavior
 WoW: Forever hides aura data from addons during combat, and the list of your buffs can't be read at all. Out of combat BuffReminder reads every buff and records its expiration time. Each group has an **In combat** setting that picks how it's followed during a fight.
@@ -52,6 +52,8 @@ The **Buff groups** tab manages groups and the weapon enchant groups, their buff
 Buffs already in a group are greyed out with the group's name.
 
 The **Options** tab has the defaults new groups start with, the default icon size, the opacity of icons whose buff is missing and of ones warning it's running out or low on stacks, how icons whose buff is missing are marked, the warning sound and a reset button. "Browse..." beside the warning sound lists the game's sounds, click one to use it and hear it.
+
+"Copy from..." on the Options tab replaces this character's settings (buff groups, weapon enchants, options and icon placement) with another character's. A character is listed once it has logged in with BuffReminder, and its list shows the settings it had when it last logged out. The X beside a character forgets it.
 
 A missing buff can be marked with a glow (pulse, flash, steady, or the game's spell alert glow like a proc on an action button) and a color washed over the icon, ex: red. Each group picks its own or follows the Options tab. Icons that are only running out or low on stacks aren't marked.
 
