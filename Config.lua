@@ -4,7 +4,7 @@
 -- Options window, script editor, addon compartment and minimap buttons. Everything is built in Lua on
 -- first use, none of it is protected so it works in combat.
 
-local BR = BuffReminder
+local BR = OpcowsBuffReminder
 local ROW_HEIGHT = 20
 
 local COND_LABELS = {
@@ -350,7 +350,7 @@ local function ConditionsPanel(parent)
 end
 
 local function GroupTarget(g)
-    local group = BRVars.BuffGroups[g]
+    local group = OpcowsBuffReminderDB.BuffGroups[g]
     return {
         name = g,
         conds = group.conditions,
@@ -362,7 +362,7 @@ local function GroupTarget(g)
 end
 
 local function EnchantTarget(slot)
-    local e = BRVars.Enchants[slot]
+    local e = OpcowsBuffReminderDB.Enchants[slot]
     return {
         name = BR.ENCHANT_NAMES[slot],
         conds = e.conditions,
@@ -392,7 +392,7 @@ local function EnchantNow(slot)
 end
 
 local function DefaultTarget()
-    local opts = BRVars.Options
+    local opts = OpcowsBuffReminderDB.Options
     return {
         name = "defaults",
         conds = opts.conditions,
@@ -419,7 +419,7 @@ local function SortedKeys(t)
     return keys
 end
 
-StaticPopupDialogs["BUFFREMINDER_DELETE_GROUP"] = {
+StaticPopupDialogs["OPCOWSBUFFREMINDER_DELETE_GROUP"] = {
     text = 'Delete the buff group "%s"?',
     button1 = YES,
     button2 = NO,
@@ -433,8 +433,8 @@ StaticPopupDialogs["BUFFREMINDER_DELETE_GROUP"] = {
     preferredIndex = 3,
 }
 
-StaticPopupDialogs["BUFFREMINDER_COPY"] = {
-    text = "Replace this character's BuffReminder settings with %s's? This deletes this character's buff groups.",
+StaticPopupDialogs["OPCOWSBUFFREMINDER_COPY"] = {
+    text = "Replace this character's Buff Reminder settings with %s's? This deletes this character's buff groups.",
     button1 = YES,
     button2 = NO,
     OnAccept = function(self, data)
@@ -447,8 +447,8 @@ StaticPopupDialogs["BUFFREMINDER_COPY"] = {
     preferredIndex = 3,
 }
 
-StaticPopupDialogs["BUFFREMINDER_RESET"] = {
-    text = "Clear all BuffReminder settings? This deletes all of your buff groups.",
+StaticPopupDialogs["OPCOWSBUFFREMINDER_RESET"] = {
+    text = "Clear all Buff Reminder settings? This deletes all of your buff groups.",
     button1 = YES,
     button2 = NO,
     OnAccept = function()
@@ -469,8 +469,8 @@ local function CreateGroupsPage(page)
 
     -- the selected buff or enchant group
     local function Current()
-        if selectedSlot then return BRVars.Enchants[selectedSlot] end
-        return BRVars.BuffGroups[selected]
+        if selectedSlot then return OpcowsBuffReminderDB.Enchants[selectedSlot] end
+        return OpcowsBuffReminderDB.BuffGroups[selected]
     end
 
     local groupsLabel = Label(page, "Buff groups")
@@ -485,7 +485,7 @@ local function CreateGroupsPage(page)
     local function NewGroup()
         local g = Trim(newEdit:GetText())
         if g == "" then return end
-        if not BRVars.BuffGroups[g] then BR.AddBuffToGroup(g, nil) end
+        if not OpcowsBuffReminderDB.BuffGroups[g] then BR.AddBuffToGroup(g, nil) end
         selected, selectedSlot = g, nil
         newEdit:SetText("")
         newEdit:ClearFocus()
@@ -512,7 +512,7 @@ local function CreateGroupsPage(page)
     name:SetPoint("RIGHT", detail, "RIGHT", -80, 0)
     name:SetWordWrap(false)
     local delete = Button(detail, "Delete", 70, function()
-        StaticPopup_Show("BUFFREMINDER_DELETE_GROUP", selected, nil, selected)
+        StaticPopup_Show("OPCOWSBUFFREMINDER_DELETE_GROUP", selected, nil, selected)
     end)
     delete:SetPoint("TOPRIGHT", 0, -3)
 
@@ -584,7 +584,7 @@ local function CreateGroupsPage(page)
         end
         -- the group each buff is in already
         local used = {}
-        for g, group in pairs(BRVars.BuffGroups) do
+        for g, group in pairs(OpcowsBuffReminderDB.BuffGroups) do
             for b in pairs(group.buffs) do used[tostring(b):lower()] = g end
         end
         table.sort(list, function(a, b) return tostring(a.name) < tostring(b.name) end)
@@ -699,7 +699,7 @@ local function CreateGroupsPage(page)
     local combatLabel = Label(detail, "In combat:")
     combatLabel:SetPoint("TOPLEFT", 0, -366)
     local combat = Button(detail, "", 130, function()
-        local group = BRVars.BuffGroups[selected]
+        local group = OpcowsBuffReminderDB.BuffGroups[selected]
         BR.SetCombatMode(selected, group.combat == "cdm" and "blizzard" or "cdm")
         Changed()
     end)
@@ -734,8 +734,8 @@ local function CreateGroupsPage(page)
     combatStatus:SetPoint("RIGHT", detail, "RIGHT")
 
     function page:Refresh()
-        if selected and not BRVars.BuffGroups[selected] then selected = nil end
-        local names = SortedKeys(BRVars.BuffGroups)
+        if selected and not OpcowsBuffReminderDB.BuffGroups[selected] then selected = nil end
+        local names = SortedKeys(OpcowsBuffReminderDB.BuffGroups)
         if not selected and not selectedSlot then
             selected = names[1]
             if not selected then selectedSlot = "main" end
@@ -757,7 +757,7 @@ local function CreateGroupsPage(page)
         for _, g in ipairs(names) do
             table.insert(items, {
                 text = g,
-                icon = BRVars.BuffGroups[g].icon,
+                icon = OpcowsBuffReminderDB.BuffGroups[g].icon,
                 selected = g == selected,
                 onClick = function()
                     selected, selectedSlot = g, nil
@@ -839,9 +839,9 @@ local function CreateOptionsPage(page)
     local sizeLabel = Label(page, "Icon size:")
     sizeLabel:SetPoint("TOPLEFT", 0, -177)
     local size = ValueBox(page, 40,
-        function() return BRVars.Options.size end,
+        function() return OpcowsBuffReminderDB.Options.size end,
         NumberSetter(10, 400, function(n)
-            BRVars.Options.size = n
+            OpcowsBuffReminderDB.Options.size = n
             BR.ApplyLayout()
         end))
     size:SetPoint("LEFT", sizeLabel, "RIGHT", 10, 0)
@@ -852,15 +852,15 @@ local function CreateOptionsPage(page)
     local missingLabel = Label(page, "missing", "GameFontHighlightSmall")
     missingLabel:SetPoint("LEFT", alphaLabel, "RIGHT", 8, 0)
     local alpha = ValueBox(page, 36,
-        function() return BRVars.Options.alpha end,
-        NumberSetter(0, 1, function(n) BRVars.Options.alpha = n end))
+        function() return OpcowsBuffReminderDB.Options.alpha end,
+        NumberSetter(0, 1, function(n) OpcowsBuffReminderDB.Options.alpha = n end))
     alpha:SetPoint("LEFT", missingLabel, "RIGHT", 6, 0)
     Tooltip(alpha, "Opacity when missing", "Icons whose buff is gone. 0 (invisible) to 1 (solid).")
     local warnLabel = Label(page, "warning", "GameFontHighlightSmall")
     warnLabel:SetPoint("LEFT", alpha, "RIGHT", 10, 0)
     local warnAlpha = ValueBox(page, 36,
-        function() return BRVars.Options.warnalpha end,
-        NumberSetter(0, 1, function(n) BRVars.Options.warnalpha = n end))
+        function() return OpcowsBuffReminderDB.Options.warnalpha end,
+        NumberSetter(0, 1, function(n) OpcowsBuffReminderDB.Options.warnalpha = n end))
     warnAlpha:SetPoint("LEFT", warnLabel, "RIGHT", 6, 0)
     Tooltip(warnAlpha, "Opacity when warning",
         "Icons whose buff is still up but running out (early warning time) or low on stacks. 0 (invisible) to 1 (solid).")
@@ -869,7 +869,7 @@ local function CreateOptionsPage(page)
     soundLabel:SetPoint("TOPLEFT", 0, -207)
     local sound = ValueBox(page, 150,
         function()
-            local id = BRVars.Options.warnsound
+            local id = OpcowsBuffReminderDB.Options.warnsound
             return id and (BR.SoundName(id) or id)
         end,
         function(text)
@@ -878,13 +878,13 @@ local function CreateOptionsPage(page)
     sound:SetPoint("LEFT", soundLabel, "RIGHT", 10, 0)
     Tooltip(sound, "Warning sound", "Played when a new icon appears. A sound kit id or a SOUNDKIT name like RAID_WARNING. Leave empty for no sound.")
     local test = Button(page, "Test", 50, function()
-        if BRVars.Options.warnsound then PlaySound(BRVars.Options.warnsound, "Master") end
+        if OpcowsBuffReminderDB.Options.warnsound then PlaySound(OpcowsBuffReminderDB.Options.warnsound, "Master") end
     end)
     test:SetPoint("LEFT", sound, "RIGHT", 6, 0)
 
     local soundPicker = Picker(page, "Warning sound", 300, 340)
     local function SoundRows()
-        local current = BRVars.Options.warnsound
+        local current = OpcowsBuffReminderDB.Options.warnsound
         local rows = { {
             name = "none",
             text = "|cff808080None|r",
@@ -930,27 +930,27 @@ local function CreateOptionsPage(page)
     local hide = Check(page, "Hide all icons", function() BR.ToggleHidden() end)
     hide:SetPoint("TOPLEFT", 200, -232)
     local minimap = Check(page, "Minimap button", function(v)
-        BRVars.Options.minimap.hide = not v
+        OpcowsBuffReminderDB.Options.minimap.hide = not v
         BR.UpdateMinimap()
     end)
     minimap:SetPoint("TOPLEFT", 360, -232)
 
     local textLabel = Label(page, "Icons show:")
     textLabel:SetPoint("TOPLEFT", 0, -263)
-    local showTime = Check(page, "Time left", function(v) BRVars.Options.icontext.time = v; Changed() end)
+    local showTime = Check(page, "Time left", function(v) OpcowsBuffReminderDB.Options.icontext.time = v; Changed() end)
     showTime:SetPoint("LEFT", textLabel, "RIGHT", 8, -1)
     Tooltip(showTime, "Time left", "The time left as text at the top of the icon. Groups can override this on the Buff groups tab.")
-    local showSwipe = Check(page, "Swipe", function(v) BRVars.Options.icontext.swipe = v; Changed() end)
+    local showSwipe = Check(page, "Swipe", function(v) OpcowsBuffReminderDB.Options.icontext.swipe = v; Changed() end)
     showSwipe:SetPoint("LEFT", showTime, "RIGHT", 70, 0)
     Tooltip(showSwipe, "Swipe", "The time left as a clock swipe darkening the icon. Groups can override this on the Buff groups tab.")
-    local showStacks = Check(page, "Stack count", function(v) BRVars.Options.icontext.stacks = v; Changed() end)
+    local showStacks = Check(page, "Stack count", function(v) OpcowsBuffReminderDB.Options.icontext.stacks = v; Changed() end)
     showStacks:SetPoint("LEFT", showSwipe, "RIGHT", 56, 0)
     local bothLabel = Label(page, "When both:")
     bothLabel:SetPoint("LEFT", showStacks, "RIGHT", 84, 1)
     local PRIORITY_NEXT = { both = "time", time = "stacks", stacks = "both" }
     local PRIORITY_LABELS = { both = "Show both", time = "Time only", stacks = "Stacks only" }
     local priority = Button(page, "", 100, function()
-        local t = BRVars.Options.icontext
+        local t = OpcowsBuffReminderDB.Options.icontext
         t.priority = PRIORITY_NEXT[t.priority]
         Changed()
     end)
@@ -963,7 +963,7 @@ local function CreateOptionsPage(page)
     local glowLabel = Label(page, "Glow", "GameFontHighlightSmall")
     glowLabel:SetPoint("LEFT", missingLabel, "RIGHT", 10, 0)
     local glow = Button(page, "", 90, function()
-        BRVars.Options.glow = NextIn(BR.GLOW_ORDER, BRVars.Options.glow, true)
+        OpcowsBuffReminderDB.Options.glow = NextIn(BR.GLOW_ORDER, OpcowsBuffReminderDB.Options.glow, true)
         Changed()
     end)
     glow:SetPoint("LEFT", glowLabel, "RIGHT", 6, 0)
@@ -978,7 +978,7 @@ local function CreateOptionsPage(page)
     local overlayLabel = Label(page, "Color", "GameFontHighlightSmall")
     overlayLabel:SetPoint("LEFT", glow, "RIGHT", 12, 0)
     local overlay = Button(page, "", 80, function()
-        BRVars.Options.overlay = NextIn(BR.OVERLAY_ORDER, BRVars.Options.overlay, true)
+        OpcowsBuffReminderDB.Options.overlay = NextIn(BR.OVERLAY_ORDER, OpcowsBuffReminderDB.Options.overlay, true)
         Changed()
     end)
     overlay:SetPoint("LEFT", overlayLabel, "RIGHT", 6, 0)
@@ -987,7 +987,7 @@ local function CreateOptionsPage(page)
         .. "Groups can have their own on the Buff groups tab.\n|cff808080Click to change.|r")
 
     local reset = Button(page, "Reset all settings", 140, function()
-        StaticPopup_Show("BUFFREMINDER_RESET")
+        StaticPopup_Show("OPCOWSBUFFREMINDER_RESET")
     end)
     reset:SetPoint("BOTTOMRIGHT", 0, 0)
     local join = Button(page, "Icons in one row", 120, function() BR.JoinBars() end)
@@ -1005,7 +1005,7 @@ local function CreateOptionsPage(page)
                 text = ("%s |cff808080(%d group%s)|r"):format(label, c.groups, c.groups == 1 and "" or "s"),
                 onClick = function()
                     copyPicker:Hide()
-                    StaticPopup_Show("BUFFREMINDER_COPY", c.key, nil, c.key)
+                    StaticPopup_Show("OPCOWSBUFFREMINDER_COPY", c.key, nil, c.key)
                 end,
                 onRemove = function()
                     BR.ForgetCharacter(c.key)
@@ -1014,7 +1014,7 @@ local function CreateOptionsPage(page)
             })
         end
         if #rows == 0 then
-            rows[1] = { text = "|cff808080No other characters yet. Log in on one with BuffReminder and it's listed here.|r" }
+            rows[1] = { text = "|cff808080No other characters yet. Log in on one with Buff Reminder and it's listed here.|r" }
         end
         return rows
     end
@@ -1026,20 +1026,20 @@ local function CreateOptionsPage(page)
     page.copyPicker = copyPicker
     Tooltip(copy, "Copy from another character",
         "Replace this character's buff groups, weapon enchants, options and icon placement with another character's. "
-        .. "Characters are listed once they've logged in with BuffReminder. The X forgets one.")
+        .. "Characters are listed once they've logged in with Buff Reminder. The X forgets one.")
 
     function page:Refresh()
         conds:Load(DefaultTarget())
         size:Load()
         alpha:Load()
         warnAlpha:Load()
-        glow:SetText(BR.GLOWS[BRVars.Options.glow])
-        overlay:SetText(BR.OVERLAYS[BRVars.Options.overlay])
+        glow:SetText(BR.GLOWS[OpcowsBuffReminderDB.Options.glow])
+        overlay:SetText(BR.OVERLAYS[OpcowsBuffReminderDB.Options.overlay])
         sound:Load()
         unlock:SetChecked(not BR.locked)
         hide:SetChecked(BR.hideAll)
-        minimap:SetChecked(not BRVars.Options.minimap.hide)
-        local t = BRVars.Options.icontext
+        minimap:SetChecked(not OpcowsBuffReminderDB.Options.minimap.hide)
+        local t = OpcowsBuffReminderDB.Options.icontext
         showTime:SetChecked(t.time)
         showSwipe:SetChecked(t.swipe)
         showStacks:SetChecked(t.stacks)
@@ -1049,7 +1049,7 @@ end
 
 -- main window ------------------------------------------------------------------------------
 local function CreateConfig()
-    local f = CreateFrame("Frame", "BuffReminderConfig", UIParent, "BasicFrameTemplateWithInset")
+    local f = CreateFrame("Frame", "OpcowsBuffReminderConfig", UIParent, "BasicFrameTemplateWithInset")
     f:SetSize(600, 520)
     f:SetPoint("CENTER")
     f:SetFrameStrata("HIGH")
@@ -1061,14 +1061,14 @@ local function CreateConfig()
     f:SetScript("OnDragStart", f.StartMoving)
     f:SetScript("OnDragStop", f.StopMovingOrSizing)
     f:Hide()
-    table.insert(UISpecialFrames, "BuffReminderConfig")
+    table.insert(UISpecialFrames, "OpcowsBuffReminderConfig")
 
     local title = f.TitleText
     if not title then
         title = f:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
         title:SetPoint("TOP", 0, -5)
     end
-    title:SetText("BuffReminder")
+    title:SetText("Opcow's Buff Reminder")
 
     f.tabs = {}
     local function SelectTab(index)
@@ -1110,7 +1110,7 @@ end
 
 -- script editor ----------------------------------------------------------------------------
 local function CreateEditor()
-    local e = CreateFrame("Frame", "BuffReminderScriptEditor", UIParent, "BasicFrameTemplateWithInset")
+    local e = CreateFrame("Frame", "OpcowsBuffReminderScriptEditor", UIParent, "BasicFrameTemplateWithInset")
     e:SetSize(500, 320)
     e:SetPoint("CENTER", 0, 40)
     e:SetFrameStrata("DIALOG")
@@ -1122,7 +1122,7 @@ local function CreateEditor()
     e:SetScript("OnDragStart", e.StartMoving)
     e:SetScript("OnDragStop", e.StopMovingOrSizing)
     e:Hide()
-    table.insert(UISpecialFrames, "BuffReminderScriptEditor")
+    table.insert(UISpecialFrames, "OpcowsBuffReminderScriptEditor")
 
     e.title = e.TitleText
     if not e.title then
@@ -1190,7 +1190,7 @@ function BR.EditScript(target)
 end
 
 -- addon compartment (the addons button by the minimap) --------------------------------------
-function BuffReminder_OnAddonCompartmentClick(addonName, buttonName)
+function OpcowsBuffReminder_OnAddonCompartmentClick(addonName, buttonName)
     if IsShiftKeyDown() then
         BR.SetLocked(not BR.locked)
         BR.Print(BR.locked and "Icons locked." or "Icons unlocked. Drag an icon to move it with the icons snapped to it, Shift-drag to pull it away on its own.")
@@ -1202,16 +1202,16 @@ function BuffReminder_OnAddonCompartmentClick(addonName, buttonName)
     BR.RefreshConfig()
 end
 
-function BuffReminder_OnAddonCompartmentEnter(addonName, button)
+function OpcowsBuffReminder_OnAddonCompartmentEnter(addonName, button)
     GameTooltip:SetOwner(button, "ANCHOR_LEFT")
-    GameTooltip:SetText("BuffReminder")
+    GameTooltip:SetText("Opcow's Buff Reminder")
     GameTooltip:AddLine("Left-click to configure.", 1, 1, 1)
     GameTooltip:AddLine("Right-click to hide or show the icons.", 1, 1, 1)
     GameTooltip:AddLine("Shift-click to unlock or lock the icons.", 1, 1, 1)
     GameTooltip:Show()
 end
 
-function BuffReminder_OnAddonCompartmentLeave()
+function OpcowsBuffReminder_OnAddonCompartmentLeave()
     GameTooltip:Hide()
 end
 
@@ -1219,7 +1219,7 @@ end
 local minimapButton
 
 local function PlaceMinimapButton()
-    local angle = math.rad(BRVars.Options.minimap.angle)
+    local angle = math.rad(OpcowsBuffReminderDB.Options.minimap.angle)
     -- on the edge of the minimap, whatever size it is
     local w, h = Minimap:GetWidth() / 2 + 5, Minimap:GetHeight() / 2 + 5
     minimapButton:ClearAllPoints()
@@ -1227,7 +1227,7 @@ local function PlaceMinimapButton()
 end
 
 local function CreateMinimapButton()
-    local b = CreateFrame("Button", "BuffReminderMinimapButton", Minimap)
+    local b = CreateFrame("Button", "OpcowsBuffReminderMinimapButton", Minimap)
     -- same layout as LibDBIcon so it matches other addons' buttons
     b:SetSize(31, 31)
     b:SetFrameStrata("MEDIUM")
@@ -1251,17 +1251,17 @@ local function CreateMinimapButton()
     border:SetPoint("TOPLEFT")
 
     b:SetScript("OnClick", function(self, button)
-        BuffReminder_OnAddonCompartmentClick("BuffReminder", button)
+        OpcowsBuffReminder_OnAddonCompartmentClick("OpcowsBuffReminder", button)
     end)
-    b:SetScript("OnEnter", function(self) BuffReminder_OnAddonCompartmentEnter("BuffReminder", self) end)
-    b:SetScript("OnLeave", BuffReminder_OnAddonCompartmentLeave)
+    b:SetScript("OnEnter", function(self) OpcowsBuffReminder_OnAddonCompartmentEnter("OpcowsBuffReminder", self) end)
+    b:SetScript("OnLeave", OpcowsBuffReminder_OnAddonCompartmentLeave)
     b:SetScript("OnDragStart", function(self)
         GameTooltip:Hide()
         self:SetScript("OnUpdate", function()
             local mx, my = Minimap:GetCenter()
             local cx, cy = GetCursorPosition()
             local scale = Minimap:GetEffectiveScale()
-            BRVars.Options.minimap.angle = math.deg(math.atan2(cy / scale - my, cx / scale - mx))
+            OpcowsBuffReminderDB.Options.minimap.angle = math.deg(math.atan2(cy / scale - my, cx / scale - mx))
             PlaceMinimapButton()
         end)
     end)
@@ -1271,7 +1271,7 @@ end
 
 function BR.UpdateMinimap()
     if not Minimap then return end
-    local hide = BRVars.Options.minimap.hide
+    local hide = OpcowsBuffReminderDB.Options.minimap.hide
     if hide and not minimapButton then return end
     minimapButton = minimapButton or CreateMinimapButton()
     PlaceMinimapButton()

@@ -1,4 +1,4 @@
--- BuffReminder.lua
+-- OpcowsBuffReminder.lua
 -- Author      : mcrane
 --
 -- WoW: Forever port. Buffs are read out of combat, when aura data is readable. In combat the
@@ -22,7 +22,7 @@ local FONT_ICON_SIZE = 30   -- the icon size the game's number font looks right 
 -- clients without secret values never have secrets
 local issecretvalue = issecretvalue or function() return false end
 
-BuffReminder = {
+OpcowsBuffReminder = {
     icons = {},             -- pooled icon frames
     groupState = {},        -- [group] = { present, expires (0 = permanent), duration, applications }
     castAt = {},            -- [group] = when its buff was last cast, for predicting cooldowns
@@ -48,7 +48,7 @@ BuffReminder = {
         mounted = false,
     },
 }
-local BR = BuffReminder
+local BR = OpcowsBuffReminder
 
 BR.DefaultOptions = {
     ["version"] = "2.0",
@@ -117,13 +117,13 @@ local function TimerStyle(group)
     elseif m == "both" then return true, true
     elseif m == "none" then return false, false
     end
-    local t = BRVars.Options.icontext
+    local t = OpcowsBuffReminderDB.Options.icontext
     return t.time, t.swipe
 end
 
 -- util functions ---------------------------------------------------------------------------
 local function Print(msg)
-    DEFAULT_CHAT_FRAME:AddMessage("|cfff4f9a7BuffReminder:|r " .. msg)
+    DEFAULT_CHAT_FRAME:AddMessage("|cfff4f9a7Opcow's Buff Reminder:|r " .. msg)
 end
 
 local function DeepCopy(t)
@@ -223,7 +223,7 @@ end
 -- buffs had before, by lower case name, so they can be picked later. The oldest are dropped.
 local SEEN_MAX = 200
 local function RememberSeen(list)
-    local seen, t, added = BRVars.Seen, time(), false
+    local seen, t, added = OpcowsBuffReminderDB.Seen, time(), false
     for _, e in ipairs(list) do
         if type(e.name) == "string" then
             local key = e.name:lower()
@@ -249,7 +249,7 @@ function BR.ScanAuras()
     if not ok then return false end
     RememberSeen(list)
     BR.groupState = {}
-    for g, group in pairs(BRVars.BuffGroups) do
+    for g, group in pairs(OpcowsBuffReminderDB.BuffGroups) do
         local best
         for buff in pairs(group.buffs) do
             local key = BuffKey(buff)
@@ -507,7 +507,7 @@ end
 function BR.LiveScan()
     if not C_UnitAuras.GetUnitAuraBySpellID then return end
     local frames
-    for g, group in pairs(BRVars.BuffGroups) do
+    for g, group in pairs(OpcowsBuffReminderDB.BuffGroups) do
         local prev = BR.groupState[g]
         local best, sure = nil, next(group.buffs) ~= nil
         for buff in pairs(group.buffs) do
@@ -599,7 +599,7 @@ end
 -- condition scripts ------------------------------------------------------------------------
 local function Compile(code, label)
     if code == nil or code == "" then return nil end
-    local fn, err = loadstring(code, "BuffReminder " .. label)
+    local fn, err = loadstring(code, "OpcowsBuffReminder " .. label)
     if not fn then Print("Script error in " .. label .. ": " .. err) end
     return fn
 end
@@ -621,27 +621,27 @@ end
 
 function BR.CompileScripts()
     BR.scripts = {}
-    for g, group in pairs(BRVars.BuffGroups) do
+    for g, group in pairs(OpcowsBuffReminderDB.BuffGroups) do
         BR.scripts[g] = Compile(group.script, g)
     end
     BR.enchantScripts = {}
-    for slot, e in pairs(BRVars.Enchants) do
+    for slot, e in pairs(OpcowsBuffReminderDB.Enchants) do
         BR.enchantScripts[slot] = Compile(e.script, ENCHANT_NAMES[slot])
     end
 end
 
 function BR.RunScripts()
-    for g in pairs(BRVars.BuffGroups) do
+    for g in pairs(OpcowsBuffReminderDB.BuffGroups) do
         BR.scriptRes[g] = RunScript(BR.scripts[g], BR.scriptRes[g])
     end
-    for slot in pairs(BRVars.Enchants) do
+    for slot in pairs(OpcowsBuffReminderDB.Enchants) do
         BR.enchantScriptRes[slot] = RunScript(BR.enchantScripts[slot], BR.enchantScriptRes[slot])
     end
 end
 
 -- display ----------------------------------------------------------------------------------
 -- the parent of everything, the icons are placed by their rows' anchors
-local frame = CreateFrame("Frame", "BuffReminderFrame", UIParent)
+local frame = CreateFrame("Frame", "OpcowsBuffReminderFrame", UIParent)
 frame:SetSize(1, 1)
 frame:SetPoint("CENTER")
 frame:SetFrameStrata("LOW")
@@ -750,7 +750,7 @@ end
 
 -- called by Blizzard once, when it makes the slot's button
 local function InitLiveButton(l, button)
-    local size = BRVars.Options.size
+    local size = OpcowsBuffReminderDB.Options.size
     button:SetSize(size, size)
     button:SetPoint("CENTER", button:GetParent(), "CENTER", 0, 0)
     pcall(button.EnableMouse, button, false)
@@ -771,7 +771,7 @@ end
 
 -- size, text and count colour, when they changed
 local function StyleLive(l, group)
-    local opts = BRVars.Options
+    local opts = OpcowsBuffReminderDB.Options
     local size = type(group.size) == "number" and group.size or opts.size
     local t = opts.icontext
     local time, swipe = TimerStyle(group)
@@ -804,21 +804,21 @@ end
 -- make, refilter and restyle the containers of Blizzard Auras groups, out of combat only
 function BR.UpdateLive()
     if InCombatLockdown() or AurasSecret() then return end
-    for g, group in pairs(BRVars.BuffGroups) do
+    for g, group in pairs(OpcowsBuffReminderDB.BuffGroups) do
         local l = live[g]
         if group.combat == "blizzard" and not (l and l.err) then
             local ids, key = LiveIds(group)
             if not l and key ~= "" then
                 l = { holder = CreateFrame("Frame", nil, frame) }
                 live[g] = l
-                l.holder:SetSize(BRVars.Options.size, BRVars.Options.size)
+                l.holder:SetSize(OpcowsBuffReminderDB.Options.size, OpcowsBuffReminderDB.Options.size)
                 l.holder:SetPoint("CENTER")
                 l.holder:SetFrameLevel(frame:GetFrameLevel() + 10)
                 l.holder:SetAlpha(0)
                 local ok, err = pcall(function()
                     local c = CreateFrame("AuraContainer", nil, l.holder, "CustomAuraContainerTemplate")
                     c:SetPoint("CENTER")
-                    c:SetSize(BRVars.Options.size, BRVars.Options.size)
+                    c:SetSize(OpcowsBuffReminderDB.Options.size, OpcowsBuffReminderDB.Options.size)
                     c:SetFrameLevel(l.holder:GetFrameLevel() + 1)
                     c:SetUnit("player")
                     pcall(c.EnableMouse, c, false)
@@ -850,7 +850,7 @@ end
 
 -- how a group is followed in combat, and whether that's worth a warning
 function BR.CombatStatus(g)
-    local group = BRVars.BuffGroups[g]
+    local group = OpcowsBuffReminderDB.BuffGroups[g]
     if not next(group.buffs) then return "No buffs yet.", false end
     if group.combat == "blizzard" then
         local l = live[g]
@@ -889,7 +889,7 @@ end
 -- tell the user once about groups that are only predicted in combat
 local noticed = {}
 function BR.CombatNotices(only)
-    for g, group in pairs(BRVars.BuffGroups) do
+    for g, group in pairs(OpcowsBuffReminderDB.BuffGroups) do
         if (only == nil or only == g) and group.conditions.always ~= 1 then
             local text, warn = BR.CombatStatus(g)
             if warn and noticed[g] ~= text then
@@ -905,14 +905,14 @@ function BR.CombatNotices(only)
 end
 
 function BR.SetCombatMode(g, mode)
-    BRVars.BuffGroups[g].combat = mode
+    OpcowsBuffReminderDB.BuffGroups[g].combat = mode
     noticed[g] = nil
     BR.UpdateLive()
     BR.CombatNotices(g)
 end
 
 -- icon placement -------------------------------------------------------------------------------
--- Icons snap together on a grid. BRVars.Options.bars holds the sets of snapped icons,
+-- Icons snap together on a grid. OpcowsBuffReminderDB.Options.bars holds the sets of snapped icons,
 -- { left, top, cells = { { key, c, r, ha, va }, ... } }: c counts columns to the right and r rows
 -- down from the top left cell, which is always 0, 0, and left, top is the set's top left corner
 -- from the screen center. Each column is as wide and each row as tall as its biggest icon, and a
@@ -927,20 +927,20 @@ local dragging          -- the set being dragged
 
 -- the default icon's size with its spacing
 local function Pitch()
-    return BRVars.Options.size + ICON_SPACING * 2
+    return OpcowsBuffReminderDB.Options.size + ICON_SPACING * 2
 end
 
 -- the group behind an icon, a buff group or an enchant group
 local function KeyGroup(key)
-    if key:sub(1, 1) == "1" then return BRVars.BuffGroups[key:sub(2)] end
-    return BRVars.Enchants[key:sub(2)]
+    if key:sub(1, 1) == "1" then return OpcowsBuffReminderDB.BuffGroups[key:sub(2)] end
+    return OpcowsBuffReminderDB.Enchants[key:sub(2)]
 end
 
 -- an icon's size, groups can have their own
 local function KeySize(key)
     local group = KeyGroup(key)
     if group and type(group.size) == "number" then return group.size end
-    return BRVars.Options.size
+    return OpcowsBuffReminderDB.Options.size
 end
 
 local function KeyPitch(key)
@@ -950,8 +950,8 @@ end
 -- every icon that can show: the buff groups and the enchant groups that aren't turned off
 local function PlaceableKeys()
     local keys = {}
-    for g in pairs(BRVars.BuffGroups) do keys["1" .. g] = true end
-    for slot, e in pairs(BRVars.Enchants) do
+    for g in pairs(OpcowsBuffReminderDB.BuffGroups) do keys["1" .. g] = true end
+    for slot, e in pairs(OpcowsBuffReminderDB.Enchants) do
         if e.conditions.always ~= 1 then keys["2" .. slot] = true end
     end
     return keys
@@ -1060,7 +1060,7 @@ end
 
 -- drop gone icons and empty sets, new icons join the first set, true when anything changed
 local function SyncBars()
-    local opts = BRVars.Options
+    local opts = OpcowsBuffReminderDB.Options
     if type(opts.bars) ~= "table" or #opts.bars == 0 then
         opts.bars = { { left = 0, top = 0, cells = {} } }
     end
@@ -1126,7 +1126,7 @@ local function SyncBars()
 end
 
 function BR.ApplyLayout()
-    local opts = BRVars.Options
+    local opts = OpcowsBuffReminderDB.Options
     SyncBars()
     for i, bar in ipairs(opts.bars) do
         local a = anchors[i]
@@ -1147,7 +1147,7 @@ function BR.ApplyLayout()
 end
 
 local function BarIndex(bar)
-    for i, b in ipairs(BRVars.Options.bars) do
+    for i, b in ipairs(OpcowsBuffReminderDB.Options.bars) do
         if b == bar then return i end
     end
 end
@@ -1265,7 +1265,7 @@ end
 -- snap a dropped set onto the set, place and alignment that puts its icons nearest where they were
 -- dropped, if that's within most of an icon
 local function SnapBar(d)
-    local bars = BRVars.Options.bars
+    local bars = OpcowsBuffReminderDB.Options.bars
     local dg = Geometry(d)
     local drop = {}
     for _, cell in ipairs(d.cells) do drop[cell] = { CellCenter(d, dg, cell) } end
@@ -1337,7 +1337,7 @@ function BR.IconDragStart(f)
             Normalize(bar, pin)
             local half = KeyPitch(f.key) / 2
             bar = { left = x - half, top = y + half, cells = { { key = f.key, c = 0, r = 0 } } }
-            table.insert(BRVars.Options.bars, bar)
+            table.insert(OpcowsBuffReminderDB.Options.bars, bar)
             BR.ApplyLayout()
             BR.Refresh()
         end
@@ -1381,7 +1381,7 @@ end
 
 -- put every icon back in one row, where the first set is
 function BR.JoinBars()
-    local bars = BRVars.Options.bars
+    local bars = OpcowsBuffReminderDB.Options.bars
     local cells = {}
     for _, b in ipairs(bars) do
         table.sort(b.cells, function(p, q) return p.r < q.r or (p.r == q.r and p.c < q.c) end)
@@ -1389,7 +1389,7 @@ function BR.JoinBars()
             table.insert(cells, { key = cell.key, c = #cells, r = 0 })
         end
     end
-    BRVars.Options.bars = { { left = bars[1].left, top = bars[1].top, cells = cells } }
+    OpcowsBuffReminderDB.Options.bars = { { left = bars[1].left, top = bars[1].top, cells = cells } }
     BR.ApplyLayout()
     BR.Refresh()
 end
@@ -1413,7 +1413,7 @@ end
 
 -- a group's glow and overlay for a missing buff, or the Options tab's for default ones
 local function MissingStyle(group)
-    local opts = BRVars.Options
+    local opts = OpcowsBuffReminderDB.Options
     local glow, overlay = group and group.glow, group and group.overlay
     if not GLOWS[glow] or glow == "default" then glow = opts.glow end
     if not OVERLAYS[overlay] or overlay == "default" then overlay = opts.overlay end
@@ -1467,7 +1467,7 @@ end
 
 -- draw one icon, f is already placed
 local function ShowIcon(f, item, now, shown, liveShown)
-    local opts = BRVars.Options
+    local opts = OpcowsBuffReminderDB.Options
     local size = KeySize(item.key)
     f:SetSize(size, size)
     if f.fontSize ~= size then
@@ -1521,13 +1521,13 @@ end
 
 -- work out which icons should be visible, using predicted expiry while auras are secret
 function BR.Refresh()
-    local opts = BRVars.Options
+    local opts = OpcowsBuffReminderDB.Options
     local now = GetTime()
     local list = {}
 
     if not BR.hideAll then
         local secret = AurasSecret()
-        for g, group in pairs(BRVars.BuffGroups) do
+        for g, group in pairs(OpcowsBuffReminderDB.BuffGroups) do
             local st = BR.groupState[g]
             -- when the buff was cast, for predicting its spell's cooldown
             if st and st.present and (st.duration or 0) > 0 and st.expires > 0 then
@@ -1558,7 +1558,7 @@ function BR.Refresh()
         end
 
         for slot, invSlot in pairs(ENCHANT_SLOTS) do
-            local eg = BRVars.Enchants[slot]
+            local eg = OpcowsBuffReminderDB.Enchants[slot]
             local e = BR.enchants[slot]
             local tex = GetInventoryItemTexture("player", invSlot)
             if IsSuppressed(eg.conditions) or BR.enchantScriptRes[slot] or not e or not tex then
@@ -1584,7 +1584,7 @@ function BR.Refresh()
             if not byKey[k] then
                 local icon
                 if k:sub(1, 1) == "1" then
-                    icon = BRVars.BuffGroups[k:sub(2)].icon
+                    icon = OpcowsBuffReminderDB.BuffGroups[k:sub(2)].icon
                 else
                     icon = GetInventoryItemTexture("player", ENCHANT_SLOTS[k:sub(2)])
                 end
@@ -1634,13 +1634,13 @@ end
 function BR.SetLocked(locked)
     BR.locked = locked
     if locked then BR.IconDragStop() end
-    if BRVars then BR.Refresh() end
+    if OpcowsBuffReminderDB then BR.Refresh() end
 end
 
 -- changes made in the options window ------------------------------------------------------
 function BR.NewGroup(g)
-    local opts = BRVars.Options
-    BRVars.BuffGroups[g] = {
+    local opts = OpcowsBuffReminderDB.Options
+    OpcowsBuffReminderDB.BuffGroups[g] = {
         ["conditions"] = DeepCopy(opts.conditions),
         ["warntime"] = opts.warntime,
         ["warnstacks"] = 0,
@@ -1656,8 +1656,8 @@ function BR.NewGroup(g)
 end
 
 function BR.AddBuffToGroup(g, buff)
-    if BRVars.BuffGroups[g] == nil then BR.NewGroup(g) end
-    local group = BRVars.BuffGroups[g]
+    if OpcowsBuffReminderDB.BuffGroups[g] == nil then BR.NewGroup(g) end
+    local group = OpcowsBuffReminderDB.BuffGroups[g]
     if buff ~= nil then
         group.buffs[buff] = true
         if group.icon == QUESTION_MARK then
@@ -1667,32 +1667,32 @@ function BR.AddBuffToGroup(g, buff)
 end
 
 function BR.RemoveGroup(g)
-    BRVars.BuffGroups[g] = nil
+    OpcowsBuffReminderDB.BuffGroups[g] = nil
     BR.groupState[g] = nil
     BR.scripts[g] = nil
     BR.scriptRes[g] = nil
 end
 
 function BR.SetGroupScript(g, code)
-    BRVars.BuffGroups[g].script = code
+    OpcowsBuffReminderDB.BuffGroups[g].script = code
     BR.scripts[g] = Compile(code, g)
     BR.scriptRes[g] = false
 end
 
 function BR.SetDefaultScript(code)
     if code ~= "" then Compile(code, "default") end
-    BRVars.Options.script = code
+    OpcowsBuffReminderDB.Options.script = code
 end
 
 function BR.SetEnchantScript(slot, code)
-    BRVars.Enchants[slot].script = code
+    OpcowsBuffReminderDB.Enchants[slot].script = code
     BR.enchantScripts[slot] = Compile(code, ENCHANT_NAMES[slot])
     BR.enchantScriptRes[slot] = false
 end
 
 -- an enchant group, turned off until it's wanted
 local function NewEnchant()
-    local opts = BRVars.Options
+    local opts = OpcowsBuffReminderDB.Options
     local conds = DeepCopy(opts.conditions)
     conds.always = 1
     return {
@@ -1709,12 +1709,12 @@ end
 -- nil or "none" turns the sound off, returns false for an unknown sound
 function BR.SetSound(v)
     if v == nil or v == "" or tostring(v):lower() == "none" then
-        BRVars.Options.warnsound = nil
+        OpcowsBuffReminderDB.Options.warnsound = nil
         return true
     end
     local id = ResolveSound(v)
     if not id then return false end
-    BRVars.Options.warnsound = id
+    OpcowsBuffReminderDB.Options.warnsound = id
     PlaySound(id, "Master")
     return true
 end
@@ -1726,9 +1726,9 @@ function BR.ToggleHidden()
 end
 
 function BR.Reset()
-    BRVars.BuffGroups = {}
-    BRVars.Options = DeepCopy(BR.DefaultOptions)
-    BRVars.Enchants = { main = NewEnchant(), off = NewEnchant() }
+    OpcowsBuffReminderDB.BuffGroups = {}
+    OpcowsBuffReminderDB.Options = DeepCopy(BR.DefaultOptions)
+    OpcowsBuffReminderDB.Enchants = { main = NewEnchant(), off = NewEnchant() }
     BR.groupState = {}
     BR.scriptRes = {}
     BR.CompileScripts()
@@ -1738,7 +1738,7 @@ function BR.Reset()
 end
 
 -- other characters -----------------------------------------------------------------------
--- BRAccount is saved for the whole account. Each character keeps its settings there, so
+-- OpcowsBuffReminderAccount is saved for the whole account. Each character keeps its settings there, so
 -- another character can copy them. The tables are this character's own, saved with it at logout.
 local function CharacterKey()
     return ("%s - %s"):format(UnitName("player") or "?", GetRealmName() or "?")
@@ -1746,19 +1746,19 @@ end
 
 function BR.RememberCharacter()
     local _, class = UnitClass("player")
-    BRAccount.chars[CharacterKey()] = {
+    OpcowsBuffReminderAccount.chars[CharacterKey()] = {
         class = class,
         time = time(),
-        BuffGroups = BRVars.BuffGroups,
-        Options = BRVars.Options,
-        Enchants = BRVars.Enchants,
+        BuffGroups = OpcowsBuffReminderDB.BuffGroups,
+        Options = OpcowsBuffReminderDB.Options,
+        Enchants = OpcowsBuffReminderDB.Enchants,
     }
 end
 
 -- the other characters, { key, class, groups }, newest first
 function BR.GetCharacters()
     local list, me = {}, CharacterKey()
-    for key, c in pairs(BRAccount.chars) do
+    for key, c in pairs(OpcowsBuffReminderAccount.chars) do
         if key ~= me then
             local n = 0
             for _ in pairs(c.BuffGroups) do n = n + 1 end
@@ -1770,16 +1770,16 @@ function BR.GetCharacters()
 end
 
 function BR.ForgetCharacter(key)
-    BRAccount.chars[key] = nil
+    OpcowsBuffReminderAccount.chars[key] = nil
 end
 
 -- replace this character's groups, enchants and options with a copy of another's
 function BR.CopyCharacter(key)
-    local c = BRAccount.chars[key]
+    local c = OpcowsBuffReminderAccount.chars[key]
     if not c then return false end
-    BRVars.BuffGroups = DeepCopy(c.BuffGroups)
-    BRVars.Options = DeepCopy(c.Options)
-    BRVars.Enchants = DeepCopy(c.Enchants)
+    OpcowsBuffReminderDB.BuffGroups = DeepCopy(c.BuffGroups)
+    OpcowsBuffReminderDB.Options = DeepCopy(c.Options)
+    OpcowsBuffReminderDB.Enchants = DeepCopy(c.Enchants)
     BR.SanityCheck()
     BR.groupState = {}
     BR.scriptRes = {}
@@ -1802,7 +1802,7 @@ end
 -- buffs seen before, like GetCurrentBuffs' entries
 function BR.GetSeenBuffs()
     local list = {}
-    for _, e in pairs(BRVars.Seen) do
+    for _, e in pairs(OpcowsBuffReminderDB.Seen) do
         table.insert(list, { name = e.name, spellId = e.id, icon = e.icon })
     end
     return list
@@ -1891,24 +1891,23 @@ BR.ENCHANT_SLOTS, BR.ENCHANT_NAMES = ENCHANT_SLOTS, ENCHANT_NAMES
 BR.Print = Print
 BR.SpellTexture = SpellTexture
 
--- /br opens the options window, everything is set up there
-SLASH_BuffReminder1 = "/br"
-SLASH_BuffReminder2 = "/buffreminder"
-SlashCmdList.BuffReminder = function()
+-- /obr opens the options window, everything is set up there
+SLASH_OpcowsBuffReminder1 = "/obr"
+SlashCmdList.OpcowsBuffReminder = function()
     BR.ToggleConfig()
 end
 
 -- saved variables --------------------------------------------------------------------------
 -- fill in missing or mistyped options and upgrade 1.x settings
 function BR.SanityCheck()
-    local opts = BRVars.Options
+    local opts = OpcowsBuffReminderDB.Options
     -- other characters' settings, account wide
-    if type(BRAccount) ~= "table" then BRAccount = {} end
-    if type(BRAccount.chars) ~= "table" then BRAccount.chars = {} end
-    for key, c in pairs(BRAccount.chars) do
+    if type(OpcowsBuffReminderAccount) ~= "table" then OpcowsBuffReminderAccount = {} end
+    if type(OpcowsBuffReminderAccount.chars) ~= "table" then OpcowsBuffReminderAccount.chars = {} end
+    for key, c in pairs(OpcowsBuffReminderAccount.chars) do
         if type(c) ~= "table" or type(c.BuffGroups) ~= "table" or type(c.Options) ~= "table"
             or type(c.Enchants) ~= "table" or type(c.time) ~= "number" then
-            BRAccount.chars[key] = nil
+            OpcowsBuffReminderAccount.chars[key] = nil
         end
     end
     -- the glow was a switch
@@ -1925,14 +1924,14 @@ function BR.SanityCheck()
             opts[k] = v
         end
     end
-    if type(BRVars.Seen) ~= "table" then BRVars.Seen = {} end
-    for k, e in pairs(BRVars.Seen) do
-        if type(e) ~= "table" or type(e.name) ~= "string" or type(e.t) ~= "number" then BRVars.Seen[k] = nil end
+    if type(OpcowsBuffReminderDB.Seen) ~= "table" then OpcowsBuffReminderDB.Seen = {} end
+    for k, e in pairs(OpcowsBuffReminderDB.Seen) do
+        if type(e) ~= "table" or type(e.name) ~= "string" or type(e.t) ~= "number" then OpcowsBuffReminderDB.Seen[k] = nil end
     end
     -- 2.0 betas and 1.x had enchant switches and a charges warning, and enchants used the defaults
-    if type(BRVars.Enchants) ~= "table" then
+    if type(OpcowsBuffReminderDB.Enchants) ~= "table" then
         local old = type(opts.enchants) == "table" and opts.enchants or {}
-        BRVars.Enchants = {}
+        OpcowsBuffReminderDB.Enchants = {}
         for slot in pairs(ENCHANT_SLOTS) do
             local e = NewEnchant()
             if old[slot] == true then e.conditions.always = opts.conditions.always end
@@ -1940,7 +1939,7 @@ function BR.SanityCheck()
             if type(opts.script) == "string" then e.script = opts.script end
             if TIMERS[old.timer] then e.timer = old.timer end
             if type(old.size) == "number" and old.size > 0 then e.size = old.size end
-            BRVars.Enchants[slot] = e
+            OpcowsBuffReminderDB.Enchants[slot] = e
         end
     end
     for k, v in pairs(opts) do
@@ -2027,9 +2026,9 @@ function BR.SanityCheck()
         if type(group.size) ~= "number" or group.size < 10 or group.size > 400 then group.size = nil end
         if type(group.script) ~= "string" then group.script = "" end
     end
-    for g, group in pairs(BRVars.BuffGroups) do
+    for g, group in pairs(OpcowsBuffReminderDB.BuffGroups) do
         if type(group) ~= "table" then
-            BRVars.BuffGroups[g] = nil
+            OpcowsBuffReminderDB.BuffGroups[g] = nil
         else
             if type(group.buffs) ~= "table" then group.buffs = {} end
             -- 1.x cached icon paths here
@@ -2039,12 +2038,12 @@ function BR.SanityCheck()
             if group.icon == nil then group.icon = QUESTION_MARK end
         end
     end
-    for k in pairs(BRVars.Enchants) do
-        if not ENCHANT_SLOTS[k] then BRVars.Enchants[k] = nil end
+    for k in pairs(OpcowsBuffReminderDB.Enchants) do
+        if not ENCHANT_SLOTS[k] then OpcowsBuffReminderDB.Enchants[k] = nil end
     end
     for slot in pairs(ENCHANT_SLOTS) do
-        if type(BRVars.Enchants[slot]) ~= "table" then BRVars.Enchants[slot] = NewEnchant() end
-        CheckGroup(BRVars.Enchants[slot])
+        if type(OpcowsBuffReminderDB.Enchants[slot]) ~= "table" then OpcowsBuffReminderDB.Enchants[slot] = NewEnchant() end
+        CheckGroup(OpcowsBuffReminderDB.Enchants[slot])
     end
     opts.version = BR.DefaultOptions.version
 end
@@ -2064,9 +2063,9 @@ local function OnUpdate(self, elapsed)
 end
 
 function BR.Init()
-    if type(BRVars) ~= "table" then BRVars = {} end
-    if type(BRVars.BuffGroups) ~= "table" then BRVars.BuffGroups = {} end
-    if type(BRVars.Options) ~= "table" then BRVars.Options = DeepCopy(BR.DefaultOptions) end
+    if type(OpcowsBuffReminderDB) ~= "table" then OpcowsBuffReminderDB = {} end
+    if type(OpcowsBuffReminderDB.BuffGroups) ~= "table" then OpcowsBuffReminderDB.BuffGroups = {} end
+    if type(OpcowsBuffReminderDB.Options) ~= "table" then OpcowsBuffReminderDB.Options = DeepCopy(BR.DefaultOptions) end
     BR.SanityCheck()
     BR.RememberCharacter()
     BR.CompileScripts()

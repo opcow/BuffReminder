@@ -1,4 +1,4 @@
-package-as: BuffReminder
+package-as: OpcowsBuffReminder
 
 ignore:
   - docs

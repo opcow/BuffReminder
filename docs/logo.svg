@@ -1,0 +1,165 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
+  <defs>
+    <radialGradient id="bg" cx="50%" cy="45%" r="65%">
+      <stop offset="0" stop-color="#6b3fd1"/>
+      <stop offset="0.55" stop-color="#2c1470"/>
+      <stop offset="1" stop-color="#0c0520"/>
+    </radialGradient>
+    <linearGradient id="gold" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#fff3b0"/>
+      <stop offset="0.35" stop-color="#f5c542"/>
+      <stop offset="0.7" stop-color="#b8801c"/>
+      <stop offset="1" stop-color="#ffe27a"/>
+    </linearGradient>
+    <linearGradient id="horn" x1="0" y1="1" x2="0" y2="0">
+      <stop offset="0" stop-color="#f7e7c4"/>
+      <stop offset="0.6" stop-color="#f2c65a"/>
+      <stop offset="1" stop-color="#c98a1c"/>
+    </linearGradient>
+    <radialGradient id="head" cx="45%" cy="35%" r="70%">
+      <stop offset="0" stop-color="#ffffff"/>
+      <stop offset="1" stop-color="#d9d4e6"/>
+    </radialGradient>
+    <radialGradient id="muzzle" cx="50%" cy="35%" r="70%">
+      <stop offset="0" stop-color="#ffc4d2"/>
+      <stop offset="1" stop-color="#e57d99"/>
+    </radialGradient>
+    <radialGradient id="badge" cx="40%" cy="35%" r="70%">
+      <stop offset="0" stop-color="#ff6b5a"/>
+      <stop offset="1" stop-color="#b3120c"/>
+    </radialGradient>
+    <filter id="blur" x="-30%" y="-30%" width="160%" height="160%"><feGaussianBlur stdDeviation="14"/></filter>
+    <filter id="soft" x="-30%" y="-30%" width="160%" height="160%"><feGaussianBlur stdDeviation="5"/></filter>
+    <clipPath id="inside"><rect x="52" y="52" width="408" height="408" rx="30"/></clipPath>
+  </defs>
+
+  <!-- spell alert glow -->
+  <rect x="46" y="46" width="420" height="420" rx="40" fill="none" stroke="#ffd23f" stroke-width="34" filter="url(#blur)" opacity="0.95"/>
+
+  <!-- icon -->
+  <rect x="52" y="52" width="408" height="408" rx="30" fill="url(#bg)"/>
+  <g clip-path="url(#inside)" opacity="0.2" fill="#ffe9a8">
+    <path d="M256,250 L200,52 L312,52 Z"/>
+    <path d="M256,250 L460,150 L460,262 Z"/>
+    <path d="M256,250 L420,460 L320,460 Z"/>
+    <path d="M256,250 L192,460 L92,460 Z"/>
+    <path d="M256,250 L52,262 L52,150 Z"/>
+    <path d="M256,250 L52,52 L120,52 Z" opacity="0.6"/>
+    <path d="M256,250 L460,52 L392,52 Z" opacity="0.6"/>
+  </g>
+  <circle cx="256" cy="250" r="150" fill="#b98cff" opacity="0.3" filter="url(#blur)"/>
+
+  <!-- tauren -->
+  <defs>
+    <linearGradient id="ivory" x1="0" y1="1" x2="0" y2="0">
+      <stop offset="0" stop-color="#d9c29a"/>
+      <stop offset="0.5" stop-color="#f6ecd4"/>
+      <stop offset="1" stop-color="#fffaf0"/>
+    </linearGradient>
+    <radialGradient id="fur" cx="50%" cy="30%" r="75%">
+      <stop offset="0" stop-color="#a86f42"/>
+      <stop offset="0.7" stop-color="#7a4a2a"/>
+      <stop offset="1" stop-color="#5a331c"/>
+    </radialGradient>
+    <radialGradient id="snout" cx="50%" cy="30%" r="75%">
+      <stop offset="0" stop-color="#e2c29a"/>
+      <stop offset="1" stop-color="#b98c60"/>
+    </radialGradient>
+    <radialGradient id="iris" cx="50%" cy="50%" r="50%">
+      <stop offset="0" stop-color="#fff7c2"/>
+      <stop offset="1" stop-color="#ffc83a"/>
+    </radialGradient>
+  </defs>
+  <g stroke="#160b2b" stroke-width="7" stroke-linejoin="round" stroke-linecap="round">
+    <!-- horns -->
+    <path d="M204,194 C156,202 104,190 90,142 C85,118 92,96 104,80 C110,118 132,148 178,158 C192,161 204,162 214,160 Z" fill="url(#ivory)"/>
+    <path d="M308,194 C356,202 408,190 422,142 C427,118 420,96 408,80 C402,118 380,148 334,158 C320,161 308,162 298,160 Z" fill="url(#ivory)"/>
+    <!-- horn wraps -->
+    <path d="M170,158 L162,190" stroke="#6b2a1a" stroke-width="12"/>
+    <path d="M150,152 L140,186" stroke="#6b2a1a" stroke-width="12"/>
+    <path d="M342,158 L350,190" stroke="#6b2a1a" stroke-width="12"/>
+    <path d="M362,152 L372,186" stroke="#6b2a1a" stroke-width="12"/>
+    <!-- ears -->
+    <g transform="rotate(18 158 238)"><ellipse cx="158" cy="238" rx="40" ry="18" fill="url(#fur)"/><ellipse cx="152" cy="238" rx="24" ry="8" fill="#c98f86" stroke="none"/></g>
+    <g transform="rotate(-18 354 238)"><ellipse cx="354" cy="238" rx="40" ry="18" fill="url(#fur)"/><ellipse cx="360" cy="238" rx="24" ry="8" fill="#c98f86" stroke="none"/></g>
+    <!-- braids behind the head -->
+    <path d="M186,236 C174,270 178,310 170,356" stroke="#2b1a12" stroke-width="18" fill="none"/>
+    <path d="M326,236 C338,270 334,310 342,356" stroke="#2b1a12" stroke-width="18" fill="none"/>
+    <!-- head -->
+    <path d="M182,200 C178,156 334,156 330,200 C338,254 330,304 308,342 L204,342 C182,304 174,254 182,200 Z" fill="url(#fur)"/>
+    <!-- mane -->
+    <path d="M178,204 C180,160 222,142 256,144 C290,142 332,160 334,204 C318,186 300,188 286,180 C276,192 264,186 256,176 C248,186 236,192 226,180 C212,188 194,186 178,204 Z" fill="#2b1a12"/>
+    <!-- war paint -->
+    <path d="M256,186 L256,214" stroke="#35d0c6" stroke-width="9"/>
+    <path d="M196,270 L226,266" stroke="#f4f0e6" stroke-width="8"/>
+    <path d="M200,286 L226,282" stroke="#35d0c6" stroke-width="8"/>
+    <path d="M316,270 L286,266" stroke="#f4f0e6" stroke-width="8"/>
+    <path d="M312,286 L286,282" stroke="#35d0c6" stroke-width="8"/>
+    <!-- eyes -->
+    <ellipse cx="222" cy="240" rx="16" ry="13" fill="url(#iris)"/>
+    <ellipse cx="290" cy="240" rx="16" ry="13" fill="url(#iris)"/>
+    <circle cx="226" cy="242" r="6" fill="#160b2b" stroke="none"/>
+    <circle cx="286" cy="242" r="6" fill="#160b2b" stroke="none"/>
+    <!-- brows -->
+    <path d="M194,214 C210,214 230,220 244,230" stroke-width="12" fill="none"/>
+    <path d="M318,214 C302,214 282,220 268,230" stroke-width="12" fill="none"/>
+    <!-- snout -->
+    <path d="M186,318 C186,286 214,280 256,280 C298,280 326,286 326,318 C326,356 296,374 256,374 C216,374 186,356 186,318 Z" fill="url(#snout)"/>
+    <ellipse cx="228" cy="318" rx="11" ry="15" fill="#3a1d12" stroke="none"/>
+    <ellipse cx="284" cy="318" rx="11" ry="15" fill="#3a1d12" stroke="none"/>
+    <!-- nose ring -->
+    <path d="M238,334 C236,366 276,366 274,334" fill="none" stroke="#160b2b" stroke-width="13"/>
+    <path d="M238,334 C236,366 276,366 274,334" fill="none" stroke="url(#gold)" stroke-width="7"/>
+    <!-- beads and feather -->
+    <circle cx="174" cy="302" r="9" fill="#35d0c6" stroke-width="4"/>
+    <circle cx="172" cy="330" r="9" fill="#e0452e" stroke-width="4"/>
+    <circle cx="338" cy="302" r="9" fill="#e0452e" stroke-width="4"/>
+    <circle cx="340" cy="330" r="9" fill="#35d0c6" stroke-width="4"/>
+    <path d="M170,356 C150,376 140,404 146,428 C166,410 176,384 170,356 Z" fill="#f4f0e6" stroke-width="5"/>
+    <path d="M152,408 C150,420 148,424 146,428" stroke="#e0452e" stroke-width="9"/>
+    <path d="M170,358 L150,420" stroke-width="3" fill="none"/>
+  </g>
+
+  <!-- frame -->
+  <rect x="52" y="52" width="408" height="408" rx="30" fill="none" stroke="#160b2b" stroke-width="10"/>
+  <rect x="58" y="58" width="396" height="396" rx="26" fill="none" stroke="url(#gold)" stroke-width="12"/>
+  <rect x="68" y="68" width="376" height="376" rx="20" fill="none" stroke="#fff6c8" stroke-width="2" opacity="0.5"/>
+
+  <!-- sparkles -->
+  <g fill="#fff8d6">
+    <path d="M418,262 l6,20 l20,6 l-20,6 l-6,20 l-6,-20 l-20,-6 l20,-6 z"/>
+    <path d="M232,76 l4,13 l13,4 l-13,4 l-4,13 l-4,-13 l-13,-4 l13,-4 z" opacity="0.8"/>
+    <path d="M92,300 l4,13 l13,4 l-13,4 l-4,13 l-4,-13 l-13,-4 l13,-4 z" opacity="0.7"/>
+  </g>
+
+  <!-- reminder badge: thorns -->
+  <defs>
+    <radialGradient id="thornbg" cx="40%" cy="35%" r="70%">
+      <stop offset="0" stop-color="#4a8a30"/>
+      <stop offset="1" stop-color="#173512"/>
+    </radialGradient>
+    <linearGradient id="vine" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#b58a4a"/>
+      <stop offset="1" stop-color="#6b4a22"/>
+    </linearGradient>
+    <linearGradient id="thorn" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#fffbe0"/>
+      <stop offset="1" stop-color="#e3d49a"/>
+    </linearGradient>
+  </defs>
+  <circle cx="410" cy="410" r="60" fill="#9dff5a" opacity="0.5" filter="url(#soft)"/>
+  <circle cx="410" cy="410" r="48" fill="url(#thornbg)" stroke="#fff6e0" stroke-width="7"/>
+  <g stroke-linejoin="round" stroke-linecap="round" clip-path="url(#badgeclip)">
+    <path d="M404,406 C390,388 368,384 368,398 C368,408 380,408 380,400" fill="none" stroke="#160b2b" stroke-width="11"/>
+    <path d="M404,406 C390,388 368,384 368,398 C368,408 380,408 380,400" fill="none" stroke="#8fcf4a" stroke-width="5"/>
+    <path d="M412,404 C432,398 450,410 452,428 C432,432 416,422 412,404 Z" fill="#8fcf4a" stroke="#160b2b" stroke-width="4"/>
+    <path d="M416,407 C428,410 440,418 450,427" fill="none" stroke="#3f7a2a" stroke-width="2.5"/>
+    <path d="M370,452 C392,438 386,414 408,404 C430,394 424,372 450,366" fill="none" stroke="#160b2b" stroke-width="22"/>
+    <path d="M375.4,448.9 L364.1,422.6 L385.1,436.2 Z M384.5,436.5 L413.1,434.0 L391.1,421.9 Z M392.4,417.5 L383.0,390.4 L403.0,405.5 Z M412.8,402.5 L440.5,409.8 L423.9,391.0 Z M424.6,388.0 L411.0,362.8 L433.2,374.5 Z M433.3,373.7 L457.9,388.4 L447.2,365.7 Z" fill="#f7efc4" stroke="#160b2b" stroke-width="4"/>
+    <path d="M370,452 C392,438 386,414 408,404 C430,394 424,372 450,366" fill="none" stroke="url(#vine)" stroke-width="14"/>
+    <path d="M370,452 C392,438 386,414 408,404 C430,394 424,372 450,366" fill="none" stroke="#f2ffd0" stroke-width="3" opacity="0.7" transform="translate(-2,-2)"/>
+  </g>
+  <clipPath id="badgeclip"><circle cx="410" cy="410" r="45"/></clipPath>
+  <circle cx="410" cy="410" r="48" fill="none" stroke="#fff6e0" stroke-width="7"/>
+  <circle cx="410" cy="410" r="52" fill="none" stroke="#160b2b" stroke-width="2" opacity="0.6"/>
+</svg>

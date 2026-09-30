@@ -1,0 +1,12 @@
+## Interface: 16001
+## Title: Opcow's Buff Reminder
+## Version: 2.0
+## Notes: Adds icons to remind you when important buffs are missing.
+## IconTexture: Interface\AddOns\OpcowsBuffReminder\media\cbutton
+## AddonCompartmentFunc: OpcowsBuffReminder_OnAddonCompartmentClick
+## AddonCompartmentFuncOnEnter: OpcowsBuffReminder_OnAddonCompartmentEnter
+## AddonCompartmentFuncOnLeave: OpcowsBuffReminder_OnAddonCompartmentLeave
+## SavedVariablesPerCharacter: OpcowsBuffReminderDB
+## SavedVariables: OpcowsBuffReminderAccount
+OpcowsBuffReminder.lua
+Config.lua
