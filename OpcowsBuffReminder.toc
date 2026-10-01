@@ -1,6 +1,6 @@
 ## Interface: 16001
 ## Title: Opcow's Buff Reminder
-## Version: 2.1
+## Version: 2.2
 ## X-Curse-Project-ID: 1718816
 ## Notes: Adds icons to remind you when important buffs are missing.
 ## IconTexture: Interface\AddOns\OpcowsBuffReminder\media\cbutton
@@ -10,4 +10,5 @@
 ## SavedVariablesPerCharacter: OpcowsBuffReminderDB
 ## SavedVariables: OpcowsBuffReminderAccount
 OpcowsBuffReminder.lua
+Party.lua
 Config.lua

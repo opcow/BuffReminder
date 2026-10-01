@@ -59,6 +59,16 @@ BR.DefaultOptions = {
     ["warnalpha"] = 1.0,    -- and of one warning that the buff is running out or low on stacks
     ["glow"] = "none",      -- glow around icons whose buff is missing, see GLOWS
     ["overlay"] = "none",   -- colour washed over icons whose buff is missing, see OVERLAYS
+    ["warnglow"] = "none",  -- and the same for icons warning it's running out or low on stacks
+    ["warnoverlay"] = "none",
+    ["clicktocast"] = true, -- clicking an icon casts its group's spell, each group picks the spell
+    ["clickbutton"] = "1",  -- with this click, see ParseClick, "1" is a plain left click
+    ["dismiss"] = true,     -- clicking an icon with dismissbutton hides it until the buff is put on again
+    ["dismissbutton"] = "2", -- a plain right click
+    ["party"] = true,       -- party reminders, see Party.lua
+    ["partywarn"] = false,  -- and their early warnings, using each group's warning time
+    ["partydock"] = "auto", -- on the panel, or "right" / "left" / "above" / "below" Blizzard's party
+                            -- frames, or "auto" to pick a side from how they're laid out
     ["script"] = "",
     ["minimap"] = {
         ["hide"] = false,
@@ -87,7 +97,7 @@ BR.DefaultOptions = {
     },
 }
 -- options that are valid but have no default value
-local EXTRA_OPTIONS = { ["warnsound"] = true, ["position"] = true, ["bars"] = true }
+local EXTRA_OPTIONS = { ["warnsound"] = true, ["position"] = true, ["bars"] = true, ["partypos"] = true }
 
 local CONDITIONS = { "dead", "instance", "party", "raid", "resting", "taxi", "combat", "mounted" }
 local ENCHANT_SLOTS = { main = 16, off = 17 }
@@ -549,6 +559,7 @@ end
 -- the last time it was read, so in combat its group doesn't wait for an aura that can't be read.
 -- Out of combat the aura read that follows the cast replaces this with the exact state.
 BR.sentSelf = {}        -- [spell id] = true when the last cast of it was on you, false when on someone else
+BR.sentTarget = {}      -- [spell id] = the name the last cast of it was aimed at, when readable
 
 local function Bool(v)
     if not issecretvalue(v) then return v and true or false end
@@ -573,7 +584,9 @@ function BR.OnCastSent(target, id)
         local name, surname = UnitName("player")
         local full = type(surname) == "string" and surname ~= "" and name .. " " .. surname or name
         onMe = target == "" or target == name or target == full
+        BR.sentTarget[id] = target
     else
+        BR.sentTarget[id] = nil
         -- the target is hidden: a helpful spell lands on you unless someone friendly is selected
         local ok1, isMe = pcall(UnitIsUnit, "target", "player")
         local ok2, assist = pcall(UnitCanAssist, "player", "target")
@@ -591,8 +604,8 @@ function BR.OnCast(id)
         Debug("cast with a hidden spell id")
         return
     end
-    local onMe = BR.sentSelf[id]
-    BR.sentSelf[id] = nil
+    local onMe, target = BR.sentSelf[id], BR.sentTarget[id]
+    BR.sentSelf[id], BR.sentTarget[id] = nil, nil
     if not (C_Spell and C_Spell.GetSpellName) then return end
     local ok, name = pcall(C_Spell.GetSpellName, id)
     if not ok or type(name) ~= "string" or issecretvalue(name) then
@@ -619,6 +632,8 @@ function BR.OnCast(id)
     end
     if #groups == 0 then return end
 
+    -- a buff given to a party member is remembered for their reminders
+    if not onMe and target and BR.OnPartyCast then BR.OnPartyCast(groups, target) end
     if not (onMe or Untargeted(id)) then
         Debug(("cast %s, not on you (%s)"):format(name, tostring(onMe)))
         return
@@ -763,45 +778,54 @@ frame:SetFrameStrata("LOW")
 frame:EnableMouse(false)
 BR.frame = frame
 
+-- an icon's texture, swipe, glow, overlay and texts, shared by the icons and the options previews
+local function NewIcon(parent)
+    local f = CreateFrame("Frame", nil, parent)
+    f.texture = f:CreateTexture(nil, "ARTWORK")
+    f.texture:SetAllPoints()
+    f.cooldown = CreateFrame("Cooldown", nil, f, "CooldownFrameTemplate")
+    f.cooldown:SetAllPoints()
+    f.cooldown:SetDrawEdge(false)
+    f.cooldown:SetHideCountdownNumbers(true)
+    -- the action button border, lit up and pulsing, over the icon and past its edges
+    f.glow = f:CreateTexture(nil, "ARTWORK", nil, 7)
+    f.glow:SetTexture("Interface\\Buttons\\UI-ActionButton-Border")
+    f.glow:SetBlendMode("ADD")
+    f.glow:SetPoint("CENTER")
+    f.glow:Hide()
+    local pulse = f.glow.CreateAnimationGroup and f.glow:CreateAnimationGroup()
+    if pulse then
+        f.fade = pulse:CreateAnimation("Alpha")
+        f.fade:SetFromAlpha(1)
+        f.fade:SetToAlpha(0.3)
+        f.fade:SetDuration(0.6)
+        pulse:SetLooping("BOUNCE")
+        f.pulse = pulse
+    end
+    -- a colour washed over the icon, under the glow
+    f.overlay = f:CreateTexture(nil, "ARTWORK", nil, 6)
+    f.overlay:SetAllPoints()
+    f.overlay:Hide()
+    f.text = f:CreateFontString(nil, "OVERLAY", "NumberFontNormal")
+    f.text:SetPoint("TOP", 0, -2)
+    -- stack count where the default buff frame puts it
+    f.count = f:CreateFontString(nil, "OVERLAY", "NumberFontNormal")
+    f.count:SetPoint("BOTTOMRIGHT", -2, 2)
+    return f
+end
+
 local function AcquireIcon(i)
     local f = BR.icons[i]
     if not f then
-        f = CreateFrame("Frame", nil, frame)
-        f.texture = f:CreateTexture(nil, "ARTWORK")
-        f.texture:SetAllPoints()
-        f.cooldown = CreateFrame("Cooldown", nil, f, "CooldownFrameTemplate")
-        f.cooldown:SetAllPoints()
-        f.cooldown:SetDrawEdge(false)
-        f.cooldown:SetHideCountdownNumbers(true)
-        -- the action button border, lit up and pulsing, over the icon and past its edges
-        f.glow = f:CreateTexture(nil, "ARTWORK", nil, 7)
-        f.glow:SetTexture("Interface\\Buttons\\UI-ActionButton-Border")
-        f.glow:SetBlendMode("ADD")
-        f.glow:SetPoint("CENTER")
-        f.glow:Hide()
-        local pulse = f.glow.CreateAnimationGroup and f.glow:CreateAnimationGroup()
-        if pulse then
-            f.fade = pulse:CreateAnimation("Alpha")
-            f.fade:SetFromAlpha(1)
-            f.fade:SetToAlpha(0.3)
-            f.fade:SetDuration(0.6)
-            pulse:SetLooping("BOUNCE")
-            f.pulse = pulse
-        end
-        -- a colour washed over the icon, under the glow
-        f.overlay = f:CreateTexture(nil, "ARTWORK", nil, 6)
-        f.overlay:SetAllPoints()
-        f.overlay:Hide()
-        f.text = f:CreateFontString(nil, "OVERLAY", "NumberFontNormal")
-        f.text:SetPoint("TOP", 0, -2)
-        -- stack count where the default buff frame puts it
-        f.count = f:CreateFontString(nil, "OVERLAY", "NumberFontNormal")
-        f.count:SetPoint("BOTTOMRIGHT", -2, 2)
-        -- only takes the mouse while unlocked
+        f = NewIcon(frame)
+        -- takes the mouse while unlocked, or to be dismissed
         f:EnableMouse(false)
         f:RegisterForDrag("LeftButton")
         f:SetScript("OnDragStart", function(self) BR.IconDragStart(self) end)
         f:SetScript("OnDragStop", function() BR.IconDragStop() end)
+        f:SetScript("OnMouseUp", function(self, button)
+            if BR.locked and self.key and BR.IsDismissClick(button) then BR.DismissIcon(self.key) end
+        end)
         f:SetScript("OnEnter", function(self) BR.IconTooltip(self) end)
         f:SetScript("OnLeave", function() GameTooltip:Hide() end)
         BR.icons[i] = f
@@ -1011,7 +1035,7 @@ function BR.CombatNotices(only)
                 noticed[g] = text
                 local hint = ""
                 if group.combat == "cdm" then
-                    hint = " Add it to the Cooldown Manager's buffs, or switch the group to Blizzard Auras on the Buff groups tab (/obr)."
+                    hint = " Add it to the Cooldown Manager's buffs, or switch the buff group to Blizzard Auras on the Buff groups tab (/obr)."
                 end
                 Print(('"%s": %s%s'):format(g, text, hint))
             end
@@ -1526,13 +1550,23 @@ local function OldPosition(p, size)
     return rx + (tonumber(p[3]) or 0) - fx, ry + (tonumber(p[4]) or 0) - fy
 end
 
--- a group's glow and overlay for a missing buff, or the Options tab's for default ones
-local function MissingStyle(group)
+-- a group's glow and overlay for a missing buff or a warning, or the Options tab's for default ones
+local function IconStyle(group, missing)
     local opts = OpcowsBuffReminderDB.Options
-    local glow, overlay = group and group.glow, group and group.overlay
-    if not GLOWS[glow] or glow == "default" then glow = opts.glow end
-    if not OVERLAYS[overlay] or overlay == "default" then overlay = opts.overlay end
+    local glowKey, overlayKey = "glow", "overlay"
+    if not missing then glowKey, overlayKey = "warnglow", "warnoverlay" end
+    local glow, overlay = group and group[glowKey], group and group[overlayKey]
+    if not GLOWS[glow] or glow == "default" then glow = opts[glowKey] end
+    if not OVERLAYS[overlay] or overlay == "default" then overlay = opts[overlayKey] end
     return glow, overlay
+end
+
+-- a group's opacity for a missing buff or a warning, or the Options tab's when it has none
+local function IconAlpha(group, missing)
+    local opts = OpcowsBuffReminderDB.Options
+    local own = group and group[missing and "alpha" or "warnalpha"]
+    if type(own) == "number" then return own end
+    return missing and opts.alpha or opts.warnalpha
 end
 
 -- the game's spell alert, the glow on an action button when a spell procs. It's made for action
@@ -1596,16 +1630,19 @@ local function ShowIcon(f, item, now, shown, liveShown)
     end
     -- a Blizzard Auras icon only shows from under Blizzard's button once the buff is gone
     local missing = item.missing or item.placeholder or item.live
-    f:SetAlpha(missing and opts.alpha or opts.warnalpha)
-    if item.missing then
-        local glow, overlay = MissingStyle(item.group)
+    local alpha = IconAlpha(item.group, missing)
+    f:SetAlpha(alpha)
+    -- a Blizzard Auras icon is mostly under Blizzard's button, and a placeholder only for placing
+    if item.missing or not (item.placeholder or item.live) then
+        local glow, overlay = IconStyle(item.group, item.missing)
         SetGlow(f, glow)
         SetOverlay(f, overlay)
     else
         SetGlow(f, nil)
         SetOverlay(f, nil)
     end
-    f:EnableMouse(not BR.locked)
+    -- an invisible icon mustn't catch clicks meant for the world under it
+    f:EnableMouse(not BR.locked or (opts.dismiss and not item.placeholder and alpha > 0))
     f.texture:SetTexture(item.icon or QUESTION_MARK)
     f.texture:SetDesaturated(item.placeholder or false)
     local time, swipe = TimerStyle(item.group)
@@ -1629,9 +1666,259 @@ local function ShowIcon(f, item, now, shown, liveShown)
         holder:ClearAllPoints()
         holder:SetPoint("CENTER", f, "CENTER")
         holder:SetSize(size, size)
-        holder:SetAlpha(opts.warnalpha)
+        holder:SetAlpha(IconAlpha(item.group, false))
         liveShown[item.live] = true
     end
+end
+
+-- an icon on the options window showing how a missing buff or a warning will look. It sits on a
+-- faint square, so the spot still shows when the opacity makes the icon itself hard to see.
+function BR.NewPreview(parent, size)
+    local p = CreateFrame("Frame", nil, parent)
+    p:SetSize(size, size)
+    p:EnableMouse(true)
+    p.bg =p:CreateTexture(nil, "BACKGROUND")
+    p.bg:SetAllPoints()
+    p.bg:SetColorTexture(1, 1, 1, 0.08)
+    local f = NewIcon(p)
+    f:SetAllPoints()
+    f.glow:SetSize(size * 64 / 36, size * 64 / 36)
+    p.icon = f
+    -- a pulse stops while the window is closed, start it again when it's opened
+    f:SetScript("OnShow", function(self)
+        local kind = self.glowKind
+        SetGlow(self, nil)
+        SetGlow(self, kind)
+    end)
+    return p
+end
+
+function BR.StylePreview(p, group, missing, texture)
+    local f = p.icon
+    f:SetAlpha(IconAlpha(group, missing))
+    local glow, overlay = IconStyle(group, missing)
+    SetGlow(f, glow)
+    SetOverlay(f, overlay)
+    f.texture:SetTexture(texture or QUESTION_MARK)
+end
+
+-- draw an icon that isn't one of the placed ones, ex: a party member's, with its group's look
+function BR.DrawIcon(f, group, missing, texture, size, expires, duration, now)
+    f:SetSize(size, size)
+    if f.fontSize ~= size then
+        f.fontSize = size
+        ScaleFont(f.text, size)
+        ScaleFont(f.count, size)
+        f.glow:SetSize(size * 64 / 36, size * 64 / 36)
+        if f.glowKind == "alert" then SetGlow(f, nil) end
+    end
+    f:SetAlpha(IconAlpha(group, missing))
+    local glow, overlay = IconStyle(group, missing)
+    SetGlow(f, glow)
+    SetOverlay(f, overlay)
+    f.texture:SetTexture(texture or QUESTION_MARK)
+    local time, swipe = TimerStyle(group)
+    if swipe and expires and duration and duration > 0 then
+        f.cooldown:SetCooldown(expires - duration, duration)
+    else
+        f.cooldown:Clear()
+    end
+    f.text:SetText(time and expires and FormatTime(expires - now) or "")
+    f.count:SetText("")
+    f:Show()
+end
+
+-- click to cast ----------------------------------------------------------------------------
+-- Clicking a buff group's icon casts the group's spell on you. Casting takes one of Blizzard's
+-- secure buttons, which can't be made, moved, shown or hidden in combat, while the icons change
+-- all fight. So the icons stay plain frames and an invisible secure button is laid over each one
+-- out of combat. They're all hidden as combat starts, so a button left behind can't cast the
+-- spell of an icon that moved, and put back when it ends.
+local clickers = {}     -- pooled secure buttons
+
+-- The click that casts is set on the Options tab by clicking with it, and saved the way the secure
+-- template names it: the modifiers held, in the template's alt-ctrl-shift- order, and the mouse
+-- button's number, ex: "shift-2" for Shift-right click. The type attribute for it is then
+-- "shift-type2", which the template only uses with exactly those keys held.
+local CLICK_BUTTONS = { "LeftButton", "RightButton", "MiddleButton", "Button4", "Button5" }
+local CLICK_NAMES = { "Left click", "Right click", "Middle click", "Button 4", "Button 5" }
+local CLICK_MODS = {}
+for _, a in ipairs({ "", "alt-" }) do
+    for _, c in ipairs({ "", "ctrl-" }) do
+        for _, s in ipairs({ "", "shift-" }) do CLICK_MODS[a .. c .. s] = true end
+    end
+end
+
+-- modifiers and button number of a saved click, nil for one that isn't valid
+local function ParseClick(click)
+    local mods, n = (type(click) == "string" and click or ""):match("^([%a%-]*)(%d)$")
+    n = tonumber(n)
+    if mods and CLICK_MODS[mods] and CLICK_BUTTONS[n] then return mods, n end
+end
+
+-- the click being made now, with button the name OnClick gets, nil for a button that can't be used
+function BR.ClickFrom(button)
+    local n
+    for i, name in ipairs(CLICK_BUTTONS) do
+        if name == button then n = i end
+    end
+    if not n then return nil end
+    return (IsAltKeyDown() and "alt-" or "") .. (IsControlKeyDown() and "ctrl-" or "")
+        .. (IsShiftKeyDown() and "shift-" or "") .. n
+end
+
+-- ex: "Shift-Right click"
+function BR.ClickLabel(click)
+    local mods, n = ParseClick(click)
+    if not mods then return "?" end
+    local keys = mods:gsub("(%a+)%-", function(m) return m:sub(1, 1):upper() .. m:sub(2) .. "-" end)
+    return keys .. CLICK_NAMES[n]
+end
+
+-- your own spells among a group's buffs, one name each, sorted
+function BR.ClickSpells(group)
+    local list, seen = {}, {}
+    if not (C_Spell and C_Spell.GetSpellName) then return list end
+    for buff in pairs(group.buffs) do
+        local id = OwnSpellId(buff)
+        local ok, name = false, nil
+        if id then ok, name = pcall(C_Spell.GetSpellName, id) end
+        if ok and type(name) == "string" and not issecretvalue(name) and not seen[name] then
+            seen[name] = true
+            table.insert(list, name)
+        end
+    end
+    table.sort(list)
+    return list
+end
+
+-- the spell a click on the group's icon casts, nil for none. group.click is "auto" for the first
+-- of your spells, "off", or a spell's name. A name that's no longer yours counts as auto. The
+-- Options tab turns it off for every group.
+function BR.ClickSpell(group)
+    if not OpcowsBuffReminderDB.Options.clicktocast or group.click == "off" then return nil end
+    local list = BR.ClickSpells(group)
+    for _, name in ipairs(list) do
+        if name == group.click then return name end
+    end
+    return list[1]
+end
+
+local function AcquireClicker(i)
+    local b = clickers[i]
+    if not b then
+        b = CreateFrame("Button", nil, UIParent, "SecureActionButtonTemplate")
+        b:SetFrameStrata("LOW")
+        -- over the icons and the Blizzard Auras buttons
+        b:SetFrameLevel(frame:GetFrameLevel() + 20)
+        b:SetAttribute("unit", "player")
+        b:SetHighlightTexture("Interface\\Buttons\\ButtonHilight-Square", "ADD")
+        b:SetScript("OnEnter", function(self)
+            GameTooltip:SetOwner(self, "ANCHOR_TOP")
+            GameTooltip:SetText(self.spell)
+            GameTooltip:AddLine(BR.ClickLabel(self.click) .. " to cast it on " .. (self.who or "yourself") .. ".",
+                1, 1, 1)
+            local opts = OpcowsBuffReminderDB.Options
+            if opts.dismiss then
+                GameTooltip:AddLine(BR.ClickLabel(opts.dismissbutton) .. " to dismiss it.", 1, 1, 1)
+            end
+            GameTooltip:Show()
+        end)
+        b:SetScript("OnLeave", function() GameTooltip:Hide() end)
+        b:SetScript("PostClick", function(self, button, down)
+            if BR.ClickFrom(button) == self.click then Debug(("clicked, casting %s"):format(self.spell)) end
+            -- the button covers the icon, so its other clicks, like dismissing, go on to it
+            if not down and self.icon then
+                local h = self.icon:GetScript("OnMouseUp")
+                if h then h(self.icon, button) end
+            end
+        end)
+        clickers[i] = b
+    end
+    return b
+end
+
+-- lay the secure buttons over the icons that can be clicked, list = { { f, spell, unit, who }, ... },
+-- unit and who for a party member's icon
+local function UpdateClickers(list)
+    -- combat is set as it starts, before the lockdown
+    if InCombatLockdown() or BR.status.combat then return end
+    local left, bottom = UIParent:GetLeft() or 0, UIParent:GetBottom() or 0
+    local opts = OpcowsBuffReminderDB.Options
+    local click = opts.clickbutton
+    local mods, button = ParseClick(click)
+    -- the dismiss click's mouse button, which the button takes too to pass it on
+    local _, dismiss = ParseClick(opts.dismiss and opts.dismissbutton)
+    local n = 0
+    for _, c in ipairs(list) do
+        local x, y = c.f:GetCenter()
+        if x and y and mods then
+            n = n + 1
+            local b = AcquireClicker(n)
+            if b.click ~= click or b.dismiss ~= dismiss then
+                if b.attr then b:SetAttribute(b.attr, nil) end
+                b.attr = mods .. "type" .. button
+                b:SetAttribute(b.attr, "spell")
+                -- the template casts on the press or the release, whichever the game is set to
+                local name = CLICK_BUTTONS[button]
+                local clicks = { name .. "Up", name .. "Down" }
+                if dismiss and dismiss ~= button then table.insert(clicks, CLICK_BUTTONS[dismiss] .. "Up") end
+                b:RegisterForClicks(unpack(clicks))
+                b.click, b.dismiss = click, dismiss
+            end
+            b:ClearAllPoints()
+            b:SetPoint("CENTER", UIParent, "BOTTOMLEFT", x - left, y - bottom)
+            b:SetSize(c.f:GetWidth(), c.f:GetHeight())
+            b:SetAttribute("spell", c.spell)
+            b:SetAttribute("unit", c.unit or "player")
+            b.spell, b.who, b.icon = c.spell, c.who, c.f
+            b:Show()
+        end
+    end
+    for i = n + 1, #clickers do clickers[i]:Hide() end
+end
+
+-- as combat starts, the last moment they can be hidden
+function BR.HideClickers()
+    if InCombatLockdown() then return end
+    for _, b in ipairs(clickers) do b:Hide() end
+end
+
+-- click to dismiss -------------------------------------------------------------------------
+-- Another click, a right click to begin with, hides an icon until its buff is put on again. It
+-- needs no secure button, so it works in combat too. Not saved.
+local dismissed = {}    -- [icon key] = the buff's expiry when it was dismissed, false when it was gone
+
+-- whether the click being made, with button the name OnClick gets, is the one that dismisses
+function BR.IsDismissClick(button)
+    local opts = OpcowsBuffReminderDB.Options
+    return opts.dismiss and BR.ClickFrom(button) == opts.dismissbutton
+end
+
+-- the state a buff group or weapon enchant icon shows, { present, expires }
+local function KeyState(key)
+    if key:sub(1, 1) == "1" then return BR.groupState[key:sub(2)] end
+    return BR.enchants[key:sub(2)]
+end
+
+function BR.DismissIcon(key)
+    local st = KeyState(key)
+    dismissed[key] = st and st.present and st.expires or false
+    Debug(("dismissed %s"):format(key:sub(2)))
+    BR.Refresh()
+end
+
+-- true while a dismissed icon stays hidden: until the buff is up with a different expiry than
+-- when it was dismissed, a second either way for a prediction corrected by a read
+local function IsDismissed(key)
+    local d = dismissed[key]
+    if d == nil then return false end
+    local st = KeyState(key)
+    if st and st.present and (d == false or math.abs((st.expires or 0) - d) > 1) then
+        dismissed[key] = nil
+        return false
+    end
+    return true
 end
 
 -- work out which icons should be visible, using predicted expiry while auras are secret
@@ -1691,8 +1978,13 @@ function BR.Refresh()
         end
     end
 
+    -- every dismissed icon, shown or not, so a recast is seen while the buff is up and not showing
+    local hidden = {}
+    for key in pairs(dismissed) do hidden[key] = IsDismissed(key) end
     local byKey = {}
-    for _, item in ipairs(list) do byKey[item.key] = item end
+    for _, item in ipairs(list) do
+        if not hidden[item.key] then byKey[item.key] = item end
+    end
     if not BR.locked and not BR.hideAll then
         -- unlocked, the icons that aren't needed show grey so they can be placed too
         for k in pairs(PlaceableKeys()) do
@@ -1711,7 +2003,7 @@ function BR.Refresh()
     -- a drag whose icon went away never gets its OnDragStop
     if dragging and not IsMouseButtonDown("LeftButton") then BR.IconDragStop() end
 
-    local shown, liveShown, newIcon = {}, {}, false
+    local shown, liveShown, newIcon, clicks = {}, {}, false, {}
     local i = 0
     for bi, bar in ipairs(opts.bars) do
         for _, p in ipairs(PlaceIcons(bar, byKey)) do
@@ -1722,6 +2014,12 @@ function BR.Refresh()
             f:ClearAllPoints()
             f:SetPoint("CENTER", anchors[bi], "CENTER", p.x, p.y)
             ShowIcon(f, item, now, shown, liveShown)
+            -- buff groups only, unlocked icons are for dragging
+            if BR.locked and item.key:sub(1, 1) == "1" and not item.placeholder and not item.live
+                and f:GetAlpha() > 0 then
+                local spell = BR.ClickSpell(item.group)
+                if spell then table.insert(clicks, { f = f, spell = spell }) end
+            end
             if not item.live and not item.placeholder and not BR.shown[item.key] then
                 -- a Blizzard Auras icon shows all fight, no sound for that
                 newIcon = true
@@ -1734,6 +2032,9 @@ function BR.Refresh()
     for g, l in pairs(live) do
         if not liveShown[g] then l.holder:SetAlpha(0) end
     end
+    -- the party panel adds its icons' clicks, true when one is new
+    if BR.RefreshParty and BR.RefreshParty(clicks, now) then newIcon = true end
+    UpdateClickers(clicks)
     BR.shown = shown
 
     if newIcon and opts.warnsound then
@@ -1763,6 +2064,10 @@ function BR.NewGroup(g)
         ["timer"] = "default",
         ["glow"] = "default",
         ["overlay"] = "default",
+        ["warnglow"] = "default",
+        ["warnoverlay"] = "default",
+        ["click"] = "auto",
+        ["party"] = true,
         ["icon"] = QUESTION_MARK,
         ["script"] = opts.script,
         ["buffs"] = {},
@@ -1817,6 +2122,8 @@ local function NewEnchant()
         ["timer"] = "default",
         ["glow"] = "default",
         ["overlay"] = "default",
+        ["warnglow"] = "default",
+        ["warnoverlay"] = "default",
         ["script"] = "",
     }
 end
@@ -1848,6 +2155,7 @@ function BR.Reset()
     BR.scriptRes = {}
     BR.CompileScripts()
     BR.ApplyLayout()
+    BR.PlaceParty()
     BR.UpdateMinimap()
     BR.RememberCharacter()
 end
@@ -1901,6 +2209,7 @@ function BR.CopyCharacter(key)
     BR.castAt = {}
     BR.CompileScripts()
     BR.ApplyLayout()
+    BR.PlaceParty()
     BR.UpdateMinimap()
     BR.UpdateLive()
     BR.RememberCharacter()
@@ -2005,6 +2314,10 @@ BR.GLOWS, BR.GLOW_ORDER, BR.OVERLAYS, BR.OVERLAY_ORDER = GLOWS, GLOW_ORDER, OVER
 BR.ENCHANT_SLOTS, BR.ENCHANT_NAMES = ENCHANT_SLOTS, ENCHANT_NAMES
 BR.Print = Print
 BR.SpellTexture = SpellTexture
+-- and Party.lua
+BR.Debug, BR.BuffKey, BR.SpellIds = Debug, BuffKey, SpellIds
+BR.IsSuppressed, BR.AurasSecret = IsSuppressed, AurasSecret
+BR.NewIcon = NewIcon
 
 -- /obr opens the options window, everything is set up there. /obr debug prints what casts and
 -- combat reads decide.
@@ -2128,6 +2441,22 @@ function BR.SanityCheck()
     if not TEXT_PRIORITIES[opts.icontext.priority] then opts.icontext.priority = "both" end
     if not GLOWS[opts.glow] or opts.glow == "default" then opts.glow = "none" end
     if not OVERLAYS[opts.overlay] or opts.overlay == "default" then opts.overlay = "none" end
+    if not GLOWS[opts.warnglow] or opts.warnglow == "default" then opts.warnglow = "none" end
+    if not OVERLAYS[opts.warnoverlay] or opts.warnoverlay == "default" then opts.warnoverlay = "none" end
+    -- a test build picked the click from a list, with an "off" in it
+    local OLD_CLICKS = { left = "1", right = "2", middle = "3", shift = "shift-1", ctrl = "ctrl-1", alt = "alt-1" }
+    if opts.clickbutton == "off" then opts.clicktocast = false end
+    opts.clickbutton = OLD_CLICKS[opts.clickbutton] or opts.clickbutton
+    if type(opts.clicktocast) ~= "boolean" then opts.clicktocast = true end
+    if not ParseClick(opts.clickbutton) then opts.clickbutton = "1" end
+    if type(opts.dismiss) ~= "boolean" then opts.dismiss = true end
+    if not ParseClick(opts.dismissbutton) then opts.dismissbutton = "2" end
+    -- one click can't do both, casting keeps it
+    if opts.dismissbutton == opts.clickbutton then
+        opts.dismissbutton = opts.clickbutton == "2" and "shift-2" or "2"
+    end
+    local DOCKS = { panel = true, auto = true, right = true, left = true, above = true, below = true }
+    if not DOCKS[opts.partydock] then opts.partydock = "auto" end
 
     -- what buff and enchant groups share
     local function CheckGroup(group)
@@ -2144,7 +2473,13 @@ function BR.SanityCheck()
         if not TIMERS[group.timer] then group.timer = "default" end
         if not GLOWS[group.glow] then group.glow = "default" end
         if not OVERLAYS[group.overlay] then group.overlay = "default" end
+        if not GLOWS[group.warnglow] then group.warnglow = "default" end
+        if not OVERLAYS[group.warnoverlay] then group.warnoverlay = "default" end
         if type(group.size) ~= "number" or group.size < 10 or group.size > 400 then group.size = nil end
+        -- its own opacities, none follows the Options tab
+        for _, k in ipairs({ "alpha", "warnalpha" }) do
+            if type(group[k]) ~= "number" or group[k] < 0 or group[k] > 1 then group[k] = nil end
+        end
         if type(group.script) ~= "string" then group.script = "" end
     end
     for g, group in pairs(OpcowsBuffReminderDB.BuffGroups) do
@@ -2156,6 +2491,8 @@ function BR.SanityCheck()
             for b in pairs(group.buffs) do group.buffs[b] = true end
             CheckGroup(group)
             if not COMBAT_MODES[group.combat] then group.combat = "cdm" end
+            if type(group.click) ~= "string" or group.click == "" then group.click = "auto" end
+            if type(group.party) ~= "boolean" then group.party = true end
             if group.icon == nil then group.icon = QUESTION_MARK end
         end
     end
@@ -2235,6 +2572,7 @@ frame:SetScript("OnEvent", function(self, event, arg1, arg2, arg3, arg4)
         BR.ScanEnchants()
     elseif event == "PLAYER_REGEN_DISABLED" then
         BR.status.combat = true
+        BR.HideClickers()
     elseif event == "PLAYER_REGEN_ENABLED" then
         BR.status.combat = false
         BR.needScan = true

@@ -1,12 +1,23 @@
 # Changelog
 
+## 2.2
+
+### Added
+
+- Click a buff group's icon to cast its spell on yourself. Each buff group picks the spell under "Click to cast" on the Buff groups tab: Auto (the first of your own spells in the buff group), one of them, or Off. Icons can't be clicked in combat or while they're unlocked. "Click to cast" on the Options tab turns it off for every buff group, or sets the click by doing it: any mouse button, with Shift, Ctrl or Alt if you like.
+- Each buff group can have its own opacity for a missing buff and for a warning. Empty follows the Options tab.
+- Icons warning that a buff is running out or low on stacks can have a glow and color too, ex: a pulse. Set it on the Options tab, or for each buff group on the Buff groups tab.
+- Party reminders. Once you've given a party member a buff from one of your buff groups, a panel shows their name and the buff's icon when it's gone, with an optional early warning. Buff groups can opt out with "Party" on the Buff groups tab. Nothing is saved, and it's hidden in combat. Unlocked, the panel shows four made up members to place it by. The icons show by Blizzard's party frames, standard or raid-style, on a side picked from how the frames are laid out (beside them when stacked, above or below when side by side). They can be put on a set side, or on the panel, instead (Options tab).
+- Click to dismiss: right click an icon, yours or a party member's, to hide it until the buff is put on again. Works in combat. The click can be changed or turned off on the Options tab.
+- A preview icon beside the missing and warning glow and color buttons shows how the icon will look, opacity included.
+
 ## 2.1
 
 ### Added
 
-- Casting one of a group's buffs on yourself during combat marks the group as up right away. Its timer starts from the cast and uses the buff's duration from the last time it was read out of combat. It works in both In combat modes and doesn't need the aura to be readable. Casts on other players don't count.
+- Casting one of a buff group's buffs on yourself during combat marks the buff group as up right away. Its timer starts from the cast and uses the buff's duration from the last time it was read out of combat. It works in both In combat modes and doesn't need the aura to be readable. Casts on other players don't count.
 - Buff durations are now saved with the "Seen before" list, so they're known after logging in.
-- `/obr debug` prints what each cast of a group's buff decides and when a combat read marks a buff as gone.
+- `/obr debug` prints what each cast of a buff group's buff decides and when a combat read marks a buff as gone.
 
 ### Fixed
 

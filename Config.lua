@@ -462,6 +462,60 @@ StaticPopupDialogs["OPCOWSBUFFREMINDER_RESET"] = {
     preferredIndex = 3,
 }
 
+-- glow and color buttons marking a missing buff or a warning, and a preview icon. target() is the
+-- table holding glowKey and overlayKey, group rows have a Default that follows the Options tab.
+-- texture() is the preview's icon.
+local STYLE_WHEN = {
+    missing = { "When missing:", "missing", "while the buff is missing, not while it's only running out" },
+    warning = { "When warning:", "warning", "while the buff is running out (early warning time) or low on stacks, not once it's gone" },
+}
+local function StyleRow(parent, when, target, glowKey, overlayKey, isGroup, texture)
+    local w = STYLE_WHEN[when]
+    local row = {}
+    local label = Label(parent, w[1])
+    row.label = label
+    local glowLabel = Label(parent, "Glow", "GameFontHighlightSmall")
+    -- a fixed column, so the missing and warning rows line up whatever their labels' widths
+    glowLabel:SetPoint("LEFT", label, "LEFT", 100, 0)
+    row.glow = Button(parent, "", 80, function()
+        local t = target()
+        t[glowKey] = NextIn(BR.GLOW_ORDER, t[glowKey], not isGroup)
+        Changed()
+    end)
+    row.glow:SetPoint("LEFT", glowLabel, "RIGHT", 6, 0)
+    local others = isGroup and "\n\n" or " Buff groups can have their own on the Buff groups tab.\n\n"
+    local default = isGroup and "|cffffd100Default:|r follows the Options tab.\n" or ""
+    Tooltip(row.glow, "Glow when " .. w[2],
+        "A glow around the icon " .. w[3] .. "." .. others
+        .. default
+        .. "|cffffd100Pulse:|r a glow that fades in and out.\n"
+        .. "|cffffd100Flash:|r the same, fast.\n"
+        .. "|cffffd100Steady:|r a glow that stays lit.\n"
+        .. "|cffffd100Spell alert:|r the game's proc glow, like an action button's. A pulse if the game won't show it.\n"
+        .. "|cff808080Click to change.|r")
+    local overlayLabel = Label(parent, "Color", "GameFontHighlightSmall")
+    overlayLabel:SetPoint("LEFT", row.glow, "RIGHT", 10, 0)
+    row.overlay = Button(parent, "", 70, function()
+        local t = target()
+        t[overlayKey] = NextIn(BR.OVERLAY_ORDER, t[overlayKey], not isGroup)
+        Changed()
+    end)
+    row.overlay:SetPoint("LEFT", overlayLabel, "RIGHT", 6, 0)
+    Tooltip(row.overlay, "Color when " .. w[2],
+        "A color washed over the icon " .. w[3] .. ", ex: red." .. others
+        .. default .. "|cff808080Click to change.|r")
+    row.preview = BR.NewPreview(parent, 22)
+    row.preview:SetPoint("LEFT", row.overlay, "RIGHT", 16, 0)
+    Tooltip(row.preview, "Preview", "How the icon looks when " .. w[2] .. ", with its glow, color and opacity.")
+    function row:Load()
+        local t = target()
+        self.glow:SetText(BR.GLOWS[t[glowKey]])
+        self.overlay:SetText(BR.OVERLAYS[t[overlayKey]])
+        BR.StylePreview(self.preview, t, when == "missing", texture and texture())
+    end
+    return row
+end
+
 -- groups page ------------------------------------------------------------------------------
 local function CreateGroupsPage(page)
     -- a buff group's name, or an enchant group's slot
@@ -478,7 +532,7 @@ local function CreateGroupsPage(page)
     local groups = ScrollList(page, 176, 300)
     groups:SetPoint("TOPLEFT", 0, -16)
 
-    local newLabel = Label(page, "New group:", "GameFontHighlightSmall")
+    local newLabel = Label(page, "New buff group:", "GameFontHighlightSmall")
     newLabel:SetPoint("TOPLEFT", groups, "BOTTOMLEFT", 2, -8)
     local newEdit = EditBox(page, 116)
     newEdit:SetPoint("TOPLEFT", newLabel, "BOTTOMLEFT", 4, -2)
@@ -495,7 +549,7 @@ local function CreateGroupsPage(page)
     local newBtn = Button(page, "Add", 50, NewGroup)
     newBtn:SetPoint("LEFT", newEdit, "RIGHT", 4, 0)
 
-    local empty = Label(page, "Create a buff group to get started.\nPut buffs that replace each other,\nlike different food buffs, in the same group.", "GameFontHighlight")
+    local empty = Label(page, "Create a buff group to get started.\nPut buffs that replace each other,\nlike different food buffs, in the same buff group.", "GameFontHighlight")
     empty:SetJustifyH("CENTER")
     empty:SetPoint("CENTER", page, "CENTER", 95, 40)
 
@@ -665,54 +719,37 @@ local function CreateGroupsPage(page)
         .. "|cffffd100None:|r neither.\n"
         .. "|cff808080Click to change.|r")
 
-    local missingLabel = Label(detail, "When missing:")
-    missingLabel:SetPoint("TOPLEFT", 0, -336)
-    local glowLabel = Label(detail, "Glow", "GameFontHighlightSmall")
-    glowLabel:SetPoint("LEFT", missingLabel, "RIGHT", 10, 0)
-    local glow = Button(detail, "", 90, function()
-        local group = Current()
-        group.glow = NextIn(BR.GLOW_ORDER, group.glow)
-        Changed()
-    end)
-    glow:SetPoint("LEFT", glowLabel, "RIGHT", 6, 0)
-    Tooltip(glow, "Glow when missing",
-        "A glow around the icon while the buff is missing, not while it's only running out.\n\n"
-        .. "|cffffd100Default:|r follows the Options tab.\n"
-        .. "|cffffd100Pulse:|r a glow that fades in and out.\n"
-        .. "|cffffd100Flash:|r the same, fast.\n"
-        .. "|cffffd100Steady:|r a glow that stays lit.\n"
-        .. "|cffffd100Spell alert:|r the game's proc glow, like an action button's. A pulse if the game won't show it.\n"
-        .. "|cff808080Click to change.|r")
-    local overlayLabel = Label(detail, "Color", "GameFontHighlightSmall")
-    overlayLabel:SetPoint("LEFT", glow, "RIGHT", 12, 0)
-    local overlay = Button(detail, "", 80, function()
-        local group = Current()
-        group.overlay = NextIn(BR.OVERLAY_ORDER, group.overlay)
-        Changed()
-    end)
-    overlay:SetPoint("LEFT", overlayLabel, "RIGHT", 6, 0)
-    Tooltip(overlay, "Color when missing",
-        "A color washed over the icon while the buff is missing, ex: red.\n\n"
-        .. "|cffffd100Default:|r follows the Options tab.\n"
-        .. "|cff808080Click to change.|r")
+    local alphaLabel = Label(detail, "Opacity:")
+    alphaLabel:SetPoint("TOPLEFT", 0, -336)
+    local alphaMissingLabel = Label(detail, "missing", "GameFontHighlightSmall")
+    alphaMissingLabel:SetPoint("LEFT", alphaLabel, "RIGHT", 8, 0)
+    -- the group's own opacity, empty follows the Options tab
+    local function AlphaBox(key)
+        return ValueBox(detail, 36,
+            function() return Current()[key] end,
+            function(text)
+                local n = tonumber(text)
+                if text == "" or text:lower() == "default" then
+                    Current()[key] = nil
+                elseif n and n >= 0 and n <= 1 then
+                    Current()[key] = n
+                end
+            end)
+    end
+    local alphaMissing = AlphaBox("alpha")
+    alphaMissing:SetPoint("LEFT", alphaMissingLabel, "RIGHT", 6, 0)
+    Tooltip(alphaMissing, "Opacity when missing",
+        "This icon's opacity while the buff is gone, 0 (invisible) to 1 (solid). Empty uses the Options tab's.")
+    local alphaWarnLabel = Label(detail, "warning", "GameFontHighlightSmall")
+    alphaWarnLabel:SetPoint("LEFT", alphaMissing, "RIGHT", 10, 0)
+    local alphaWarn = AlphaBox("warnalpha")
+    alphaWarn:SetPoint("LEFT", alphaWarnLabel, "RIGHT", 6, 0)
+    Tooltip(alphaWarn, "Opacity when warning",
+        "This icon's opacity while the buff is still up but running out (early warning time) or low on stacks, "
+        .. "0 (invisible) to 1 (solid). Empty uses the Options tab's.")
 
-    local combatLabel = Label(detail, "In combat:")
-    combatLabel:SetPoint("TOPLEFT", 0, -366)
-    local combat = Button(detail, "", 130, function()
-        local group = OpcowsBuffReminderDB.BuffGroups[selected]
-        BR.SetCombatMode(selected, group.combat == "cdm" and "blizzard" or "cdm")
-        Changed()
-    end)
-    combat:SetPoint("LEFT", combatLabel, "RIGHT", 10, 0)
-    Tooltip(combat, "In combat",
-        "The game hides most buffs from addons in combat.\n\n"
-        .. "|cffffd100Cooldown Manager:|r read live when the game allows it or when the Cooldown Manager tracks the buff. "
-        .. "Otherwise the time it had when the fight started counts down, and changes show after combat.\n\n"
-        .. "|cffffd100Blizzard Auras:|r for buffs the Cooldown Manager can't track. Blizzard's own aura button shows the buff "
-        .. "over the icon for the whole fight with its exact time and stacks, low stacks in red. When the buff drops the icon shows through.\n"
-        .. "|cff808080Click to change.|r")
     local sizeLabel = Label(detail, "Icon size:")
-    sizeLabel:SetPoint("LEFT", combat, "RIGHT", 20, 0)
+    sizeLabel:SetPoint("LEFT", alphaWarn, "RIGHT", 20, 0)
     local size = ValueBox(detail, 40,
         function() return Current().size end,
         function(text)
@@ -729,6 +766,65 @@ local function CreateGroupsPage(page)
         end)
     size:SetPoint("LEFT", sizeLabel, "RIGHT", 10, 0)
     Tooltip(size, "Icon size", "This icon's own size, 10 to 400. Empty uses the size on the Options tab.")
+
+    local function GroupIcon()
+        return selectedSlot and EnchantIcon(selectedSlot) or Current().icon
+    end
+    local missingStyle = StyleRow(detail, "missing", Current, "glow", "overlay", true, GroupIcon)
+    missingStyle.label:SetPoint("TOPLEFT", 0, -366)
+    local warnStyle = StyleRow(detail, "warning", Current, "warnglow", "warnoverlay", true, GroupIcon)
+    warnStyle.label:SetPoint("TOPLEFT", 0, -396)
+
+    -- "auto", "off", or one of the group's spells that's yours, a spell no longer yours is auto
+    local function ClickValue(group, spells)
+        if group.click == "off" then return "off" end
+        for _, name in ipairs(spells) do
+            if name == group.click then return name end
+        end
+        return "auto"
+    end
+    local clickLabel = Label(detail, "Click to cast:")
+    clickLabel:SetPoint("TOPLEFT", 0, -426)
+    local click = Button(detail, "", 180, function()
+        local group = Current()
+        local spells = BR.ClickSpells(group)
+        local order = { "auto" }
+        for _, name in ipairs(spells) do table.insert(order, name) end
+        table.insert(order, "off")
+        group.click = NextIn(order, ClickValue(group, spells))
+        Changed()
+    end)
+    click:SetPoint("LEFT", clickLabel, "RIGHT", 10, 0)
+    Tooltip(click, "Click to cast",
+        "Clicking the icon casts this spell on you.\n\n"
+        .. "|cffffd100Auto:|r the first of your own spells in the buff group.\n"
+        .. "|cffffd100Off:|r the icon can't be clicked.\n\n"
+        .. "Icons can't be clicked in combat, since the game doesn't let addons move them there, or while they're unlocked for moving.\n"
+        .. "|cff808080Click to change.|r")
+    local party = Check(detail, "Party", function(v)
+        Current().party = v
+        Changed()
+    end)
+    party:SetPoint("LEFT", click, "RIGHT", 8, -1)
+    Tooltip(party, "Remind party",
+        "Once you've given this buff to a party member, a line for them on the party panel shows it when it's gone. "
+        .. "Uncheck it for buffs you only keep on yourself.")
+
+    local combatLabel = Label(detail, "In combat:")
+    combatLabel:SetPoint("TOPLEFT", 0, -456)
+    local combat = Button(detail, "", 130, function()
+        local group = OpcowsBuffReminderDB.BuffGroups[selected]
+        BR.SetCombatMode(selected, group.combat == "cdm" and "blizzard" or "cdm")
+        Changed()
+    end)
+    combat:SetPoint("LEFT", combatLabel, "RIGHT", 10, 0)
+    Tooltip(combat, "In combat",
+        "The game hides most buffs from addons in combat.\n\n"
+        .. "|cffffd100Cooldown Manager:|r read live when the game allows it or when the Cooldown Manager tracks the buff. "
+        .. "Otherwise the time it had when the fight started counts down, and changes show after combat.\n\n"
+        .. "|cffffd100Blizzard Auras:|r for buffs the Cooldown Manager can't track. Blizzard's own aura button shows the buff "
+        .. "over the icon for the whole fight with its exact time and stacks, low stacks in red. When the buff drops the icon shows through.\n"
+        .. "|cff808080Click to change.|r")
     local combatStatus = Label(detail, "", "GameFontHighlightSmall")
     combatStatus:SetPoint("TOPLEFT", combatLabel, "BOTTOMLEFT", 0, -10)
     combatStatus:SetPoint("RIGHT", detail, "RIGHT")
@@ -770,25 +866,22 @@ local function CreateGroupsPage(page)
 
         empty:Hide()
         local ench = selectedSlot ~= nil
-        for _, w in ipairs({ delete, buffsLabel, buffsHint, buffs, buffEdit, addBtn, pickBtn, combatLabel, combat, combatStatus }) do
+        -- enchants have no click or combat setting
+        for _, w in ipairs({ delete, buffsLabel, buffsHint, buffs, buffEdit, addBtn, pickBtn, clickLabel, click,
+            party, combatLabel, combat, combatStatus }) do
             w:SetShown(not ench)
         end
         enchNow:SetShown(ench)
         enchHint:SetShown(ench)
         stacksLabel:SetText(ench and "Warn at charges:" or "Warn at stacks:")
-        -- enchants have no combat setting, the size takes its place
-        sizeLabel:ClearAllPoints()
-        if ench then
-            sizeLabel:SetPoint("TOPLEFT", 0, -366)
-        else
-            sizeLabel:SetPoint("LEFT", combat, "RIGHT", 20, 0)
-        end
 
         local group = Current()
         stacks:Load()
         timer:SetText(BR.TIMERS[group.timer])
-        glow:SetText(BR.GLOWS[group.glow])
-        overlay:SetText(BR.OVERLAYS[group.overlay])
+        missingStyle:Load()
+        warnStyle:Load()
+        alphaMissing:Load()
+        alphaWarn:Load()
         size:Load()
         if ench then
             icon:SetTexture(EnchantIcon(selectedSlot))
@@ -813,6 +906,20 @@ local function CreateGroupsPage(page)
         end
         buffs:SetItems(bitems)
         conds:Load(GroupTarget(selected))
+        party:SetChecked(group.party)
+        local spells = BR.ClickSpells(group)
+        local cv = ClickValue(group, spells)
+        local clickOn = OpcowsBuffReminderDB.Options.clicktocast
+        click:SetEnabled(clickOn and #spells > 0)
+        if not clickOn then
+            click:SetText("Off on Options tab")
+        elseif #spells == 0 then
+            click:SetText("None of your spells")
+        elseif cv == "auto" then
+            click:SetText("Auto: " .. spells[1])
+        else
+            click:SetText(cv == "off" and "Off" or cv)
+        end
         combat:SetText(BR.COMBAT_MODES[group.combat])
         local status, warn = BR.CombatStatus(selected)
         combatStatus:SetText(status)
@@ -828,7 +935,7 @@ end
 local function CreateOptionsPage(page)
     local header = Label(page, "Defaults", "GameFontNormalLarge")
     header:SetPoint("TOPLEFT", 0, 0)
-    local note = Label(page, "Copied to new groups.", "GameFontHighlightSmall")
+    local note = Label(page, "Copied to new buff groups.", "GameFontHighlightSmall")
     note:SetPoint("LEFT", header, "RIGHT", 10, -1)
     local conds = ConditionsPanel(page)
     conds:SetPoint("TOPLEFT", 0, -28)
@@ -845,7 +952,7 @@ local function CreateOptionsPage(page)
             BR.ApplyLayout()
         end))
     size:SetPoint("LEFT", sizeLabel, "RIGHT", 10, 0)
-    Tooltip(size, "Icon size", "10 to 400. Groups can have their own size on the Buff groups tab.")
+    Tooltip(size, "Icon size", "10 to 400. Buff groups can have their own size on the Buff groups tab.")
 
     local alphaLabel = Label(page, "Opacity:")
     alphaLabel:SetPoint("LEFT", size, "RIGHT", 20, 0)
@@ -855,7 +962,8 @@ local function CreateOptionsPage(page)
         function() return OpcowsBuffReminderDB.Options.alpha end,
         NumberSetter(0, 1, function(n) OpcowsBuffReminderDB.Options.alpha = n end))
     alpha:SetPoint("LEFT", missingLabel, "RIGHT", 6, 0)
-    Tooltip(alpha, "Opacity when missing", "Icons whose buff is gone. 0 (invisible) to 1 (solid).")
+    Tooltip(alpha, "Opacity when missing", "Icons whose buff is gone. 0 (invisible) to 1 (solid). "
+        .. "Buff groups can have their own on the Buff groups tab.")
     local warnLabel = Label(page, "warning", "GameFontHighlightSmall")
     warnLabel:SetPoint("LEFT", alpha, "RIGHT", 10, 0)
     local warnAlpha = ValueBox(page, 36,
@@ -863,7 +971,8 @@ local function CreateOptionsPage(page)
         NumberSetter(0, 1, function(n) OpcowsBuffReminderDB.Options.warnalpha = n end))
     warnAlpha:SetPoint("LEFT", warnLabel, "RIGHT", 6, 0)
     Tooltip(warnAlpha, "Opacity when warning",
-        "Icons whose buff is still up but running out (early warning time) or low on stacks. 0 (invisible) to 1 (solid).")
+        "Icons whose buff is still up but running out (early warning time) or low on stacks. 0 (invisible) to 1 (solid). "
+        .. "Buff groups can have their own on the Buff groups tab.")
 
     local soundLabel = Label(page, "Warning sound:")
     soundLabel:SetPoint("TOPLEFT", 0, -207)
@@ -939,10 +1048,10 @@ local function CreateOptionsPage(page)
     textLabel:SetPoint("TOPLEFT", 0, -263)
     local showTime = Check(page, "Time left", function(v) OpcowsBuffReminderDB.Options.icontext.time = v; Changed() end)
     showTime:SetPoint("LEFT", textLabel, "RIGHT", 8, -1)
-    Tooltip(showTime, "Time left", "The time left as text at the top of the icon. Groups can override this on the Buff groups tab.")
+    Tooltip(showTime, "Time left", "The time left as text at the top of the icon. Buff groups can override this on the Buff groups tab.")
     local showSwipe = Check(page, "Swipe", function(v) OpcowsBuffReminderDB.Options.icontext.swipe = v; Changed() end)
     showSwipe:SetPoint("LEFT", showTime, "RIGHT", 70, 0)
-    Tooltip(showSwipe, "Swipe", "The time left as a clock swipe darkening the icon. Groups can override this on the Buff groups tab.")
+    Tooltip(showSwipe, "Swipe", "The time left as a clock swipe darkening the icon. Buff groups can override this on the Buff groups tab.")
     local showStacks = Check(page, "Stack count", function(v) OpcowsBuffReminderDB.Options.icontext.stacks = v; Changed() end)
     showStacks:SetPoint("LEFT", showSwipe, "RIGHT", 56, 0)
     local bothLabel = Label(page, "When both:")
@@ -958,33 +1067,109 @@ local function CreateOptionsPage(page)
     Tooltip(priority, "When both apply",
         "An icon can show time left text (top) and a stack count (bottom right) at once. On small icons they can crowd it, pick one to show only that.\n|cff808080Click to change.|r")
 
-    local missingLabel = Label(page, "When missing:")
-    missingLabel:SetPoint("TOPLEFT", 0, -293)
-    local glowLabel = Label(page, "Glow", "GameFontHighlightSmall")
-    glowLabel:SetPoint("LEFT", missingLabel, "RIGHT", 10, 0)
-    local glow = Button(page, "", 90, function()
-        OpcowsBuffReminderDB.Options.glow = NextIn(BR.GLOW_ORDER, OpcowsBuffReminderDB.Options.glow, true)
+    local function Opts() return OpcowsBuffReminderDB.Options end
+    -- a sample buff for the previews, Mark of the Wild
+    local function SampleIcon() return "Interface\\Icons\\Spell_Nature_Regeneration" end
+    local missingStyle = StyleRow(page, "missing", Opts, "glow", "overlay", false, SampleIcon)
+    missingStyle.label:SetPoint("TOPLEFT", 0, -293)
+    local warnStyle = StyleRow(page, "warning", Opts, "warnglow", "warnoverlay", false, SampleIcon)
+    warnStyle.label:SetPoint("TOPLEFT", 0, -323)
+
+    local clickLabel = Label(page, "Click to cast:")
+    clickLabel:SetPoint("TOPLEFT", 0, -355)
+    local clickOn = Check(page, "", function(v)
+        OpcowsBuffReminderDB.Options.clicktocast = v
         Changed()
     end)
-    glow:SetPoint("LEFT", glowLabel, "RIGHT", 6, 0)
-    Tooltip(glow, "Glow when missing",
-        "A glow around icons while their buff is missing, not while it's only running out. "
-        .. "Groups can have their own on the Buff groups tab.\n\n"
-        .. "|cffffd100Pulse:|r a glow that fades in and out.\n"
-        .. "|cffffd100Flash:|r the same, fast.\n"
-        .. "|cffffd100Steady:|r a glow that stays lit.\n"
-        .. "|cffffd100Spell alert:|r the game's proc glow, like an action button's. A pulse if the game won't show it.\n"
-        .. "|cff808080Click to change.|r")
-    local overlayLabel = Label(page, "Color", "GameFontHighlightSmall")
-    overlayLabel:SetPoint("LEFT", glow, "RIGHT", 12, 0)
-    local overlay = Button(page, "", 80, function()
-        OpcowsBuffReminderDB.Options.overlay = NextIn(BR.OVERLAY_ORDER, OpcowsBuffReminderDB.Options.overlay, true)
+    clickOn:SetHitRectInsets(0, 0, 0, 0)
+    clickOn:SetPoint("LEFT", clickLabel, "RIGHT", 6, -1)
+    Tooltip(clickOn, "Click to cast",
+        "Clicking a buff group's icon casts its spell on you, out of combat. "
+        .. "Each buff group picks its spell or turns it off on the Buff groups tab. Unchecked, no icon can be clicked.")
+    -- shows the click saved in Options[key]: click it once, then again with the button and keys to
+    -- use. It can't be the click saved in Options[other], which is used to do what.
+    local function ClickCapture(key, other, what)
+        local b = Button(page, "", 170, nil)
+        b:RegisterForClicks("AnyUp")
+        b:SetScript("OnClick", function(self, button)
+            if not self.listening then
+                self.listening = true
+                self:SetText("|cff00ff00Click here with it|r")
+                return
+            end
+            local opts = OpcowsBuffReminderDB.Options
+            local click = BR.ClickFrom(button)
+            if click and click == opts[other] then
+                self:SetText("|cffff4040Used to " .. what .. ", try another|r")
+                return
+            end
+            self.listening = nil
+            if click then opts[key] = click end
+            Changed()
+        end)
+        b:SetScript("OnHide", function(self) self.listening = nil end)
+        return b
+    end
+    local clickButton = ClickCapture("clickbutton", "dismissbutton", "dismiss")
+    clickButton:SetPoint("LEFT", clickOn, "RIGHT", 4, 1)
+    Tooltip(clickButton, "Click to cast with",
+        "The click that casts: any mouse button, with Shift, Ctrl or Alt held if you like. "
+        .. "One with a key held leaves a plain click free, so an icon can't be cast by accident.\n\n"
+        .. "|cff808080Click this, then click it again the way you want to cast.|r")
+
+    local dismissLabel = Label(page, "Click to dismiss:")
+    dismissLabel:SetPoint("TOPLEFT", 0, -385)
+    local dismissOn = Check(page, "", function(v)
+        OpcowsBuffReminderDB.Options.dismiss = v
         Changed()
     end)
-    overlay:SetPoint("LEFT", overlayLabel, "RIGHT", 6, 0)
-    Tooltip(overlay, "Color when missing",
-        "A color washed over icons while their buff is missing, ex: red. "
-        .. "Groups can have their own on the Buff groups tab.\n|cff808080Click to change.|r")
+    dismissOn:SetHitRectInsets(0, 0, 0, 0)
+    dismissOn:SetPoint("LEFT", dismissLabel, "RIGHT", 6, -1)
+    Tooltip(dismissOn, "Click to dismiss",
+        "Clicking an icon this way hides it until the buff is put on again, yours or a party member's. "
+        .. "It works in combat too, so while it's on your icons catch clicks, the same as action buttons do.")
+    local dismissButton = ClickCapture("dismissbutton", "clickbutton", "cast")
+    dismissButton:SetPoint("LEFT", dismissOn, "RIGHT", 4, 1)
+    Tooltip(dismissButton, "Click to dismiss with",
+        "The click that dismisses an icon: any mouse button, with Shift, Ctrl or Alt held if you like. "
+        .. "It can't be the click that casts.\n\n"
+        .. "|cff808080Click this, then click it again the way you want to dismiss.|r")
+
+    local partyLabel = Label(page, "Party:")
+    partyLabel:SetPoint("TOPLEFT", 0, -415)
+    local partyOn = Check(page, "Remind party members", function(v)
+        OpcowsBuffReminderDB.Options.party = v
+        Changed()
+    end)
+    partyOn:SetPoint("LEFT", partyLabel, "RIGHT", 6, -1)
+    Tooltip(partyOn, "Party reminders",
+        "Once you've given a party member a buff from one of your buff groups, its icon shows by their party frame, or on a panel, when it's gone. "
+        .. "Only buffs you've been seen giving them count. The dismiss click on an icon hides it until you buff them with it again.\n\n"
+        .. "Hidden in combat. Unlock the icons to move the panel. Buff groups can opt out on the Buff groups tab.")
+    local partyWarn = Check(page, "Early warning", function(v)
+        OpcowsBuffReminderDB.Options.partywarn = v
+        Changed()
+    end)
+    partyWarn:SetPoint("LEFT", partyOn, "RIGHT", 150, 0)
+    Tooltip(partyWarn, "Party early warning",
+        "Also show a party member's buff before it runs out, using the buff group's early warning time.")
+    local DOCKS = { "auto", "right", "left", "above", "below", "panel" }
+    local DOCK_LABELS = { panel = "On the panel", auto = "By party frames", right = "Right of party frames",
+        left = "Left of party frames", above = "Above party frames", below = "Below party frames" }
+    local partyDock = Button(page, "", 140, function(self)
+        local opts = OpcowsBuffReminderDB.Options
+        opts.partydock = NextIn(DOCKS, opts.partydock)
+        self:SetText(DOCK_LABELS[opts.partydock])
+        Changed()
+    end)
+    partyDock:SetPoint("LEFT", partyWarn, "RIGHT", 90, 0)
+    Tooltip(partyDock, "Where party reminders show",
+        "By each member's frame in Blizzard's party frames, standard or raid-style, or on the panel. "
+        .. "\"By party frames\" picks the side from where the frames are: beside them when they're stacked, "
+        .. "above or below when they're side by side, toward the middle of the screen. "
+        .. "Or pick a side yourself. The icons follow the frames when they're moved. "
+        .. "Members whose frame isn't showing, or with frames from another addon, go on the panel.\n\n"
+        .. "|cff808080Click to switch.|r")
 
     local reset = Button(page, "Reset all settings", 140, function()
         StaticPopup_Show("OPCOWSBUFFREMINDER_RESET")
@@ -1002,7 +1187,7 @@ local function CreateOptionsPage(page)
             local label = color and ("|c%s%s|r"):format(color.colorStr, c.key) or c.key
             table.insert(rows, {
                 name = c.key,
-                text = ("%s |cff808080(%d group%s)|r"):format(label, c.groups, c.groups == 1 and "" or "s"),
+                text = ("%s |cff808080(%d buff group%s)|r"):format(label, c.groups, c.groups == 1 and "" or "s"),
                 onClick = function()
                     copyPicker:Hide()
                     StaticPopup_Show("OPCOWSBUFFREMINDER_COPY", c.key, nil, c.key)
@@ -1033,12 +1218,23 @@ local function CreateOptionsPage(page)
         size:Load()
         alpha:Load()
         warnAlpha:Load()
-        glow:SetText(BR.GLOWS[OpcowsBuffReminderDB.Options.glow])
-        overlay:SetText(BR.OVERLAYS[OpcowsBuffReminderDB.Options.overlay])
+        missingStyle:Load()
+        warnStyle:Load()
         sound:Load()
         unlock:SetChecked(not BR.locked)
         hide:SetChecked(BR.hideAll)
         minimap:SetChecked(not OpcowsBuffReminderDB.Options.minimap.hide)
+        clickOn:SetChecked(OpcowsBuffReminderDB.Options.clicktocast)
+        clickButton.listening = nil
+        clickButton:SetText(BR.ClickLabel(OpcowsBuffReminderDB.Options.clickbutton))
+        dismissOn:SetChecked(OpcowsBuffReminderDB.Options.dismiss)
+        dismissButton.listening = nil
+        dismissButton:SetText(BR.ClickLabel(OpcowsBuffReminderDB.Options.dismissbutton))
+        partyOn:SetChecked(OpcowsBuffReminderDB.Options.party)
+        partyWarn:SetChecked(OpcowsBuffReminderDB.Options.partywarn)
+        partyWarn:SetEnabled(OpcowsBuffReminderDB.Options.party)
+        partyDock:SetText(DOCK_LABELS[OpcowsBuffReminderDB.Options.partydock])
+        partyDock:SetEnabled(OpcowsBuffReminderDB.Options.party)
         local t = OpcowsBuffReminderDB.Options.icontext
         showTime:SetChecked(t.time)
         showSwipe:SetChecked(t.swipe)
@@ -1050,7 +1246,7 @@ end
 -- main window ------------------------------------------------------------------------------
 local function CreateConfig()
     local f = CreateFrame("Frame", "OpcowsBuffReminderConfig", UIParent, "BasicFrameTemplateWithInset")
-    f:SetSize(600, 520)
+    f:SetSize(620, 610)
     f:SetPoint("CENTER")
     f:SetFrameStrata("HIGH")
     f:SetToplevel(true)
