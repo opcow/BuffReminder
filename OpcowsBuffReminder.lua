@@ -245,8 +245,12 @@ local function RememberSeen(list)
     for _, e in ipairs(list) do
         if type(e.name) == "string" then
             local key = e.name:lower()
-            if not seen[key] then added = true end
-            seen[key] = { name = e.name, id = e.spellId, icon = e.icon, duration = e.duration, t = t }
+            local old = seen[key]
+            if not old then added = true end
+            -- the most charges it's had, what a cast in combat starts with
+            local charges = math.max(e.applications or 0, old and type(old.charges) == "number" and old.charges or 0)
+            seen[key] = { name = e.name, id = e.spellId, icon = e.icon, duration = e.duration, t = t,
+                charges = charges > 0 and charges or nil }
         end
     end
     if not added then return end
@@ -420,11 +424,14 @@ end
 local function LiveEntry(aura, prev)
     if not aura or issecretvalue(aura) then return nil end
     local was = prev and prev.present
+    local stacks = Num(aura.applications)
     return {
         present = true,
         expires = Num(aura.expirationTime) or (was and prev.expires) or 0,
         duration = Num(aura.duration) or (was and prev.duration) or 0,
-        applications = Num(aura.applications) or (was and prev.applications) or nil,
+        applications = stacks or (was and prev.applications) or nil,
+        -- when hits last used a charge, kept while the count is still predicted
+        chargeAt = not stacks and was and prev.chargeAt or nil,
     }
 end
 
@@ -653,11 +660,37 @@ function BR.OnCast(id)
         -- another buff of the group may still outlast it
         local prev = BR.groupState[g]
         if not (prev and prev.present and prev.expires and Outlasts(prev, e)) then
-            BR.groupState[g] = { present = true, expires = e.expires, duration = e.duration }
-            Debug(("cast %s, %s is up for %ds"):format(name, g, dur))
+            -- hits count down from full charges
+            local charges = OpcowsBuffReminderDB.BuffGroups[g].hitcd > 0 and Num(seen.charges) or nil
+            BR.groupState[g] = { present = true, expires = e.expires, duration = e.duration,
+                applications = charges }
+            Debug(("cast %s, %s is up for %ds%s"):format(name, g, dur,
+                charges and (" with " .. charges .. " charges") or ""))
         end
     end
     BR.Refresh()
+end
+
+-- UNIT_COMBAT on you. In combat, a buff group whose charges are used by hits, like Lightning
+-- Shield, loses one for each hit that lands at least its cooldown after the last charge was used.
+-- Dodges, parries and misses don't count. Out of combat the aura read is exact.
+function BR.OnHit(action)
+    if not BR.status.combat or issecretvalue(action) or action ~= "WOUND" then return end
+    local now, changed = GetTime(), false
+    for g, group in pairs(OpcowsBuffReminderDB.BuffGroups) do
+        local st = BR.groupState[g]
+        local n = group.hitcd > 0 and st and st.present and Num(st.applications)
+        if n and n > 0 and now - (st.chargeAt or 0) >= group.hitcd then
+            if n == 1 then
+                BR.groupState[g] = { present = false }
+            else
+                st.applications, st.chargeAt = n - 1, now
+            end
+            Debug(("hit, %s down to %d charges"):format(g, n - 1))
+            changed = true
+        end
+    end
+    if changed then BR.Refresh() end
 end
 
 -- a hand's temporary enchant or imbue from C_Item.GetWeaponEnchantInfo, ignoring permanent enchants.
@@ -1133,18 +1166,8 @@ local function LiveReady(g)
     return l ~= nil and l.container ~= nil and not l.err
 end
 
--- how a group is followed in combat, and whether that's worth a warning
-function BR.CombatStatus(g)
-    local group = OpcowsBuffReminderDB.BuffGroups[g]
-    if not next(group.buffs) then return "No buffs yet.", false end
-    if group.combat == "blizzard" then
-        local l = live[g]
-        if l and l.err then return "Blizzard Auras don't work on this client, it's predicted in combat.", true end
-        local _, key = LiveIds(group)
-        if key == "" then return "Spell id not known yet. Have the buff once, or add it by spell id.", true end
-        if not LiveReady(g) then return "Blizzard Auras are set up after combat.", false end
-        return "Blizzard's aura button shows it all fight, with exact time and stacks.", false
-    end
+-- how a group in Cooldown Manager mode is followed in combat, and whether that's worth a warning
+local function CDMStatus(group)
     local secret, unknown = {}, false
     for buff in pairs(group.buffs) do
         local ids = SpellIds(buff)
@@ -1169,6 +1192,25 @@ function BR.CombatStatus(g)
         if not tracked then return "The Cooldown Manager doesn't track it, it's predicted in combat.", true end
     end
     return "The Cooldown Manager tracks it, it's read live in combat.", false
+end
+
+-- how a group is followed in combat, and whether that's worth a warning
+function BR.CombatStatus(g)
+    local group = OpcowsBuffReminderDB.BuffGroups[g]
+    if not next(group.buffs) then return "No buffs yet.", false end
+    if group.combat == "blizzard" then
+        local l = live[g]
+        if l and l.err then return "Blizzard Auras don't work on this client, it's predicted in combat.", true end
+        local _, key = LiveIds(group)
+        if key == "" then return "Spell id not known yet. Have the buff once, or add it by spell id.", true end
+        if not LiveReady(g) then return "Blizzard Auras are set up after combat.", false end
+        return "Blizzard's aura button shows it all fight, with exact time and stacks.", false
+    end
+    local text, warn = CDMStatus(group)
+    if warn and group.hitcd > 0 then
+        return "Predicted in combat, with a charge used by each hit you take.", false
+    end
+    return text, warn
 end
 
 -- tell the user once about groups that are only predicted in combat
@@ -2261,6 +2303,7 @@ function BR.NewGroup(g)
         ["warntime"] = opts.warntime,
         ["warnstacks"] = 0,
         ["combat"] = "cdm",
+        ["hitcd"] = 0,
         ["timer"] = "default",
         ["glow"] = "default",
         ["overlay"] = "default",
@@ -2570,8 +2613,7 @@ SLASH_OpcowsBuffReminder1 = "/obr"
 SlashCmdList.OpcowsBuffReminder = function(msg)
     if msg and msg:lower():match("^%s*debug%s*$") then
         BR.debug = not BR.debug
-        Print("debug " .. (BR.debug and "on" or "off") .. ", auras secret now: " .. tostring(AurasSecret()))
-        return
+        Print("debug " .. (BR.debug and "on" or "off") .. ", auras secret now: " .. tostring(AurasSecret()))        return
     end
     BR.ToggleConfig()
 end
@@ -2746,6 +2788,7 @@ function BR.SanityCheck()
             if not COMBAT_MODES[group.combat] then group.combat = "cdm" end
             if type(group.click) ~= "string" or group.click == "" then group.click = "auto" end
             if type(group.party) ~= "boolean" then group.party = true end
+            if type(group.hitcd) ~= "number" or group.hitcd < 0 then group.hitcd = 0 end
             if group.icon == nil then group.icon = QUESTION_MARK end
         end
     end
@@ -2794,6 +2837,8 @@ function BR.Init()
     frame:RegisterUnitEvent("UNIT_INVENTORY_CHANGED", "player")
     frame:RegisterUnitEvent("UNIT_SPELLCAST_SENT", "player")
     frame:RegisterUnitEvent("UNIT_SPELLCAST_SUCCEEDED", "player")
+    -- hits taken, for buff groups whose charges hits use. Not every client has it.
+    pcall(frame.RegisterUnitEvent, frame, "UNIT_COMBAT", "player")
     frame:RegisterEvent("PLAYER_ENTERING_WORLD")
     frame:RegisterEvent("PLAYER_REGEN_DISABLED")
     frame:RegisterEvent("PLAYER_REGEN_ENABLED")
@@ -2822,6 +2867,10 @@ frame:SetScript("OnEvent", function(self, event, arg1, arg2, arg3, arg4)
         -- unit, cast GUID, spell id
         if Num(arg3) then EnchantCastDone(arg3) end
         BR.OnCast(arg3)
+        return
+    elseif event == "UNIT_COMBAT" then
+        -- unit, action, descriptor, amount
+        BR.OnHit(arg2)
         return
     end
 

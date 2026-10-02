@@ -19,13 +19,15 @@ If a buff group can only be predicted, because the Cooldown Manager isn't availa
 
 **Casting a buff in combat.** When you cast one of a buff group's buffs on yourself during a fight, the buff group is marked as up right away and its timer starts from the cast, using the buff's duration from the last time it was read out of combat. This works in either mode and doesn't need the aura to be readable. A buff that has never been read out of combat on this character has no known duration and waits for the sources above. A cast aimed at another player doesn't count. `/obr debug` prints what each cast of a buff group's buff decides, for when one isn't picked up.
 
+**Charges used by hits.** Some buffs lose a charge when you're hit, like Lightning Shield, and neither the buff nor its charges can be read in combat. The hits you take can be, so a Cooldown Manager buff group with a **Hit cooldown** (Buff groups tab, beside In combat) counts its charges down from the pull: one for each hit that lands at least that many seconds after the last charge was used, ex: 3 for Lightning Shield. Dodges, parries and misses don't count. At 0 the icon shows the buff as gone, and **Warn at stacks** warns before that, ex: 1. Casting the buff again in combat starts over with the most charges it's been seen with. A hit the game reports oddly, like one fully absorbed, can throw the count off by one until combat ends.
+
 When combat ends everything is read again, which corrects any prediction.
 
 ## Low stack warning
 A buff group can warn when its buff is down to a number of stacks or charges, ex: Inner Fire at 3 (Buff groups tab). The icon shows with the count in the lower right corner and the time left at the top. The time left text, the cooldown swipe and the stack count can each be turned off, and when an icon has both texts you can pick which one shows (Options tab). Each buff group can override how it shows the time left: text, swipe, both or none (Buff groups tab). In combat the count only updates when the buff can be read live (source 1 or 2 above, when the manager exposes the aura), or on Blizzard's button in Blizzard Auras buff groups. Otherwise it's refreshed after combat.
 
 ## Click to cast
-Click a buff group's icon to cast its spell on yourself. **Click to cast** on the Options tab turns it on or off and sets which click does it: click the button beside it, then click it again with the mouse button you want, holding Shift, Ctrl or Alt if you like, ex: Shift-Right click. A click with a key held leaves a plain click free, so an icon can't be cast by accident. **Click to cast** on the Buff groups tab picks the spell: **Auto** uses the first of your own spells in the buff group, or pick one of them, or turn it **Off**. Buff groups with none of your spells, like food, can't be clicked, and neither can weapon enchant icons.
+Click a buff group's icon to cast its spell on yourself. **Click to cast** on the Options tab turns it on or off and sets which click does it: click the button beside it, then click it again with the mouse button you want, holding Shift, Ctrl or Alt if you like, ex: Shift-Right click. A click with a key held leaves a plain click free, so an icon can't be cast by accident. **Click to cast** on the Buff groups tab picks the spell: **Auto** uses the first of your own spells in the buff group, or pick one of them, or turn it **Off**. Buff groups with none of your spells, like food, can't be clicked. Weapon enchant icons put on what you last used on that hand, see Weapon enchants.
 The game doesn't let addons move or hide clickable buttons during combat, while Buff Reminder's icons come and go all fight. So icons can only be clicked out of combat; when a fight starts they stop taking clicks and they're clickable again once it ends. Unlocked icons can't be clicked either, so they can be dragged. An icon with its opacity set to 0 isn't clickable.
 
 ## Click to dismiss
@@ -33,6 +35,8 @@ Right click an icon to hide it until the buff is put on again, ex: a buff you ca
 
 ## Party reminders
 When you give a party member a buff from one of your buff groups, ex: Thorns, Buff Reminder remembers it for them. When that buff is gone from them, a panel shows their name on a bar in their class color, with their role icon if they have one, and the buff's icon, one line per party member. It counts whoever cast the buff, and a buff group counts as one buff, so Gift of the Wild covers Mark of the Wild. Nothing is set up ahead of time: a member you've never buffed never gets a line.
+
+![party reminder beside a raid-style party frame](docs/screen_2.png)
 
 - Right click an icon (the dismiss click, see Click to dismiss) to forget that buff for them until you're seen buffing them with it again.
 - Click an icon to cast the buff on them, the same way as your own icons.

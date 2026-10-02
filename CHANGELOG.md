@@ -1,5 +1,11 @@
 # Changelog
 
+## 2.4
+
+### Added
+
+- Charges used by hits, for buffs like Lightning Shield whose charges can't be read in combat. Give a Cooldown Manager buff group a "Hit cooldown" on the Buff groups tab, ex: 3, and its charges count down from the pull, one for each hit you take that lands at least that long after the last charge was used. At 0 the icon shows the buff as gone, and Warn at stacks warns before that. Recasting it in combat starts over with full charges.
+
 ## 2.3
 
 ### Added
