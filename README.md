@@ -45,6 +45,8 @@ The panel hides in combat, since party buffs can't be read then. Members who are
 ## Weapon enchants
 Temporary weapon enchants, like poisons, oils, sharpening stones and shaman imbues, have two built-in weapon enchant groups at the top of the Buff groups list: **Main hand enchant** and **Off hand enchant**. They start turned off; set **Show** to Normal to use one. Each hand has its own conditions, early warning time, low charges warning, script, time left and icon size, the same as a buff group. They can't be deleted and have no In combat setting, since weapon enchants can always be read.
 
+Clicking a weapon enchant icon puts what you last put on that hand on it again: the same poison, oil or sharpening stone from your bags, or the same imbue spell. It's remembered when you put one on out of combat, and the Buff groups tab shows it beside **Click to apply**, where it can be turned off. The icon can't be clicked until something has been remembered, or when none of that item is left in your bags. Out of combat, the icon's corner shows how many of that item are in your bags, like an action button, in red at 0, or a "?" while nothing has been remembered. Check **Count** beside Click to apply to show the count all the time, in combat too. Hovering an icon that can't be clicked shows what was last used and why.
+
 ## Placing icons
 Icons snap together on a grid, into rows, columns, squares or any other shape. At first every icon is in one row. Unlock the icons (the Options tab or Shift-click the minimap button) and every icon shows, grey when it isn't needed right now:
 - Drag an icon to move it together with the icons snapped to it.
@@ -70,7 +72,10 @@ Buffs already in a buff group are greyed out with the buff group's name.
 
 The **Options** tab has the defaults new buff groups start with, the default icon size, the opacity of icons whose buff is missing and of ones warning it's running out or low on stacks (buff groups can have their own), how icons whose buff is missing or running out are marked, the warning sound and a reset button. "Browse..." beside the warning sound lists the game's sounds, click one to use it and hear it.
 
-"Copy from..." on the Options tab replaces this character's settings (buff groups, weapon enchants, options and icon placement) with another character's. A character is listed once it has logged in with Buff Reminder, and its list shows the settings it had when it last logged out. The X beside a character forgets it.
+"Save / load..." on the Options tab shares settings (buff groups, weapon enchants, options and icon placement) between characters:
+- Type a name at the top and click Save to keep a copy of this character's settings under that name. Saves belong to the account, so every character can load them. Saving under a name already in use replaces that save, after asking.
+- Under **Saved**, click a save to load it in place of this character's settings. The X deletes it.
+- Under **Characters**, click a character to copy its settings instead. A character is listed once it has logged in with Buff Reminder, with the settings it had when it last logged out. The X forgets it.
 
 A missing buff can be marked with a glow (pulse, flash, steady, or the game's spell alert glow like a proc on an action button) and a color washed over the icon, ex: red. Icons warning that a buff is running out or low on stacks have their own glow and color, ex: a pulse to catch your eye before the buff drops. Each buff group picks its own or follows the Options tab, and both start with none. A small icon at the end of each row previews the look, with the glow, color and opacity together.
 

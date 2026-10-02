@@ -1,5 +1,16 @@
 # Changelog
 
+## 2.3
+
+### Added
+
+- Click a weapon enchant icon to put the same poison, oil, sharpening stone or imbue on that hand again. Buff Reminder remembers what you last put on each hand out of combat. "Click to apply" on the Buff groups tab shows it and can turn it off. Out of combat, the icon's corner shows how many are left in your bags (red at 0), or "?" while nothing is remembered. "Count" beside it shows the count all the time, in combat too. When the icon can't be clicked, ex: in combat or with none left in your bags, its tooltip shows what was last used and why.
+- Named saves. "Save / load..." on the Options tab saves this character's settings under a name, and any character on the account can load them. Copying from another character is still there, in the same list.
+
+### Changed
+
+- The options window switches between Buff groups and Options with tabs under the window, like the character window's, instead of buttons.
+
 ## 2.2
 
 ### Added

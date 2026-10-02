@@ -677,34 +677,178 @@ local function ReadWeaponEnchant(hand)
     return found
 end
 
+-- What you last put on each hand is remembered for clicking its icon, in the hand's
+-- OpcowsBuffReminderDB.Enchants[slot].last as { item = id } for a poison, oil or stone, or
+-- { spell = id } for an imbue. Nothing says which item or spell an enchant came from, so a cast of
+-- yours is matched to an enchant that shows up on a hand within a few seconds of it.
+local ENCHANT_MATCH = 3     -- seconds
+local enchantCast           -- { id, item or spell, t } of your last cast that could be one
+local enchantSent           -- the same, sent but not yet succeeded
+local enchantAt = {}        -- [slot] = when an enchant last showed up on the hand
+
+-- the spell id an item casts when used
+local function ItemSpellId(item)
+    local get = C_Item and C_Item.GetItemSpell or GetItemSpell
+    if not get then return nil end
+    local ok, _, id = pcall(get, item)
+    if ok and not issecretvalue(id) then return id end
+end
+
+-- the item in your bags that casts spell id
+local function BagItemFor(id)
+    if not (C_Container and C_Container.GetContainerNumSlots) then return nil end
+    for bag = 0, NUM_BAG_SLOTS or 4 do
+        for slot = 1, C_Container.GetContainerNumSlots(bag) or 0 do
+            local item = C_Container.GetContainerItemID(bag, slot)
+            if item and not issecretvalue(item) and ItemSpellId(item) == id then return item end
+        end
+    end
+end
+
+-- an enchant and a cast close enough together are what you put on that hand
+local function MatchEnchant()
+    if not enchantCast then return end
+    for slot, at in pairs(enchantAt) do
+        if math.abs(at - enchantCast.t) <= ENCHANT_MATCH then
+            OpcowsBuffReminderDB.Enchants[slot].last = { item = enchantCast.item, spell = enchantCast.spell }
+            Debug(("%s: remembered %s %d"):format(ENCHANT_NAMES[slot], enchantCast.item and "item" or "spell",
+                enchantCast.item or enchantCast.spell))
+            enchantAt[slot] = nil
+        end
+    end
+end
+
+-- UNIT_SPELLCAST_SENT, while the item used is still in your bags. Out of combat only, when
+-- enchants are put on, since it searches the bags.
+local function EnchantCastSent(id)
+    enchantSent = nil
+    if BR.status.combat then return end
+    if IsPlayerSpell and IsPlayerSpell(id) then
+        enchantSent = { id = id, spell = id }
+    else
+        local item = BagItemFor(id)
+        if item then enchantSent = { id = id, item = item } end
+    end
+end
+
+-- UNIT_SPELLCAST_SUCCEEDED
+local function EnchantCastDone(id)
+    if not (enchantSent and enchantSent.id == id) then return end
+    enchantCast, enchantSent = enchantSent, nil
+    enchantCast.t = GetTime()
+    MatchEnchant()
+end
+
 function BR.ScanEnchants()
+    local now = GetTime()
+    local old = { main = BR.enchants.main, off = BR.enchants.off }
     -- the old GetWeaponEnchantInfo misses imbues like Flametongue Weapon on Forever
     if C_Item and C_Item.GetWeaponEnchantInfo and Enum and Enum.ItemEnchantType and Enum.WeaponSlot then
         local main = ReadWeaponEnchant(Enum.WeaponSlot.MainHand)
         local off = ReadWeaponEnchant(Enum.WeaponSlot.OffHand)
         if main == nil or off == nil then return end
-        local now = GetTime()
         local function entry(w)
             if not w then return { present = false } end
             return { present = true, expires = now + (w.timeLeft or 0) / 1000, charges = w.charges or 0 }
         end
         BR.enchants.main = entry(main)
         BR.enchants.off = entry(off)
-        return
+    else
+        local r = { pcall(GetWeaponEnchantInfo) }
+        if not r[1] then return end
+        for i = 2, 9 do
+            if issecretvalue(r[i]) then return end
+        end
+        local function entry(has, ms, charges)
+            if not has then return { present = false } end
+            return { present = true, expires = now + (ms or 0) / 1000, charges = charges or 0 }
+        end
+        -- hasEnchant, expirationMs, charges, enchantId for each hand
+        BR.enchants.main = entry(r[2], r[3], r[4])
+        BR.enchants.off = entry(r[6], r[7], r[8])
     end
-    local r = { pcall(GetWeaponEnchantInfo) }
-    if not r[1] then return end
-    for i = 2, 9 do
-        if issecretvalue(r[i]) then return end
+    -- one that's new, or put on again with more time
+    for slot, o in pairs(old) do
+        local e = BR.enchants[slot]
+        if e.present and o and (not o.present or e.expires > o.expires + 5) then enchantAt[slot] = now end
     end
-    local now = GetTime()
-    local function entry(has, ms, charges)
-        if not has then return { present = false } end
-        return { present = true, expires = now + (ms or 0) / 1000, charges = charges or 0 }
+    MatchEnchant()
+end
+
+-- the name of what you last put on a hand, nil for nothing remembered
+function BR.EnchantLastName(slot)
+    local last = OpcowsBuffReminderDB.Enchants[slot].last
+    if type(last) ~= "table" then return nil end
+    local ok, name
+    if last.item then
+        local get = C_Item and C_Item.GetItemNameByID or GetItemInfo
+        ok, name = pcall(get, last.item)
+        if not ok or type(name) ~= "string" or issecretvalue(name) then name = "item " .. last.item end
+    elseif last.spell then
+        ok, name = pcall(C_Spell.GetSpellName, last.spell)
+        if not ok or type(name) ~= "string" or issecretvalue(name) then name = "spell " .. last.spell end
     end
-    -- hasEnchant, expirationMs, charges, enchantId for each hand
-    BR.enchants.main = entry(r[2], r[3], r[4])
-    BR.enchants.off = entry(r[6], r[7], r[8])
+    return name
+end
+
+-- the mark in the corner of a hand's enchant icon, like an action button's: how many of the last
+-- used item are in your bags, red at none, or "?" for nothing remembered, red when the remembered
+-- spell isn't yours. Shown out of combat while the icon could be clicked, and the count all the time
+-- when the hand's showcount is on. Returns text, r, g, b, or nil for no mark.
+function BR.EnchantMark(slot)
+    local eg = OpcowsBuffReminderDB.Enchants[slot]
+    local last = eg.last
+    local click = OpcowsBuffReminderDB.Options.clicktocast and eg.click ~= "off" and not BR.status.combat
+    if not (click or eg.showcount) then return nil end
+    if type(last) ~= "table" then
+        if click then return "?", 0.8, 0.8, 0.8 end
+        return nil
+    end
+    if last.item then
+        local count = (C_Item and C_Item.GetItemCount or GetItemCount)(last.item)
+        if issecretvalue(count) then return nil end
+        count = count or 0
+        if count == 0 then return "0", 1, 0.1, 0.1 end
+        return tostring(count), 1, 1, 1
+    end
+    if click and not (IsPlayerSpell and IsPlayerSpell(last.spell)) then return "?", 1, 0.1, 0.1 end
+    return nil
+end
+
+-- why a hand's enchant icon can't be clicked, nil when it can
+function BR.EnchantClickProblem(slot)
+    local eg = OpcowsBuffReminderDB.Enchants[slot]
+    local last = eg.last
+    if not OpcowsBuffReminderDB.Options.clicktocast then return "Click to cast is off on the Options tab." end
+    if eg.click == "off" then return "Click to apply is off for this hand on the Buff groups tab." end
+    if type(last) ~= "table" then
+        return "Nothing remembered yet. Put a poison, oil, stone or imbue on this hand out of combat and it will be."
+    end
+    if last.item then
+        local count = (C_Item and C_Item.GetItemCount or GetItemCount)(last.item)
+        if not issecretvalue(count) and (count or 0) == 0 then return "None left in your bags." end
+    elseif not (IsPlayerSpell and IsPlayerSpell(last.spell)) then
+        return "That spell isn't one of yours."
+    end
+    if BR.status.combat then return "Icons can't be clicked in combat." end
+    return nil
+end
+
+-- what clicking a hand's enchant icon does, nil for nothing: { item = "item:id" } or { spell =
+-- name }, with label its name. An item needs to be in your bags and a spell to be yours.
+function BR.EnchantAction(slot)
+    local eg = OpcowsBuffReminderDB.Enchants[slot]
+    local last = eg.last
+    if not OpcowsBuffReminderDB.Options.clicktocast or eg.click == "off" or type(last) ~= "table" then return nil end
+    local name = BR.EnchantLastName(slot)
+    if last.item then
+        local count = (C_Item and C_Item.GetItemCount or GetItemCount)(last.item)
+        if issecretvalue(count) or (count or 0) == 0 then return nil end
+        return { item = "item:" .. last.item, label = name }
+    elseif last.spell then
+        if not (IsPlayerSpell and IsPlayerSpell(last.spell)) or name:find("^spell ") then return nil end
+        return { spell = name, label = name }
+    end
 end
 
 local function Flag(v, prev)
@@ -811,6 +955,8 @@ local function NewIcon(parent)
     -- stack count where the default buff frame puts it
     f.count = f:CreateFontString(nil, "OVERLAY", "NumberFontNormal")
     f.count:SetPoint("BOTTOMRIGHT", -2, 2)
+    -- a weapon enchant's bag count, placed when it's shown
+    f.bag = f:CreateFontString(nil, "OVERLAY", "NumberFontNormal")
     return f
 end
 
@@ -1502,8 +1648,28 @@ function BR.IconDragStop()
     BR.Refresh()
 end
 
+-- a locked enchant icon with no button over it: what you last put on the hand and why it can't be
+-- clicked. Locked icons only take the mouse while click to dismiss is on.
+local function EnchantTooltip(f, slot)
+    local last = BR.EnchantLastName(slot)
+    GameTooltip:SetOwner(f, "ANCHOR_TOP")
+    GameTooltip:SetText(ENCHANT_NAMES[slot])
+    if last then GameTooltip:AddLine("Last used: " .. last, 1, 1, 1) end
+    local problem = BR.EnchantClickProblem(slot)
+    if problem then GameTooltip:AddLine(problem, 1, 0.5, 0.25, true) end
+    local opts = OpcowsBuffReminderDB.Options
+    if opts.dismiss then
+        GameTooltip:AddLine(BR.ClickLabel(opts.dismissbutton) .. " to dismiss it.", 1, 1, 1)
+    end
+    GameTooltip:Show()
+end
+
 function BR.IconTooltip(f)
-    if BR.locked or not f.key then return end
+    if not f.key then return end
+    if BR.locked then
+        if f.key:sub(1, 1) == "2" then EnchantTooltip(f, f.key:sub(2)) end
+        return
+    end
     local name = f.key:sub(2)
     if f.key:sub(1, 1) == "2" then
         name = ENCHANT_NAMES[name]
@@ -1623,6 +1789,7 @@ local function ShowIcon(f, item, now, shown, liveShown)
         f.fontSize = size
         ScaleFont(f.text, size)
         ScaleFont(f.count, size)
+        ScaleFont(f.bag, size)
         -- the border's button fills 36 of its 64 pixels
         f.glow:SetSize(size * 64 / 36, size * 64 / 36)
         -- the spell alert is sized when it's shown
@@ -1659,6 +1826,22 @@ local function ShowIcon(f, item, now, shown, liveShown)
     end
     f.text:SetText(timeText)
     f.count:SetText(stackText)
+    -- how many of what a weapon enchant icon puts on are left
+    local mark, r, g, b
+    if BR.locked and not item.placeholder and item.key:sub(1, 1) == "2" then
+        mark, r, g, b = BR.EnchantMark(item.key:sub(2))
+    end
+    f.bag:SetText(mark or "")
+    if mark then
+        f.bag:SetTextColor(r, g, b)
+        -- the bottom right like an action button, unless the charges are there
+        f.bag:ClearAllPoints()
+        if stackText ~= "" then
+            f.bag:SetPoint("BOTTOMLEFT", 2, 2)
+        else
+            f.bag:SetPoint("BOTTOMRIGHT", -2, 2)
+        end
+    end
     f:Show()
     if not item.placeholder then shown[item.key] = true end
     if item.live then
@@ -1816,8 +1999,13 @@ local function AcquireClicker(i)
         b:SetScript("OnEnter", function(self)
             GameTooltip:SetOwner(self, "ANCHOR_TOP")
             GameTooltip:SetText(self.spell)
-            GameTooltip:AddLine(BR.ClickLabel(self.click) .. " to cast it on " .. (self.who or "yourself") .. ".",
-                1, 1, 1)
+            if self.hand then
+                GameTooltip:AddLine(BR.ClickLabel(self.click) .. " to put it on your "
+                    .. (self.hand == "main" and "main hand" or "off hand") .. ".", 1, 1, 1)
+            else
+                GameTooltip:AddLine(BR.ClickLabel(self.click) .. " to cast it on " .. (self.who or "yourself") .. ".",
+                    1, 1, 1)
+            end
             local opts = OpcowsBuffReminderDB.Options
             if opts.dismiss then
                 GameTooltip:AddLine(BR.ClickLabel(opts.dismissbutton) .. " to dismiss it.", 1, 1, 1)
@@ -1858,7 +2046,6 @@ local function UpdateClickers(list)
             if b.click ~= click or b.dismiss ~= dismiss then
                 if b.attr then b:SetAttribute(b.attr, nil) end
                 b.attr = mods .. "type" .. button
-                b:SetAttribute(b.attr, "spell")
                 -- the template casts on the press or the release, whichever the game is set to
                 local name = CLICK_BUTTONS[button]
                 local clicks = { name .. "Up", name .. "Down" }
@@ -1869,9 +2056,13 @@ local function UpdateClickers(list)
             b:ClearAllPoints()
             b:SetPoint("CENTER", UIParent, "BOTTOMLEFT", x - left, y - bottom)
             b:SetSize(c.f:GetWidth(), c.f:GetHeight())
+            -- a spell, or for a weapon enchant maybe an item, then the hand it goes on
+            b:SetAttribute(b.attr, c.item and "item" or "spell")
             b:SetAttribute("spell", c.spell)
+            b:SetAttribute("item", c.item)
+            b:SetAttribute("target-slot", c.slot)
             b:SetAttribute("unit", c.unit or "player")
-            b.spell, b.who, b.icon = c.spell, c.who, c.f
+            b.spell, b.who, b.hand, b.icon = c.label or c.spell, c.who, c.hand, c.f
             b:Show()
         end
     end
@@ -2014,11 +2205,20 @@ function BR.Refresh()
             f:ClearAllPoints()
             f:SetPoint("CENTER", anchors[bi], "CENTER", p.x, p.y)
             ShowIcon(f, item, now, shown, liveShown)
-            -- buff groups only, unlocked icons are for dragging
-            if BR.locked and item.key:sub(1, 1) == "1" and not item.placeholder and not item.live
-                and f:GetAlpha() > 0 then
-                local spell = BR.ClickSpell(item.group)
-                if spell then table.insert(clicks, { f = f, spell = spell }) end
+            -- unlocked icons are for dragging
+            if BR.locked and not item.placeholder and not item.live and f:GetAlpha() > 0 then
+                if item.key:sub(1, 1) == "1" then
+                    local spell = BR.ClickSpell(item.group)
+                    if spell then table.insert(clicks, { f = f, spell = spell }) end
+                else
+                    -- what you last put on the hand, used on it
+                    local hand = item.key:sub(2)
+                    local a = BR.EnchantAction(hand)
+                    if a then
+                        table.insert(clicks, { f = f, spell = a.spell, item = a.item, label = a.label,
+                            slot = ENCHANT_SLOTS[hand], hand = hand })
+                    end
+                end
             end
             if not item.live and not item.placeholder and not BR.shown[item.key] then
                 -- a Blizzard Auras icon shows all fight, no sound for that
@@ -2196,10 +2396,8 @@ function BR.ForgetCharacter(key)
     OpcowsBuffReminderAccount.chars[key] = nil
 end
 
--- replace this character's groups, enchants and options with a copy of another's
-function BR.CopyCharacter(key)
-    local c = OpcowsBuffReminderAccount.chars[key]
-    if not c then return false end
+-- replace this character's groups, enchants and options with a copy of c's
+local function LoadSettings(c)
     OpcowsBuffReminderDB.BuffGroups = DeepCopy(c.BuffGroups)
     OpcowsBuffReminderDB.Options = DeepCopy(c.Options)
     OpcowsBuffReminderDB.Enchants = DeepCopy(c.Enchants)
@@ -2213,6 +2411,53 @@ function BR.CopyCharacter(key)
     BR.UpdateMinimap()
     BR.UpdateLive()
     BR.RememberCharacter()
+end
+
+-- replace this character's settings with a copy of another's
+function BR.CopyCharacter(key)
+    local c = OpcowsBuffReminderAccount.chars[key]
+    if not c then return false end
+    LoadSettings(c)
+    return true
+end
+
+-- named saves, account wide: a copy of the settings as they were when saved, for any character to load
+function BR.SaveSettings(name)
+    local _, class = UnitClass("player")
+    OpcowsBuffReminderAccount.saves[name] = {
+        class = class,
+        by = CharacterKey(),
+        time = time(),
+        BuffGroups = DeepCopy(OpcowsBuffReminderDB.BuffGroups),
+        Options = DeepCopy(OpcowsBuffReminderDB.Options),
+        Enchants = DeepCopy(OpcowsBuffReminderDB.Enchants),
+    }
+end
+
+-- the saves, { name, class, by, groups, time }, by name
+function BR.GetSaves()
+    local list = {}
+    for name, s in pairs(OpcowsBuffReminderAccount.saves) do
+        local n = 0
+        for _ in pairs(s.BuffGroups) do n = n + 1 end
+        table.insert(list, { name = name, class = s.class, by = s.by, groups = n, time = s.time })
+    end
+    table.sort(list, function(a, b) return a.name:lower() < b.name:lower() end)
+    return list
+end
+
+function BR.HasSave(name)
+    return OpcowsBuffReminderAccount.saves[name] ~= nil
+end
+
+function BR.DeleteSave(name)
+    OpcowsBuffReminderAccount.saves[name] = nil
+end
+
+function BR.LoadSave(name)
+    local s = OpcowsBuffReminderAccount.saves[name]
+    if not s then return false end
+    LoadSettings(s)
     return true
 end
 
@@ -2342,6 +2587,14 @@ function BR.SanityCheck()
         if type(c) ~= "table" or type(c.BuffGroups) ~= "table" or type(c.Options) ~= "table"
             or type(c.Enchants) ~= "table" or type(c.time) ~= "number" then
             OpcowsBuffReminderAccount.chars[key] = nil
+        end
+    end
+    -- named saves, account wide
+    if type(OpcowsBuffReminderAccount.saves) ~= "table" then OpcowsBuffReminderAccount.saves = {} end
+    for name, s in pairs(OpcowsBuffReminderAccount.saves) do
+        if type(name) ~= "string" or type(s) ~= "table" or type(s.BuffGroups) ~= "table"
+            or type(s.Options) ~= "table" or type(s.Enchants) ~= "table" or type(s.time) ~= "number" then
+            OpcowsBuffReminderAccount.saves[name] = nil
         end
     end
     -- the glow was a switch
@@ -2501,7 +2754,13 @@ function BR.SanityCheck()
     end
     for slot in pairs(ENCHANT_SLOTS) do
         if type(OpcowsBuffReminderDB.Enchants[slot]) ~= "table" then OpcowsBuffReminderDB.Enchants[slot] = NewEnchant() end
-        CheckGroup(OpcowsBuffReminderDB.Enchants[slot])
+        local eg = OpcowsBuffReminderDB.Enchants[slot]
+        CheckGroup(eg)
+        -- clicking uses what you last put on the hand
+        if eg.click ~= "off" then eg.click = "auto" end
+        if type(eg.showcount) ~= "boolean" then eg.showcount = false end
+        local last = eg.last
+        if type(last) ~= "table" or not (Num(last.item) or Num(last.spell)) then eg.last = nil end
     end
     opts.version = BR.DefaultOptions.version
 end
@@ -2557,9 +2816,11 @@ frame:SetScript("OnEvent", function(self, event, arg1, arg2, arg3, arg4)
     elseif event == "UNIT_SPELLCAST_SENT" then
         -- unit, target, cast GUID, spell id
         BR.OnCastSent(arg2, arg4)
+        if Num(arg4) then EnchantCastSent(arg4) end
         return
     elseif event == "UNIT_SPELLCAST_SUCCEEDED" then
         -- unit, cast GUID, spell id
+        if Num(arg3) then EnchantCastDone(arg3) end
         BR.OnCast(arg3)
         return
     end

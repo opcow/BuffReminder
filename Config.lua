@@ -447,6 +447,49 @@ StaticPopupDialogs["OPCOWSBUFFREMINDER_COPY"] = {
     preferredIndex = 3,
 }
 
+StaticPopupDialogs["OPCOWSBUFFREMINDER_LOAD_SAVE"] = {
+    text = 'Replace this character\'s Buff Reminder settings with the save "%s"? This deletes this character\'s buff groups.',
+    button1 = YES,
+    button2 = NO,
+    OnAccept = function(self, data)
+        if BR.LoadSave(data) then BR.Print('Settings loaded from "' .. data .. '".') end
+        Changed()
+    end,
+    timeout = 0,
+    whileDead = true,
+    hideOnEscape = true,
+    preferredIndex = 3,
+}
+
+StaticPopupDialogs["OPCOWSBUFFREMINDER_OVERWRITE_SAVE"] = {
+    text = 'Replace the save "%s" with this character\'s settings?',
+    button1 = YES,
+    button2 = NO,
+    OnAccept = function(self, data)
+        BR.SaveSettings(data)
+        BR.Print('Settings saved as "' .. data .. '".')
+        Changed()
+    end,
+    timeout = 0,
+    whileDead = true,
+    hideOnEscape = true,
+    preferredIndex = 3,
+}
+
+StaticPopupDialogs["OPCOWSBUFFREMINDER_DELETE_SAVE"] = {
+    text = 'Delete the save "%s"?',
+    button1 = YES,
+    button2 = NO,
+    OnAccept = function(self, data)
+        BR.DeleteSave(data)
+        Changed()
+    end,
+    timeout = 0,
+    whileDead = true,
+    hideOnEscape = true,
+    preferredIndex = 3,
+}
+
 StaticPopupDialogs["OPCOWSBUFFREMINDER_RESET"] = {
     text = "Clear all Buff Reminder settings? This deletes all of your buff groups.",
     button1 = YES,
@@ -787,6 +830,12 @@ local function CreateGroupsPage(page)
     clickLabel:SetPoint("TOPLEFT", 0, -426)
     local click = Button(detail, "", 180, function()
         local group = Current()
+        -- a hand's enchant uses what you last put on it, or nothing
+        if selectedSlot then
+            group.click = group.click == "off" and "auto" or "off"
+            Changed()
+            return
+        end
         local spells = BR.ClickSpells(group)
         local order = { "auto" }
         for _, name in ipairs(spells) do table.insert(order, name) end
@@ -795,17 +844,34 @@ local function CreateGroupsPage(page)
         Changed()
     end)
     click:SetPoint("LEFT", clickLabel, "RIGHT", 10, 0)
-    Tooltip(click, "Click to cast",
-        "Clicking the icon casts this spell on you.\n\n"
-        .. "|cffffd100Auto:|r the first of your own spells in the buff group.\n"
-        .. "|cffffd100Off:|r the icon can't be clicked.\n\n"
-        .. "Icons can't be clicked in combat, since the game doesn't let addons move them there, or while they're unlocked for moving.\n"
-        .. "|cff808080Click to change.|r")
+    local CLICK_LIMITS = "Icons can't be clicked in combat, since the game doesn't let addons move them there, "
+        .. "or while they're unlocked for moving.\n"
+    Tooltip(click, "Click to cast", function()
+        if selectedSlot then
+            return "Clicking the icon puts what you last put on this hand on it again: a poison, oil or "
+                .. "sharpening stone from your bags, or an imbue spell. It's remembered when you put one on "
+                .. "out of combat. The icon can't be clicked when none are left in your bags.\n\n"
+                .. CLICK_LIMITS .. "|cff808080Click to turn it on or off.|r"
+        end
+        return "Clicking the icon casts this spell on you.\n\n"
+            .. "|cffffd100Auto:|r the first of your own spells in the buff group.\n"
+            .. "|cffffd100Off:|r the icon can't be clicked.\n\n"
+            .. CLICK_LIMITS .. "|cff808080Click to change.|r"
+    end)
     local party = Check(detail, "Party", function(v)
         Current().party = v
         Changed()
     end)
     party:SetPoint("LEFT", click, "RIGHT", 8, -1)
+    -- in the party check's place for a hand's enchant
+    local showCount = Check(detail, "Count", function(v)
+        Current().showcount = v
+        Changed()
+    end)
+    showCount:SetPoint("LEFT", click, "RIGHT", 8, -1)
+    Tooltip(showCount, "Always show count",
+        "Show how many of the last used poison, oil or stone are in your bags on the icon all the time, in combat too, "
+        .. "in red at 0. Unchecked, it only shows out of combat while the icon can be clicked.")
     Tooltip(party, "Remind party",
         "Once you've given this buff to a party member, a line for them on the party panel shows it when it's gone. "
         .. "Uncheck it for buffs you only keep on yourself.")
@@ -866,11 +932,14 @@ local function CreateGroupsPage(page)
 
         empty:Hide()
         local ench = selectedSlot ~= nil
-        -- enchants have no click or combat setting
-        for _, w in ipairs({ delete, buffsLabel, buffsHint, buffs, buffEdit, addBtn, pickBtn, clickLabel, click,
+        -- enchants have no party or combat setting
+        for _, w in ipairs({ delete, buffsLabel, buffsHint, buffs, buffEdit, addBtn, pickBtn,
             party, combatLabel, combat, combatStatus }) do
             w:SetShown(not ench)
         end
+        showCount:SetShown(ench)
+        clickLabel:SetText(ench and "Click to apply:" or "Click to cast:")
+        local clickOn = OpcowsBuffReminderDB.Options.clicktocast
         enchNow:SetShown(ench)
         enchHint:SetShown(ench)
         stacksLabel:SetText(ench and "Warn at charges:" or "Warn at stacks:")
@@ -888,6 +957,16 @@ local function CreateGroupsPage(page)
             name:SetText(BR.ENCHANT_NAMES[selectedSlot])
             enchNow:SetText(EnchantNow(selectedSlot))
             conds:Load(EnchantTarget(selectedSlot))
+            showCount:SetChecked(group.showcount)
+            local last = BR.EnchantLastName(selectedSlot)
+            click:SetEnabled(clickOn)
+            if not clickOn then
+                click:SetText("Off on Options tab")
+            elseif group.click == "off" then
+                click:SetText("Off")
+            else
+                click:SetText(last and ("Last used: " .. last) or "None used yet")
+            end
             return
         end
 
@@ -909,7 +988,6 @@ local function CreateGroupsPage(page)
         party:SetChecked(group.party)
         local spells = BR.ClickSpells(group)
         local cv = ClickValue(group, spells)
-        local clickOn = OpcowsBuffReminderDB.Options.clicktocast
         click:SetEnabled(clickOn and #spells > 0)
         if not clickOn then
             click:SetText("Off on Options tab")
@@ -1179,9 +1257,60 @@ local function CreateOptionsPage(page)
     join:SetPoint("RIGHT", reset, "LEFT", -8, 0)
     Tooltip(join, "Icons in one row", "Puts every icon back in one row, where the first set of icons is.")
 
-    local copyPicker = Picker(page, "Copy settings from", 300, 300)
+    local copyPicker = Picker(page, "Saved settings", 340, 380, 30)
+    -- save these settings by name, at the top of the picker
+    local saveLabel = Label(copyPicker, "Save as:", "GameFontHighlightSmall")
+    saveLabel:SetPoint("TOPLEFT", 12, -60)
+    local saveName = EditBox(copyPicker, 196)
+    saveName:SetPoint("LEFT", saveLabel, "RIGHT", 8, 0)
+    local function Save()
+        local name = Trim(saveName:GetText())
+        if name == "" then return end
+        saveName:ClearFocus()
+        if BR.HasSave(name) then
+            StaticPopup_Show("OPCOWSBUFFREMINDER_OVERWRITE_SAVE", name, nil, name)
+            return
+        end
+        BR.SaveSettings(name)
+        BR.Print('Settings saved as "' .. name .. '".')
+        saveName:SetText("")
+        copyPicker:Reload()
+    end
+    local saveButton = Button(copyPicker, "Save", 60, Save)
+    saveButton:SetPoint("LEFT", saveName, "RIGHT", 6, 0)
+    saveName:SetScript("OnEnterPressed", Save)
+    saveName:SetScript("OnEscapePressed", function(self) self:ClearFocus() end)
+    Tooltip(saveButton, "Save settings",
+        "Saves a copy of this character's buff groups, weapon enchants, options and icon placement under this name. "
+        .. "Every character on the account can load it. Later changes here don't change the save; save again to update it.")
+
+    local function Header(text)
+        return { text = "|cffffd100" .. text .. "|r" }
+    end
     local function CharacterRows()
-        local rows = {}
+        local rows = { Header("Saved") }
+        local saves = BR.GetSaves()
+        for _, s in ipairs(saves) do
+            local color = s.class and RAID_CLASS_COLORS and RAID_CLASS_COLORS[s.class]
+            local label = color and ("|c%s%s|r"):format(color.colorStr, s.name) or s.name
+            table.insert(rows, {
+                name = s.name,
+                text = ("%s |cff808080(%d buff group%s, %s)|r"):format(label, s.groups, s.groups == 1 and "" or "s",
+                    date("%Y-%m-%d", s.time)),
+                onClick = function()
+                    copyPicker:Hide()
+                    StaticPopup_Show("OPCOWSBUFFREMINDER_LOAD_SAVE", s.name, nil, s.name)
+                end,
+                onRemove = function()
+                    StaticPopup_Show("OPCOWSBUFFREMINDER_DELETE_SAVE", s.name, nil, s.name)
+                end,
+            })
+        end
+        if #saves == 0 then
+            table.insert(rows, { text = "|cff808080Nothing saved yet.|r" })
+        end
+        table.insert(rows, Header("Characters"))
+        local n = #rows
         for _, c in ipairs(BR.GetCharacters()) do
             local color = c.class and RAID_CLASS_COLORS and RAID_CLASS_COLORS[c.class]
             local label = color and ("|c%s%s|r"):format(color.colorStr, c.key) or c.key
@@ -1198,22 +1327,26 @@ local function CreateOptionsPage(page)
                 end,
             })
         end
-        if #rows == 0 then
-            rows[1] = { text = "|cff808080No other characters yet. Log in on one with Buff Reminder and it's listed here.|r" }
+        if #rows == n then
+            table.insert(rows, { text = "|cff808080No other characters yet. Log in on one with Buff Reminder and it's listed here.|r" })
         end
         return rows
     end
-    local copy = Button(page, "Copy from...", 100, function(self)
+    local copy = Button(page, "Save / load...", 100, function(self)
         if copyPicker:IsShown() then copyPicker:Hide() return end
+        saveName:SetText("")
         copyPicker:Open(self, CharacterRows)
     end)
     copy:SetPoint("RIGHT", join, "LEFT", -8, 0)
     page.copyPicker = copyPicker
-    Tooltip(copy, "Copy from another character",
-        "Replace this character's buff groups, weapon enchants, options and icon placement with another character's. "
-        .. "Characters are listed once they've logged in with Buff Reminder. The X forgets one.")
+    Tooltip(copy, "Save and load settings",
+        "Save these settings by name for any character on the account to load, or load a save or another "
+        .. "character's settings in place of this character's buff groups, weapon enchants, options and icon placement.\n\n"
+        .. "Characters are listed once they've logged in with Buff Reminder. The X deletes a save or forgets a character.")
 
     function page:Refresh()
+        -- a save was made or deleted from a popup
+        if copyPicker:IsShown() then copyPicker:Reload() end
         conds:Load(DefaultTarget())
         size:Load()
         alpha:Load()
@@ -1266,22 +1399,69 @@ local function CreateConfig()
     end
     title:SetText("Opcow's Buff Reminder")
 
+    -- the game's tabs hanging under the window, like the character window's. Plain buttons along
+    -- the top if the template is missing.
     f.tabs = {}
+    local panelTabs = PanelTemplates_SetTab and PanelTemplates_SetNumTabs
     local function SelectTab(index)
         for i, tab in ipairs(f.tabs) do
             tab.page:SetShown(i == index)
-            if i == index then tab:LockHighlight() else tab:UnlockHighlight() end
+            if not panelTabs then
+                if i == index then tab:LockHighlight() else tab:UnlockHighlight() end
+            end
         end
+        if panelTabs then PanelTemplates_SetTab(f, index) end
         BR.RefreshConfig()
     end
-    for i, info in ipairs({ { "Buff groups", CreateGroupsPage }, { "Options", CreateOptionsPage } }) do
-        local tab = Button(f, info[1], 110, function() SelectTab(i) end)
-        tab:SetPoint("TOPLEFT", 12 + (i - 1) * 114, -30)
-        tab.page = CreateFrame("Frame", nil, f)
-        tab.page:SetPoint("TOPLEFT", 14, -62)
-        tab.page:SetPoint("BOTTOMRIGHT", -14, 32)
-        info[2](tab.page)
+    local pages = { { "Buff groups", CreateGroupsPage }, { "Options", CreateOptionsPage } }
+    for i, info in ipairs(pages) do
+        local tab
+        if panelTabs then
+            local ok, t = pcall(CreateFrame, "Button", "OpcowsBuffReminderConfigTab" .. i, f, "PanelTabButtonTemplate")
+            if ok and t then tab = t else panelTabs = nil end
+        end
+        if tab then
+            tab:SetText(info[1])
+            tab:SetScript("OnClick", function()
+                PlaySound(SOUNDKIT and SOUNDKIT.IG_CHARACTER_INFO_TAB or 841)
+                SelectTab(i)
+            end)
+            if PanelTemplates_TabResize then PanelTemplates_TabResize(tab, 0) end
+            if i == 1 then
+                tab:SetPoint("TOPLEFT", f, "BOTTOMLEFT", 12, 2)
+            else
+                tab:SetPoint("LEFT", f.tabs[i - 1], "RIGHT", -15, 0)
+            end
+        else
+            tab = Button(f, info[1], 110, function() SelectTab(i) end)
+            tab:SetPoint("TOPLEFT", 12 + (i - 1) * 114, -30)
+        end
         f.tabs[i] = tab
+    end
+    -- a template that failed partway leaves earlier tabs made from it, so go back to buttons for all
+    if not panelTabs then
+        for i, tab in ipairs(f.tabs) do
+            if tab:GetObjectType() == "Button" and tab:GetName() then
+                tab:Hide()
+                f.tabs[i] = Button(f, pages[i][1], 110, function() SelectTab(i) end)
+                f.tabs[i]:SetPoint("TOPLEFT", 12 + (i - 1) * 114, -30)
+            end
+        end
+    end
+    -- tabs underneath give the pages the room the buttons took
+    local top = panelTabs and -30 or -62
+    for i, tab in ipairs(f.tabs) do
+        tab.page = CreateFrame("Frame", nil, f)
+        tab.page:SetPoint("TOPLEFT", 14, top)
+        tab.page:SetPoint("BOTTOMRIGHT", -14, 32)
+        pages[i][2](tab.page)
+    end
+    if panelTabs then
+        f.Tabs = f.tabs
+        PanelTemplates_SetNumTabs(f, #f.tabs)
+        f:SetHeight(f:GetHeight() - (62 + top))
+        -- keep the tabs on screen too
+        f:SetClampRectInsets(0, 0, 0, -32)
     end
     SelectTab(1)
 
