@@ -104,6 +104,9 @@ local ENCHANT_SLOTS = { main = 16, off = 17 }
 local ENCHANT_NAMES = { main = "Main hand enchant", off = "Off hand enchant" }
 local TEXT_PRIORITIES = { time = true, stacks = true, both = true }
 local COMBAT_MODES = { cdm = "Cooldown Manager", blizzard = "Blizzard Auras" }
+-- which hits you take use a buff group's charges in combat, see BR.OnHit
+local HIT_USES = { off = "Off", hits = "Hits", physical = "Physical hits" }
+local HIT_USE_ORDER = { "off", "hits", "physical" }
 -- how a group shows its time left, "default" follows the Options tab
 local TIMERS = { default = "Default", text = "Text", swipe = "Swipe", both = "Text and swipe", none = "None" }
 local TIMER_ORDER = { "default", "text", "swipe", "both", "none" }
@@ -365,6 +368,8 @@ end
 -- A buff that's your own spell can't be put back while the spell is cooling down, ex:
 -- Berserking, so its group isn't shown until it's ready.
 local GCD = 1.5
+-- shorter cooldowns are the global cooldown, which can read a little over 1.5
+local MIN_COOLDOWN = 2
 
 -- your own spell's id for a buff, the highest rank, or nil if it isn't a spell you have
 local function OwnSpellId(buff)
@@ -382,8 +387,12 @@ local function OwnSpellId(buff)
     return best
 end
 
+-- [spell id] = when its cooldown ends, from the last read. In combat the game hides cooldowns,
+-- so one read before the pull is still known during it.
+local coolEnds = {}
+
 -- when the spell's cooldown ends, 0 when it's ready, nil when it can't be read
-local function CooldownEnd(id)
+local function ReadCooldown(id)
     local start, dur
     if C_Spell and C_Spell.GetSpellCooldown then
         local ok, cd = pcall(C_Spell.GetSpellCooldown, id)
@@ -396,24 +405,71 @@ local function CooldownEnd(id)
     end
     if not start or not dur then return nil end
     -- the global cooldown doesn't count
-    if dur <= GCD then return 0 end
+    if dur < MIN_COOLDOWN then return 0 end
+    -- its length, for predicting it after a cast in combat
+    if OpcowsBuffReminderDB and OpcowsBuffReminderDB.Cooldowns then OpcowsBuffReminderDB.Cooldowns[id] = dur end
     return start + dur
+end
+
+-- the cooldown's end as read, or from the last read while the game hides it
+local function CooldownEnd(id)
+    local ends = ReadCooldown(id)
+    if ends then
+        coolEnds[id] = ends
+        return ends, true
+    end
+    return coolEnds[id], false
+end
+
+-- the game's base cooldown of a spell in seconds, nil when it has none or it can't be read
+local function BaseCooldown(id)
+    if not GetSpellBaseCooldown then return nil end
+    local ok, b = pcall(GetSpellBaseCooldown, id)
+    b = ok and Num(b)
+    if b and b / 1000 >= MIN_COOLDOWN then return b / 1000 end
+end
+
+-- the spell's cooldown in seconds: the game's base cooldown, or the last one read
+local function CooldownLength(id)
+    local saved = OpcowsBuffReminderDB and OpcowsBuffReminderDB.Cooldowns
+    local last = saved and saved[id]
+    return BaseCooldown(id) or (last and last >= MIN_COOLDOWN and last or nil)
 end
 
 -- true when every buff in the group is your spell and none of them can be cast yet. A buff
 -- that isn't your spell, like food, can always be had. When the cooldown can't be read, it's
 -- predicted from when the buff was last cast and the spell's base cooldown.
+-- /obr debug, what the cooldown check decides for a buff, printed when it changes
+local coolSaid = {}
+local function CoolDebug(buff, msg)
+    if BR.debug and coolSaid[buff] ~= msg then
+        coolSaid[buff] = msg
+        Debug(("cooldown, %s: %s"):format(tostring(buff), msg))
+    end
+end
+
+-- /obr debug turned on, every buff's cooldown line prints again
+function BR.ClearCoolDebug()
+    coolSaid = {}
+end
+
 local function GroupCooling(group, castAt, now)
     local any = false
     for buff in pairs(group.buffs) do
         local id = OwnSpellId(buff)
-        if not id then return false end
-        local ends = CooldownEnd(id)
-        if ends == nil and castAt and GetSpellBaseCooldown then
-            local ok, base = pcall(GetSpellBaseCooldown, id)
-            base = ok and Num(base)
-            if base and base / 1000 > GCD then ends = castAt + base / 1000 end
+        if not id then
+            CoolDebug(buff, "not your spell")
+            return false
         end
+        local ends, read = CooldownEnd(id)
+        local length = CooldownLength(id)
+        -- hidden: the later of the last read and a cast since
+        if not read and castAt and length then ends = math.max(ends or 0, castAt + length) end
+        CoolDebug(buff, ("spell %d, game says %s, cooldown %s, cast time %s: %s"):format(id,
+            read and (ends > now and "cooling" or "ready") or "hidden",
+            length and ("%gs"):format(length) or "unknown",
+            castAt and "known" or "unknown",
+            ends and ends > now and "hidden while cooling" or "shown"))
         if not ends or ends <= now then return false end
         any = true
     end
@@ -476,7 +532,7 @@ local function CDMState()
     return "on"
 end
 
--- spell id -> buff frame of the Cooldown Manager, empty when it's turned off
+-- spell id -> list of the Cooldown Manager's buff frames for it, empty when it's turned off
 local function CDMFrames()
     local map = {}
     if CDMState() ~= "on" then return map end
@@ -488,7 +544,11 @@ local function CDMFrames()
                 for f in pool:EnumerateActive() do
                     local function add(id)
                         id = Num(id)
-                        if id and id > 0 then map[id] = f end
+                        if id and id > 0 then
+                            local list = map[id] or {}
+                            map[id] = list
+                            if list[#list] ~= f then list[#list + 1] = f end
+                        end
                     end
                     local cid = Num(f.cooldownID)
                     local info = cid and C_CooldownViewer.GetCooldownViewerCooldownInfo(cid)
@@ -506,28 +566,114 @@ local function CDMFrames()
     return map
 end
 
--- same answers as LookupBuff, from a Cooldown Manager buff frame
+-- /obr cdm, every buff frame of the Cooldown Manager with its spell ids and state
+function BR.CDMDump()
+    local function show(v)
+        if issecretvalue(v) then return "secret" end
+        return tostring(v)
+    end
+    Print("cooldown manager: " .. CDMState())
+    for _, name in ipairs({ "BuffIconCooldownViewer", "BuffBarCooldownViewer" }) do
+        local viewer = _G[name]
+        local pool = viewer and viewer.itemFramePool
+        if not (pool and pool.EnumerateActive) then
+            Print(name .. ": no frames")
+        else
+            local n = 0
+            for f in pool:EnumerateActive() do
+                n = n + 1
+                local cid = f.cooldownID
+                local ok, info = pcall(function()
+                    return Num(cid) and C_CooldownViewer.GetCooldownViewerCooldownInfo(Num(cid))
+                end)
+                info = ok and type(info) == "table" and info or {}
+                local linked = {}
+                if type(info.linkedSpellIDs) == "table" then
+                    for _, id in ipairs(info.linkedSpellIDs) do linked[#linked + 1] = show(id) end
+                end
+                local spell = Num(info.spellID)
+                local nok, sname = pcall(function()
+                    return spell and C_Spell and C_Spell.GetSpellName and C_Spell.GetSpellName(spell)
+                end)
+                sname = nok and sname or nil
+                local sok, shown = pcall(f.IsShown, f)
+                Print(("%s %d: %s, cooldown %s, spell %s, override %s, linked %s [%s], aura spell %s, shown %s, active %s, aura %s"):format(
+                    name:sub(1, 7), n, show(sname), show(cid), show(info.spellID), show(info.overrideSpellID),
+                    show(info.linkedSpellID), table.concat(linked, " "), show(f.auraSpellID),
+                    sok and show(shown) or "?", show(f.isActive), show(f.auraInstanceID)))
+            end
+        end
+    end
+end
+
+-- /obr debug, what a Cooldown Manager frame says about a buff, printed when it changes
+local cdmSaid = {}
+local function CDMDebug(buff, id, list, trusted)
+    if not BR.debug then return end
+    local function show(v)
+        if issecretvalue(v) then return "secret" end
+        return tostring(v)
+    end
+    local parts = {}
+    for i, f in ipairs(list) do
+        local ok, shown = pcall(f.IsShown, f)
+        parts[i] = ("[aura %s, active %s, cached %s, shown %s, cooldown %s]"):format(
+            show(f.auraInstanceID), show(f.isActive), f.auraDataCached and "yes" or "no",
+            ok and show(shown) or "?", show(f.cooldownID))
+    end
+    local msg = ("cooldown manager, %s (spell %d), %d frames%s: %s"):format(tostring(buff), id, #list,
+        trusted and "" or ", not seen up yet so predicted", table.concat(parts, " "))
+    if cdmSaid[buff] ~= msg then
+        cdmSaid[buff] = msg
+        Debug(msg)
+    end
+end
+
+-- what one Cooldown Manager frame says: an entry, false when it surely has no aura, nil when unknown
+local function CDMFrameLookup(f, prev)
+    local cached = LiveEntry(f.auraDataCached, prev)
+    if cached then return cached end
+    local inst, active = f.auraInstanceID, f.isActive
+    if not issecretvalue(inst) and inst == nil then return false end
+    if not issecretvalue(active) and type(active) == "boolean" then
+        if not active then return false end
+        local e = LiveEntry({}, prev)
+        -- the manager's own timer for the aura, when its remaining time is readable
+        if (issecretvalue(inst) or type(inst) == "number") and C_UnitAuras.GetAuraDuration then
+            local ok, rem = pcall(function()
+                return C_UnitAuras.GetAuraDuration("player", inst):GetRemainingDuration()
+            end)
+            rem = ok and Num(rem)
+            if rem then e.expires = GetTime() + rem end
+        end
+        return e
+    end
+    return nil
+end
+
+-- buffs a Cooldown Manager frame has shown as up this session. Until then its frames saying
+-- the buff is gone aren't believed, since the manager doesn't follow every buff it lists,
+-- ex: Mark of the Wild while you have it
+local cdmSeenUp = {}
+
+-- same answers as LookupBuff, from the Cooldown Manager's buff frames. Any frame showing
+-- the buff up wins
 local function CDMLookup(frames, buff, prev)
     for _, id in ipairs(SpellIds(buff)) do
-        local f = frames[id]
-        if f then
-            local cached = LiveEntry(f.auraDataCached, prev)
-            local inst, active = f.auraInstanceID, f.isActive
-            if not issecretvalue(inst) and inst == nil and not cached then return false end
-            if cached then return cached end
-            if not issecretvalue(active) and type(active) == "boolean" then
-                if not active then return false end
-                local e = LiveEntry({}, prev)
-                -- the manager's own timer for the aura, when its remaining time is readable
-                if (issecretvalue(inst) or type(inst) == "number") and C_UnitAuras.GetAuraDuration then
-                    local ok, rem = pcall(function()
-                        return C_UnitAuras.GetAuraDuration("player", inst):GetRemainingDuration()
-                    end)
-                    rem = ok and Num(rem)
-                    if rem then e.expires = GetTime() + rem end
+        local list = frames[id]
+        if list then
+            local gone = false
+            for _, f in ipairs(list) do
+                local e = CDMFrameLookup(f, prev)
+                if e then
+                    cdmSeenUp[buff] = true
+                    CDMDebug(buff, id, list, true)
+                    return e
                 end
-                return e
+                if e == false then gone = true end
             end
+            CDMDebug(buff, id, list, cdmSeenUp[buff])
+            if gone and cdmSeenUp[buff] then return false end
         end
     end
     return nil
@@ -555,7 +701,9 @@ function BR.LiveScan()
         if best then
             BR.groupState[g] = best
         elseif sure then
-            if prev and prev.present then Debug(("combat read: %s is gone"):format(g)) end
+            if prev and prev.present then
+                Debug(("combat read: %s is gone (%s)"):format(g, frames and "cooldown manager" or "direct lookup"))
+            end
             BR.groupState[g] = { present = false }
         end
     end
@@ -645,6 +793,9 @@ function BR.OnCast(id)
         Debug(("cast %s, not on you (%s)"):format(name, tostring(onMe)))
         return
     end
+    -- the cast starts the spell's cooldown, whether or not the buff's duration is known
+    local now = GetTime()
+    for _, g in ipairs(groups) do BR.castAt[g] = now end
     -- without a duration seen before, the time left isn't known
     local seen = OpcowsBuffReminderDB.Seen[name]
     local dur = seen and Num(seen.duration)
@@ -653,15 +804,13 @@ function BR.OnCast(id)
         return
     end
 
-    local now = GetTime()
     local e = { present = true, expires = dur > 0 and now + dur or 0, duration = dur }
     for _, g in ipairs(groups) do
-        BR.castAt[g] = now
         -- another buff of the group may still outlast it
         local prev = BR.groupState[g]
         if not (prev and prev.present and prev.expires and Outlasts(prev, e)) then
             -- hits count down from full charges
-            local charges = OpcowsBuffReminderDB.BuffGroups[g].hitcd > 0 and Num(seen.charges) or nil
+            local charges = OpcowsBuffReminderDB.BuffGroups[g].hituse ~= "off" and Num(seen.charges) or nil
             BR.groupState[g] = { present = true, expires = e.expires, duration = e.duration,
                 applications = charges }
             Debug(("cast %s, %s is up for %ds%s"):format(name, g, dur,
@@ -671,15 +820,28 @@ function BR.OnCast(id)
     BR.Refresh()
 end
 
--- UNIT_COMBAT on you. In combat, a buff group whose charges are used by hits, like Lightning
--- Shield, loses one for each hit that lands at least its cooldown after the last charge was used.
--- Dodges, parries and misses don't count. Out of combat the aura read is exact.
-function BR.OnHit(action)
+-- UNIT_COMBAT on you. In combat, a buff group whose charges are used by hits loses one for each
+-- hit that lands at least its cooldown after the last charge was used: any hit (hituse "hits",
+-- ex: Lightning Shield, every 3 seconds) or physical ones ("physical", ex: Inner Fire, every
+-- hit). Dodges, parries and misses don't count, and neither do hits a shield fully absorbs, ex:
+-- Power Word: Shield, which come as a WOUND of 0. Out of combat the aura read is exact.
+local SCHOOL_PHYSICAL = 1
+function BR.OnHit(action, descriptor, amount, school)
     if not BR.status.combat or issecretvalue(action) or action ~= "WOUND" then return end
+    if BR.debug then
+        local function show(v) return issecretvalue(v) and "secret" or tostring(v) end
+        Debug(("hit for %s (%s), school %s"):format(show(amount), show(descriptor), show(school)))
+    end
+    if Num(amount) == 0 then
+        Debug("hit fully absorbed, no charge used")
+        return
+    end
+    local physical = Num(school) == SCHOOL_PHYSICAL
     local now, changed = GetTime(), false
     for g, group in pairs(OpcowsBuffReminderDB.BuffGroups) do
         local st = BR.groupState[g]
-        local n = group.hitcd > 0 and st and st.present and Num(st.applications)
+        local counts = group.hituse == "hits" or group.hituse == "physical" and physical
+        local n = counts and st and st.present and Num(st.applications)
         if n and n > 0 and now - (st.chargeAt or 0) >= group.hitcd then
             if n == 1 then
                 BR.groupState[g] = { present = false }
@@ -1036,21 +1198,24 @@ local function LiveIds(group)
     return ids, table.concat(list, ",")
 end
 
--- count text for every number, red at or under the low stack warning. Without one Blizzard
--- doesn't print a count of 1.
+-- count text from 1 up, red at or under the low stack warning, and none at 0 for buffs without
+-- stacks, ex: Mark of the Wild. Without one Blizzard doesn't print a count of 1.
 local function CountFormatter(warn)
     if not (C_StringUtil and C_StringUtil.CreateNumericRuleFormatter) then return nil end
     local ok, fm = pcall(function()
         local fm = C_StringUtil.CreateNumericRuleFormatter()
-        local points = { { threshold = 0, format = "%d" } }
+        local points = { { threshold = 0, format = "" }, { threshold = 1, format = "%d" } }
         if warn > 0 then
-            points = { { threshold = 0, format = "|cffff3030%d|r" }, { threshold = warn + 1, format = "%d" } }
+            points = { { threshold = 0, format = "" }, { threshold = 1, format = "|cffff3030%d|r" },
+                { threshold = warn + 1, format = "%d" } }
         end
         fm:SetBreakpoints(points)
         -- Blizzard formats inside its aura update, make sure it can't fail there
         for n = 0, warn + 1 do
             local text = fm:FormatNumber(n)
-            if type(text) ~= "string" or issecretvalue(text) then error("formatted " .. n .. " as " .. tostring(text)) end
+            if type(text) ~= "string" or issecretvalue(text) or (n == 0 and text ~= "") then
+                error("formatted " .. n .. " as " .. tostring(text))
+            end
         end
         return fm
     end)
@@ -1184,12 +1349,18 @@ local function CDMStatus(group)
     if state == "missing" then return "The Cooldown Manager isn't available, it's predicted in combat.", true end
     if state == "off" then return "The Cooldown Manager is turned off, it's predicted in combat.", true end
     local frames = CDMFrames()
-    for _, ids in pairs(secret) do
-        local tracked = false
+    for buff, ids in pairs(secret) do
+        local tracked
         for _, id in ipairs(ids) do
-            if frames[id] then tracked = true end
+            if frames[id] then tracked = tracked or id end
         end
         if not tracked then return "The Cooldown Manager doesn't track it, it's predicted in combat.", true end
+        -- the manager follows only the rank it holds, ex: Mark of the Wild 5232 while you have
+        -- 6756, and adding it again doesn't change that
+        local mine = BR.learnedIds[BuffKey(buff)] or OwnSpellId(buff)
+        if mine and not frames[mine] then
+            return ("The Cooldown Manager only follows another rank (spell %d, yours is %d), it's predicted in combat. Blizzard Auras can follow it."):format(tracked, mine), true
+        end
     end
     return "The Cooldown Manager tracks it, it's read live in combat.", false
 end
@@ -1207,7 +1378,7 @@ function BR.CombatStatus(g)
         return "Blizzard's aura button shows it all fight, with exact time and stacks.", false
     end
     local text, warn = CDMStatus(group)
-    if warn and group.hitcd > 0 then
+    if warn and group.hituse ~= "off" then
         return "Predicted in combat, with a charge used by each hit you take.", false
     end
     return text, warn
@@ -1222,7 +1393,7 @@ function BR.CombatNotices(only)
             if warn and noticed[g] ~= text then
                 noticed[g] = text
                 local hint = ""
-                if group.combat == "cdm" then
+                if group.combat == "cdm" and not text:find("Blizzard Auras can", 1, true) then
                     hint = " Add it to the Cooldown Manager's buffs, or switch the buff group to Blizzard Auras on the Buff groups tab (/obr)."
                 end
                 Print(('"%s": %s%s'):format(g, text, hint))
@@ -2168,12 +2339,15 @@ function BR.Refresh()
             if st and st.present and (st.duration or 0) > 0 and st.expires > 0 then
                 BR.castAt[g] = st.expires - st.duration
             end
+            -- checked even while the group is hidden, ex: shown only in combat, so a cooldown
+            -- read before the pull is known during it
+            local cooling = GroupCooling(group, BR.castAt[g], now)
             if IsSuppressed(group.conditions) or BR.scriptRes[g] then
                 -- hidden
             elseif secret and group.combat == "blizzard" and LiveReady(g) then
                 -- Blizzard's button covers the icon while the buff is up
                 table.insert(list, { key = "1" .. g, icon = group.icon, live = g, group = group })
-            elseif st and GroupCooling(group, BR.castAt[g], now) then
+            elseif st and cooling then
                 -- can't be cast again yet
             elseif st then
                 -- no state means auras haven't been readable yet, don't guess
@@ -2303,6 +2477,7 @@ function BR.NewGroup(g)
         ["warntime"] = opts.warntime,
         ["warnstacks"] = 0,
         ["combat"] = "cdm",
+        ["hituse"] = "off",
         ["hitcd"] = 0,
         ["timer"] = "default",
         ["glow"] = "default",
@@ -2597,6 +2772,7 @@ BR.QUESTION_MARK = QUESTION_MARK
 BR.MEDIA = MEDIA
 BR.CONDITIONS = CONDITIONS
 BR.COMBAT_MODES = COMBAT_MODES
+BR.HIT_USES, BR.HIT_USE_ORDER = HIT_USES, HIT_USE_ORDER
 BR.TIMERS, BR.TIMER_ORDER = TIMERS, TIMER_ORDER
 BR.GLOWS, BR.GLOW_ORDER, BR.OVERLAYS, BR.OVERLAY_ORDER = GLOWS, GLOW_ORDER, OVERLAYS, OVERLAY_ORDER
 BR.ENCHANT_SLOTS, BR.ENCHANT_NAMES = ENCHANT_SLOTS, ENCHANT_NAMES
@@ -2613,7 +2789,13 @@ SLASH_OpcowsBuffReminder1 = "/obr"
 SlashCmdList.OpcowsBuffReminder = function(msg)
     if msg and msg:lower():match("^%s*debug%s*$") then
         BR.debug = not BR.debug
-        Print("debug " .. (BR.debug and "on" or "off") .. ", auras secret now: " .. tostring(AurasSecret()))        return
+        Print("debug " .. (BR.debug and "on" or "off") .. ", auras secret now: " .. tostring(AurasSecret()))
+        if BR.debug then BR.ClearCoolDebug() end
+        return
+    end
+    if msg and msg:lower():match("^%s*cdm%s*$") then
+        BR.CDMDump()
+        return
     end
     BR.ToggleConfig()
 end
@@ -2652,6 +2834,11 @@ function BR.SanityCheck()
         elseif type(opts[k]) ~= type(v) then
             opts[k] = v
         end
+    end
+    -- [spell id] = its cooldown in seconds, last read out of combat
+    if type(OpcowsBuffReminderDB.Cooldowns) ~= "table" then OpcowsBuffReminderDB.Cooldowns = {} end
+    for k, v in pairs(OpcowsBuffReminderDB.Cooldowns) do
+        if type(k) ~= "number" or type(v) ~= "number" or v < MIN_COOLDOWN then OpcowsBuffReminderDB.Cooldowns[k] = nil end
     end
     if type(OpcowsBuffReminderDB.Seen) ~= "table" then OpcowsBuffReminderDB.Seen = {} end
     for k, e in pairs(OpcowsBuffReminderDB.Seen) do
@@ -2789,6 +2976,8 @@ function BR.SanityCheck()
             if type(group.click) ~= "string" or group.click == "" then group.click = "auto" end
             if type(group.party) ~= "boolean" then group.party = true end
             if type(group.hitcd) ~= "number" or group.hitcd < 0 then group.hitcd = 0 end
+            -- 2.4 had only the cooldown, set meant any hit
+            if not HIT_USES[group.hituse] then group.hituse = group.hitcd > 0 and "hits" or "off" end
             if group.icon == nil then group.icon = QUESTION_MARK end
         end
     end
@@ -2851,7 +3040,7 @@ function BR.Init()
     Print("loaded. Type /obr for the options.")
 end
 
-frame:SetScript("OnEvent", function(self, event, arg1, arg2, arg3, arg4)
+frame:SetScript("OnEvent", function(self, event, arg1, arg2, arg3, arg4, arg5)
     if event == "ADDON_LOADED" then
         if arg1 == ADDON_NAME then
             self:UnregisterEvent("ADDON_LOADED")
@@ -2869,8 +3058,8 @@ frame:SetScript("OnEvent", function(self, event, arg1, arg2, arg3, arg4)
         BR.OnCast(arg3)
         return
     elseif event == "UNIT_COMBAT" then
-        -- unit, action, descriptor, amount
-        BR.OnHit(arg2)
+        -- unit, action, descriptor, amount, school
+        BR.OnHit(arg2, arg3, arg4, arg5)
         return
     end
 

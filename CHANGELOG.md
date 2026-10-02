@@ -1,5 +1,19 @@
 # Changelog
 
+## Unreleased
+
+### Changed
+
+- "Hit cooldown" became a "Charges used by" row under In combat: Off, Hits, or Physical hits (melee and ranged only, for Inner Fire), with a Cooldown that can be 0 for buffs where every hit uses a charge. Buff groups with a hit cooldown set in 2.4 count any hit, as before. The options window is a little taller to fit it.
+
+### Fixed
+
+- A buff tracked on the Cooldown Manager that the manager doesn't actually follow, ex: Mark of the Wild, showed as missing all through combat while you had it. Buff Reminder now only believes the manager says a buff is gone once it has seen the manager show that buff as up, and predicts it until then.
+- The Cooldown Manager follows only one rank of some buffs, ex: Mark of the Wild rank 2 when you have rank 3, and adding the buff again doesn't change it. The Buff groups tab and the login message now say when that happens, so the buff group can be switched to Blizzard Auras.
+- A buff whose spell was on cooldown, ex: Berserking, showed in combat, since the game hides cooldowns then. A cooldown read before the pull is now kept through it, and a cast in combat is timed with the spell's cooldown as last read, even when the buff's own duration isn't known yet.
+- Hits fully absorbed by a shield, ex: Power Word: Shield, used a charge of Inner Fire or Lightning Shield.
+- Blizzard Auras showed a stack count of 0 on buffs without stacks, ex: Mark of the Wild.
+
 ## 2.4
 
 ### Added

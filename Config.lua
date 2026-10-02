@@ -891,32 +891,42 @@ local function CreateGroupsPage(page)
         .. "|cffffd100Blizzard Auras:|r for buffs the Cooldown Manager can't track. Blizzard's own aura button shows the buff "
         .. "over the icon for the whole fight with its exact time and stacks, low stacks in red. When the buff drops the icon shows through.\n"
         .. "|cff808080Click to change.|r")
-    -- seconds between charges hits can use, 0 or empty is off
-    local hitsLabel = Label(detail, "Hit cooldown:")
-    hitsLabel:SetPoint("LEFT", combat, "RIGHT", 16, 0)
-    local hits = ValueBox(detail, 36,
-        function()
-            local cd = Current().hitcd or 0
-            return cd > 0 and cd or nil
-        end,
+    -- which hits use the buff's charges in combat, and how often one can be used
+    local usedLabel = Label(detail, "Charges used by:")
+    usedLabel:SetPoint("TOPLEFT", 0, -486)
+    local used = Button(detail, "", 110, function()
+        local group = Current()
+        group.hituse = NextIn(BR.HIT_USE_ORDER, group.hituse)
+        Changed()
+    end)
+    used:SetPoint("LEFT", usedLabel, "RIGHT", 10, 0)
+    Tooltip(used, "Charges used by hits",
+        "For buffs whose charges are used up by hits you take. Neither the buff nor its charges can be read "
+        .. "in combat, but the hits you take can, so the charges are counted down from the pull. "
+        .. "Dodges, parries and misses don't count. At 0 charges the icon shows the buff as gone, and "
+        .. "Warn at stacks warns before that. Casting the buff again in combat starts over with full charges. "
+        .. "It's corrected when combat ends.\n\n"
+        .. "|cffffd100Off:|r not counted, the charges it had at the pull stay.\n"
+        .. "|cffffd100Hits:|r any hit that lands, ex: Lightning Shield or Water Shield.\n"
+        .. "|cffffd100Physical hits:|r melee and ranged hits only, ex: Inner Fire.\n\n"
+        .. "Only for Cooldown Manager, Blizzard Auras show the exact charges.\n"
+        .. "|cff808080Click to change.|r")
+    local cdLabel = Label(detail, "Cooldown:")
+    cdLabel:SetPoint("LEFT", used, "RIGHT", 16, 0)
+    local cd = ValueBox(detail, 36,
+        function() return Current().hitcd end,
         function(text)
             if text == "" then Current().hitcd = 0 return end
             local n = tonumber(text)
             if n and n >= 0 and n <= 60 then Current().hitcd = n end
         end)
-    hits:SetPoint("LEFT", hitsLabel, "RIGHT", 8, 0)
-    local hitsUnit = Label(detail, "sec", "GameFontHighlightSmall")
-    hitsUnit:SetPoint("LEFT", hits, "RIGHT", 4, 0)
-    Tooltip(hits, "Charges used by hits",
-        "For buffs whose charges are used up by hits you take, like Lightning Shield. Neither the buff nor its "
-        .. "charges can be read in combat, but hits you take can, so the charges are counted down from the pull: "
-        .. "one for each hit that lands at least this many seconds after the last charge was used. "
-        .. "Dodges, parries and misses don't count. At 0 charges the icon shows the buff as gone, and "
-        .. "Warn at stacks warns before that. Casting the buff again in combat starts over with full charges.\n\n"
-        .. "Enter how often a charge can be used, ex: 3 for Lightning Shield. Empty turns it off. "
-        .. "It's corrected when combat ends.\n\n"
-        .. "Only for Cooldown Manager, Blizzard Auras show the exact charges.")    local combatStatus = Label(detail, "", "GameFontHighlightSmall")
-    combatStatus:SetPoint("TOPLEFT", combatLabel, "BOTTOMLEFT", 0, -10)
+    cd:SetPoint("LEFT", cdLabel, "RIGHT", 8, 0)
+    local cdUnit = Label(detail, "sec", "GameFontHighlightSmall")
+    cdUnit:SetPoint("LEFT", cd, "RIGHT", 4, 0)
+    Tooltip(cd, "Charge cooldown",
+        "How soon after a charge is used another hit can use one, in seconds, ex: 3 for Lightning Shield. "
+        .. "Hits in between don't count. 0 for buffs where every hit uses a charge, like Inner Fire.")
+    local combatStatus = Label(detail, "", "GameFontHighlightSmall")
     combatStatus:SetPoint("RIGHT", detail, "RIGHT")
 
     function page:Refresh()
@@ -958,7 +968,7 @@ local function CreateGroupsPage(page)
         local ench = selectedSlot ~= nil
         -- enchants have no party or combat setting
         for _, w in ipairs({ delete, buffsLabel, buffsHint, buffs, buffEdit, addBtn, pickBtn,
-            party, combatLabel, combat, combatStatus, hitsLabel, hits, hitsUnit }) do
+            party, combatLabel, combat, combatStatus, usedLabel, used, cdLabel, cd, cdUnit }) do
             w:SetShown(not ench)
         end
         showCount:SetShown(ench)
@@ -1025,10 +1035,15 @@ local function CreateGroupsPage(page)
         combat:SetText(BR.COMBAT_MODES[group.combat])
         -- Blizzard's button shows the exact charges
         local cdm = group.combat == "cdm"
-        hitsLabel:SetShown(cdm)
-        hits:SetShown(cdm)
-        hitsUnit:SetShown(cdm)
-        hits:Load()
+        local counted = cdm and group.hituse ~= "off"
+        usedLabel:SetShown(cdm)
+        used:SetShown(cdm)
+        used:SetText(BR.HIT_USES[group.hituse])
+        cdLabel:SetShown(counted)
+        cd:SetShown(counted)
+        cdUnit:SetShown(counted)
+        cd:Load()
+        combatStatus:SetPoint("TOPLEFT", cdm and usedLabel or combatLabel, "BOTTOMLEFT", 0, -10)
         local status, warn = BR.CombatStatus(selected)
         combatStatus:SetText(status)
         if warn then
@@ -1409,7 +1424,7 @@ end
 -- main window ------------------------------------------------------------------------------
 local function CreateConfig()
     local f = CreateFrame("Frame", "OpcowsBuffReminderConfig", UIParent, "BasicFrameTemplateWithInset")
-    f:SetSize(620, 610)
+    f:SetSize(620, 640)
     f:SetPoint("CENTER")
     f:SetFrameStrata("HIGH")
     f:SetToplevel(true)
