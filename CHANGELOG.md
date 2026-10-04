@@ -1,5 +1,21 @@
 # Changelog
 
+## Unreleased
+
+### Added
+
+- Alerts, on a new Alerts tab: an icon that shows while an aura is on you, ex: Clearcasting from Omen of Clarity. Add one by name (every rank) or spell id, or browse the buffs you have now or have had. It's Blizzard's own aura button, so it shows in combat too with the exact time and stacks. Each alert has its own size, opacity, glow and color, time left, conditions and script, and a sound the game plays as the aura is put on. Unlock the icons to place it with the others.
+- "Auto" under Charges used by, the new default, sets it up for you for Lightning Shield, Inner Fire and Shadowguard, every rank. Other buffs aren't counted, as with Off. Buff groups that were on Off are now on Auto, and ones set by hand keep their settings.
+- "Hits + absorbed" under Charges used by, for buffs like Shadowguard whose charges are used even by hits Power Word: Shield absorbs.
+- With `/obr debug` on, each fight ends with a line comparing the charges counted by hits to the real count, to help set a buff group's Cooldown.
+
+### Fixed
+
+- Blizzard Auras showed a stack count of 1 on buffs without stacks. Counts now start at 2, like Blizzard's own buttons, or at 1 when the buff group has Warn at stacks set.
+- The hit that starts a fight could be missed by Charges used by, leaving the count one charge too high.
+- Recasting a Cooldown Manager buff in combat could lose its charges, so Charges used by stopped counting until combat ended. The manager still shows the buff as gone for a moment after the cast, and that read undid the cast.
+- Recasting a buff in combat started its Cooldown over, so the next hit used a charge even when the game's own cooldown was still running.
+
 ## 2.5
 
 ### Changed

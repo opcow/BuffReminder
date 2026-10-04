@@ -317,7 +317,10 @@ local function ConditionsPanel(parent)
         Changed()
     end)
     p.always:SetPoint("LEFT", showLabel, "RIGHT", 6, 0)
-    Tooltip(p.always, "Show", function() return ALWAYS_TIPS[p.target.conds.always] .. "\n|cff808080Click to change.|r" end)
+    Tooltip(p.always, "Show", function()
+        local tips = p.target.alwaysTips or ALWAYS_TIPS
+        return tips[p.target.conds.always] .. "\n|cff808080Click to change.|r"
+    end)
 
     local warnLabel = Label(p, "Early warning:")
     warnLabel:SetPoint("LEFT", p.always, "RIGHT", 16, 0)
@@ -328,6 +331,8 @@ local function ConditionsPanel(parent)
     local secs = Label(p, "sec", "GameFontHighlightSmall")
     secs:SetPoint("LEFT", p.warn, "RIGHT", 4, 0)
     Tooltip(p.warn, "Early warning", "Show the icon with a countdown when the buff has this many seconds left. 0 shows it only once the buff is gone.")
+
+    p.warnParts = { warnLabel, p.warn, secs }
 
     p.script = Button(p, "Script", 70, function() BR.EditScript(p.target) end)
     p.script:SetPoint("TOPRIGHT", 0, -70)
@@ -342,7 +347,9 @@ local function ConditionsPanel(parent)
             c.label:SetFontObject(conds.always == 0 and "GameFontHighlightSmall" or "GameFontDisableSmall")
         end
         self.always:SetText(ALWAYS_LABELS[conds.always])
-        self.warn:Load()
+        -- alerts have no early warning
+        for _, w in ipairs(self.warnParts) do w:SetShown(target.getWarn ~= nil) end
+        if target.getWarn then self.warn:Load() end
         self.script:SetText(target.getScript() ~= "" and "Script |cff00ff00*|r" or "Script")
     end
 
@@ -418,6 +425,37 @@ local function SortedKeys(t)
     table.sort(keys, function(a, b) return tostring(a):lower() < tostring(b):lower() end)
     return keys
 end
+
+local ALERT_ALWAYS_TIPS = {
+    [0] = "The icon shows while the aura is on you, unless a condition above hides it.",
+    [1] = "The icon is never shown.",
+    [2] = "The icon always shows while the aura is on you, the conditions above are ignored.",
+}
+-- an alert has no early warning, so no getWarn
+local function AlertTarget(aura)
+    local alert = OpcowsBuffReminderDB.Alerts[aura]
+    return {
+        name = BuffText(aura),
+        conds = alert.conditions,
+        alwaysTips = ALERT_ALWAYS_TIPS,
+        getScript = function() return alert.script end,
+        setScript = function(code) BR.SetAlertScript(aura, code) end,
+    }
+end
+
+StaticPopupDialogs["OPCOWSBUFFREMINDER_DELETE_ALERT"] = {
+    text = 'Delete the alert for "%s"?',
+    button1 = YES,
+    button2 = NO,
+    OnAccept = function(self, data)
+        BR.RemoveAlert(data)
+        Changed()
+    end,
+    timeout = 0,
+    whileDead = true,
+    hideOnEscape = true,
+    preferredIndex = 3,
+}
 
 StaticPopupDialogs["OPCOWSBUFFREMINDER_DELETE_GROUP"] = {
     text = 'Delete the buff group "%s"?',
@@ -511,6 +549,7 @@ StaticPopupDialogs["OPCOWSBUFFREMINDER_RESET"] = {
 local STYLE_WHEN = {
     missing = { "When missing:", "missing", "while the buff is missing, not while it's only running out" },
     warning = { "When warning:", "warning", "while the buff is running out (early warning time) or low on stacks, not once it's gone" },
+    alert = { "Look:", "it's up", "while the aura is on you" },
 }
 local function StyleRow(parent, when, target, glowKey, overlayKey, isGroup, texture)
     local w = STYLE_WHEN[when]
@@ -526,7 +565,7 @@ local function StyleRow(parent, when, target, glowKey, overlayKey, isGroup, text
         Changed()
     end)
     row.glow:SetPoint("LEFT", glowLabel, "RIGHT", 6, 0)
-    local others = isGroup and "\n\n" or " Buff groups can have their own on the Buff groups tab.\n\n"
+    local others = (isGroup or when == "alert") and "\n\n" or " Buff groups can have their own on the Buff groups tab.\n\n"
     local default = isGroup and "|cffffd100Default:|r follows the Options tab.\n" or ""
     Tooltip(row.glow, "Glow when " .. w[2],
         "A glow around the icon " .. w[3] .. "." .. others
@@ -554,7 +593,7 @@ local function StyleRow(parent, when, target, glowKey, overlayKey, isGroup, text
         local t = target()
         self.glow:SetText(BR.GLOWS[t[glowKey]])
         self.overlay:SetText(BR.OVERLAYS[t[overlayKey]])
-        BR.StylePreview(self.preview, t, when == "missing", texture and texture())
+        BR.StylePreview(self.preview, t, when ~= "warning", texture and texture())
     end
     return row
 end
@@ -894,8 +933,10 @@ local function CreateGroupsPage(page)
     -- which hits use the buff's charges in combat, and how often one can be used
     local usedLabel = Label(detail, "Charges used by:")
     usedLabel:SetPoint("TOPLEFT", 0, -486)
-    local used = Button(detail, "", 110, function()
+    local used = Button(detail, "", 140, function()
         local group = Current()
+        -- leaving Auto keeps its cooldown to start from
+        if group.hituse == "auto" then group.hitcd = select(2, BR.HitUse(group)) end
         group.hituse = NextIn(BR.HIT_USE_ORDER, group.hituse)
         Changed()
     end)
@@ -903,19 +944,23 @@ local function CreateGroupsPage(page)
     Tooltip(used, "Charges used by hits",
         "For buffs whose charges are used up by hits you take. Neither the buff nor its charges can be read "
         .. "in combat, but the hits you take can, so the charges are counted down from the pull. "
-        .. "Dodges, parries and misses don't count. At 0 charges the icon shows the buff as gone, and "
+        .. "Dodges, parries and misses don't count, nor do hits a shield fully absorbs, like Power Word: Shield, "
+        .. "unless you pick Hits + absorbed. At 0 charges the icon shows the buff as gone, and "
         .. "Warn at stacks warns before that. Casting the buff again in combat starts over with full charges. "
         .. "It's corrected when combat ends.\n\n"
+        .. "|cffffd100Auto:|r set for you for Lightning Shield, Inner Fire and Shadowguard, Off for other buffs.\n"
         .. "|cffffd100Off:|r not counted, the charges it had at the pull stay.\n"
         .. "|cffffd100Hits:|r any hit that lands, ex: Lightning Shield or Water Shield.\n"
-        .. "|cffffd100Physical hits:|r melee and ranged hits only, ex: Inner Fire.\n\n"
+        .. "|cffffd100Physical hits:|r melee and ranged hits only, ex: Inner Fire.\n"
+        .. "|cffffd100Hits + absorbed:|r any hit, even one a shield fully absorbs, ex: Shadowguard.\n\n"
         .. "Only for Cooldown Manager, Blizzard Auras show the exact charges.\n"
         .. "|cff808080Click to change.|r")
     local cdLabel = Label(detail, "Cooldown:")
     cdLabel:SetPoint("LEFT", used, "RIGHT", 16, 0)
     local cd = ValueBox(detail, 36,
-        function() return Current().hitcd end,
+        function() return select(2, BR.HitUse(Current())) end,
         function(text)
+            if Current().hituse == "auto" then return end
             if text == "" then Current().hitcd = 0 return end
             local n = tonumber(text)
             if n and n >= 0 and n <= 60 then Current().hitcd = n end
@@ -924,8 +969,9 @@ local function CreateGroupsPage(page)
     local cdUnit = Label(detail, "sec", "GameFontHighlightSmall")
     cdUnit:SetPoint("LEFT", cd, "RIGHT", 4, 0)
     Tooltip(cd, "Charge cooldown",
-        "How soon after a charge is used another hit can use one, in seconds, ex: 3 for Lightning Shield. "
-        .. "Hits in between don't count. 0 for buffs where every hit uses a charge, like Inner Fire.")
+        "How soon after a charge is used another hit can use one, in seconds, ex: 3.4 for Lightning Shield. "
+        .. "Hits in between don't count. 0 for buffs where every hit uses a charge, like Inner Fire.\n"
+        .. "|cff808080Set for you on Auto.|r")
     local combatStatus = Label(detail, "", "GameFontHighlightSmall")
     combatStatus:SetPoint("RIGHT", detail, "RIGHT")
 
@@ -1035,14 +1081,18 @@ local function CreateGroupsPage(page)
         combat:SetText(BR.COMBAT_MODES[group.combat])
         -- Blizzard's button shows the exact charges
         local cdm = group.combat == "cdm"
-        local counted = cdm and group.hituse ~= "off"
+        local use = BR.HitUse(group)
+        local auto = group.hituse == "auto"
+        local counted = cdm and use ~= "off"
         usedLabel:SetShown(cdm)
         used:SetShown(cdm)
-        used:SetText(BR.HIT_USES[group.hituse])
+        used:SetText(auto and "Auto: " .. BR.HIT_USES[use] or BR.HIT_USES[use])
         cdLabel:SetShown(counted)
         cd:SetShown(counted)
         cdUnit:SetShown(counted)
         cd:Load()
+        cd:SetEnabled(not auto)
+        if auto then cd:SetTextColor(0.5, 0.5, 0.5) end
         combatStatus:SetPoint("TOPLEFT", cdm and usedLabel or combatLabel, "BOTTOMLEFT", 0, -10)
         local status, warn = BR.CombatStatus(selected)
         combatStatus:SetText(status)
@@ -1051,6 +1101,246 @@ local function CreateGroupsPage(page)
         else
             combatStatus:SetTextColor(0.6, 0.8, 0.6)
         end
+    end
+end
+
+-- alerts page ------------------------------------------------------------------------------
+local function CreateAlertsPage(page)
+    local selected     -- the selected alert's aura
+
+    local function Current() return OpcowsBuffReminderDB.Alerts[selected] end
+
+    local alertsLabel = Label(page, "Alerts")
+    alertsLabel:SetPoint("TOPLEFT", 0, 0)
+    local alerts = ScrollList(page, 176, 300)
+    alerts:SetPoint("TOPLEFT", 0, -16)
+
+    local newLabel = Label(page, "New alert, aura name or spell id:", "GameFontHighlightSmall")
+    newLabel:SetPoint("TOPLEFT", alerts, "BOTTOMLEFT", 2, -8)
+    local newEdit = EditBox(page, 116)
+    newEdit:SetPoint("TOPLEFT", newLabel, "BOTTOMLEFT", 4, -2)
+    local function NewAlert(aura)
+        aura = Trim(aura)
+        if aura == "" then return end
+        BR.NewAlert(aura)
+        selected = aura
+        newEdit:SetText("")
+        newEdit:ClearFocus()
+        Changed()
+    end
+    newEdit:SetScript("OnEnterPressed", function(self) NewAlert(self:GetText()) end)
+    local newBtn = Button(page, "Add", 50, function() NewAlert(newEdit:GetText()) end)
+    newBtn:SetPoint("LEFT", newEdit, "RIGHT", 4, 0)
+
+    -- the buffs you have now and the ones you've had
+    local picker = Picker(page, "New alert", 300, 340)
+    local function AuraRows()
+        local list = {}
+        for _, e in ipairs(BR.GetCurrentBuffs() or {}) do table.insert(list, e) end
+        for _, e in ipairs(BR.GetSeenBuffs()) do table.insert(list, e) end
+        table.sort(list, function(a, b) return tostring(a.name) < tostring(b.name) end)
+        local rows, seen = {}, {}
+        for _, e in ipairs(list) do
+            local name = e.name
+            if type(name) == "string" and not seen[name] then
+                seen[name] = true
+                local has = OpcowsBuffReminderDB.Alerts[name]
+                table.insert(rows, {
+                    name = name,
+                    text = has and ("|cff808080%s (has one)|r"):format(name) or name,
+                    icon = e.icon or BR.QUESTION_MARK,
+                    spell = e.spellId,
+                    onClick = function()
+                        picker:Hide()
+                        NewAlert(name)
+                    end,
+                })
+            end
+        end
+        if #rows == 0 then rows[1] = { text = "|cff808080None yet.|r" } end
+        return rows
+    end
+    local pickBtn = Button(page, "Browse...", 176, function(self)
+        if picker:IsShown() then picker:Hide() return end
+        picker:Open(self, AuraRows)
+    end)
+    pickBtn:SetPoint("TOPLEFT", newEdit, "BOTTOMLEFT", -6, -6)
+    Tooltip(pickBtn, "Browse auras", "Pick from the buffs you have now or ones you've had before, ex: Clearcasting. "
+        .. "Have the aura once out of combat to have it listed.")
+
+    local empty = Label(page, "Alerts show an icon while an aura is on you,\nex: Clearcasting from Omen of Clarity.\n"
+        .. "Add one by name or spell id to get started.", "GameFontHighlight")
+    empty:SetJustifyH("CENTER")
+    empty:SetPoint("CENTER", page, "CENTER", 95, 40)
+
+    local detail = CreateFrame("Frame", nil, page)
+    detail:SetPoint("TOPLEFT", 190, 0)
+    detail:SetPoint("BOTTOMRIGHT", 0, 0)
+
+    local icon = detail:CreateTexture(nil, "ARTWORK")
+    icon:SetSize(28, 28)
+    icon:SetPoint("TOPLEFT", 0, 0)
+    local name = Label(detail, "", "GameFontNormalLarge")
+    name:SetPoint("LEFT", icon, "RIGHT", 8, 0)
+    name:SetPoint("RIGHT", detail, "RIGHT", -80, 0)
+    name:SetWordWrap(false)
+    local delete = Button(detail, "Delete", 70, function()
+        StaticPopup_Show("OPCOWSBUFFREMINDER_DELETE_ALERT", BuffText(selected), nil, selected)
+    end)
+    delete:SetPoint("TOPRIGHT", 0, -3)
+
+    local hint = Label(detail, "A name follows every rank of the aura, a spell id only that one. "
+        .. "Blizzard's own aura button is the icon, so it shows the exact time and stacks, in combat too. "
+        .. "Unlock the icons to place it.", "GameFontDisableSmall")
+    hint:SetPoint("TOPLEFT", 0, -38)
+    hint:SetPoint("RIGHT", detail, "RIGHT")
+    hint:SetJustifyH("LEFT")
+    local status = Label(detail, "", "GameFontHighlightSmall")
+    status:SetPoint("TOPLEFT", hint, "BOTTOMLEFT", 0, -8)
+    status:SetPoint("RIGHT", detail, "RIGHT")
+    status:SetJustifyH("LEFT")
+
+    local function AlertIcon() return Current().icon end
+    local style = StyleRow(detail, "alert", Current, "glow", "overlay", false, AlertIcon)
+    style.label:SetPoint("TOPLEFT", 0, -110)
+
+    local sizeLabel = Label(detail, "Icon size:")
+    sizeLabel:SetPoint("TOPLEFT", 0, -140)
+    local size = ValueBox(detail, 40,
+        function() return Current().size end,
+        function(text)
+            local alert = Current()
+            local n = tonumber(text)
+            if text == "" or text:lower() == "default" then
+                alert.size = nil
+            elseif n and n >= 10 and n <= 400 then
+                alert.size = n
+            else
+                return
+            end
+            BR.ApplyLayout()
+            BR.UpdateAlerts()
+        end)
+    size:SetPoint("LEFT", sizeLabel, "RIGHT", 10, 0)
+    Tooltip(size, "Icon size", "This icon's own size, 10 to 400. Empty uses the size on the Options tab.")
+    local alphaLabel = Label(detail, "Opacity:")
+    alphaLabel:SetPoint("LEFT", size, "RIGHT", 20, 0)
+    local alpha = ValueBox(detail, 36,
+        function() return Current().alpha end,
+        NumberSetter(0, 1, function(n) Current().alpha = n end))
+    alpha:SetPoint("LEFT", alphaLabel, "RIGHT", 10, 0)
+    Tooltip(alpha, "Opacity", "This icon's opacity, 0 (invisible) to 1 (solid).")
+
+    local timerLabel = Label(detail, "Time left:")
+    timerLabel:SetPoint("TOPLEFT", 0, -170)
+    local timer = Button(detail, "", 110, function()
+        local alert = Current()
+        alert.timer = NextIn(BR.TIMER_ORDER, alert.timer)
+        BR.UpdateAlerts()
+        Changed()
+    end)
+    timer:SetPoint("LEFT", timerLabel, "RIGHT", 10, 0)
+    Tooltip(timer, "Time left",
+        "How this icon shows the time left on the aura.\n\n"
+        .. "|cffffd100Default:|r follows the Icons show setting on the Options tab.\n"
+        .. "|cffffd100Text:|r time left as text at the top.\n"
+        .. "|cffffd100Swipe:|r a cooldown swipe over the icon.\n"
+        .. "|cffffd100Text and swipe:|r both.\n"
+        .. "|cffffd100None:|r neither.\n"
+        .. "|cff808080Click to change.|r")
+
+    local soundLabel = Label(detail, "Sound:")
+    soundLabel:SetPoint("TOPLEFT", 0, -200)
+    local sound = ValueBox(detail, 130,
+        function() return BR.AlertSoundName(Current().sound) end,
+        function(text)
+            if not BR.SetAlertSoundChoice(selected, text) then BR.Print("Unknown sound " .. text .. ".") end
+        end)
+    sound:SetPoint("LEFT", soundLabel, "RIGHT", 10, 0)
+    Tooltip(sound, "Sound", "Played by the game as the aura is put on you, in combat too. "
+        .. "A name from Browse, a sound file id or a sound file's path. Leave empty for no sound.")
+    local test = Button(detail, "Test", 50, function()
+        local s = Current().sound
+        if s then pcall(PlaySoundFile, s, "Master") end
+    end)
+    test:SetPoint("LEFT", sound, "RIGHT", 6, 0)
+    local soundPicker = Picker(detail, "Alert sound", 260, 300)
+    local function SoundRows()
+        local current = Current().sound
+        local function Row(label, value, text)
+            return {
+                name = label,
+                text = text or label,
+                selected = value == current,
+                onClick = function()
+                    BR.SetAlertSoundChoice(selected, value)
+                    Changed()
+                    soundPicker:Reload()
+                end,
+            }
+        end
+        local rows = { Row("none", nil, "|cff808080None|r") }
+        for _, s in ipairs(BR.ALERT_SOUNDS) do table.insert(rows, Row(s[1], s[1])) end
+        -- the name's row is selected by the sound's file id
+        for i, s in ipairs(BR.ALERT_SOUNDS) do rows[i + 1].selected = s[2] == current end
+        return rows
+    end
+    local browse = Button(detail, "Browse...", 80, function(self)
+        if soundPicker:IsShown() then soundPicker:Hide() return end
+        soundPicker:Open(self, SoundRows)
+    end)
+    browse:SetPoint("LEFT", test, "RIGHT", 4, 0)
+    Tooltip(browse, "Browse sounds", "Click one to use it and hear it.")
+    page:SetScript("OnHide", function()
+        picker:Hide()
+        soundPicker:Hide()
+    end)
+
+    local conds = ConditionsPanel(detail)
+    conds:SetPoint("TOPLEFT", 0, -236)
+
+    local details = { detail }
+    function page:Refresh()
+        local db = OpcowsBuffReminderDB.Alerts
+        if selected and not db[selected] then selected = nil end
+        local keys = SortedKeys(db)
+        selected = selected or keys[1]
+
+        local items = {}
+        for _, aura in ipairs(keys) do
+            table.insert(items, {
+                text = BuffText(aura),
+                icon = db[aura].icon,
+                selected = aura == selected,
+                onClick = function()
+                    selected = aura
+                    soundPicker:Hide()
+                    BR.RefreshConfig()
+                end,
+            })
+        end
+        alerts:SetItems(items)
+
+        empty:SetShown(not selected)
+        for _, w in ipairs(details) do w:SetShown(selected ~= nil) end
+        if not selected then return end
+
+        local alert = Current()
+        icon:SetTexture(alert.icon)
+        name:SetText(BuffText(selected))
+        local text, warn = BR.AlertStatus(selected)
+        status:SetText(text)
+        if warn then
+            status:SetTextColor(1, 0.5, 0.25)
+        else
+            status:SetTextColor(0.6, 0.8, 0.6)
+        end
+        style:Load()
+        size:Load()
+        alpha:Load()
+        timer:SetText(BR.TIMERS[alert.timer])
+        sound:Load()
+        conds:Load(AlertTarget(selected))
     end
 end
 
@@ -1458,7 +1748,7 @@ local function CreateConfig()
         if panelTabs then PanelTemplates_SetTab(f, index) end
         BR.RefreshConfig()
     end
-    local pages = { { "Buff groups", CreateGroupsPage }, { "Options", CreateOptionsPage } }
+    local pages = { { "Buff groups", CreateGroupsPage }, { "Alerts", CreateAlertsPage }, { "Options", CreateOptionsPage } }
     for i, info in ipairs(pages) do
         local tab
         if panelTabs then

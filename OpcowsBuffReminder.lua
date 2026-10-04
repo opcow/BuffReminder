@@ -31,6 +31,8 @@ OpcowsBuffReminder = {
     enchants = {},          -- [slot] = { present, expires, charges }
     scripts = {},           -- [group] = compiled condition script
     scriptRes = {},         -- [group] = last script result, true hides the icon
+    alertScripts = {},      -- [alert] = compiled condition script of the alert
+    alertScriptRes = {},    -- [alert] = last script result, true hides the icon
     scriptErrReported = {}, -- [function] = true once its runtime error has been printed
     enchantScripts = {},    -- [slot] = compiled condition script of the enchant group
     enchantScriptRes = {},  -- [slot] = last script result, true hides the icon
@@ -52,7 +54,7 @@ OpcowsBuffReminder = {
 local BR = OpcowsBuffReminder
 
 BR.DefaultOptions = {
-    ["version"] = "2.0",
+    ["version"] = "2.6",
     ["size"] = 30,
     ["warntime"] = 0,       -- seconds left when the icon starts showing, 0 only when the buff is gone
     ["alpha"] = 1.0,        -- opacity of an icon whose buff is missing
@@ -105,8 +107,15 @@ local ENCHANT_NAMES = { main = "Main hand enchant", off = "Off hand enchant" }
 local TEXT_PRIORITIES = { time = true, stacks = true, both = true }
 local COMBAT_MODES = { cdm = "Cooldown Manager", blizzard = "Blizzard Auras" }
 -- which hits you take use a buff group's charges in combat, see BR.OnHit
-local HIT_USES = { off = "Off", hits = "Hits", physical = "Physical hits" }
-local HIT_USE_ORDER = { "off", "hits", "physical" }
+local HIT_USES = { auto = "Auto", off = "Off", hits = "Hits", physical = "Physical hits", absorbed = "Hits + absorbed" }
+local HIT_USE_ORDER = { "auto", "off", "hits", "physical", "absorbed" }
+-- what "auto" uses for buffs known to have charges, by the spell id of any rank: the hits that
+-- use a charge and the cooldown, a little under the game's to allow for when hits arrive
+local CHARGE_BUFFS = {
+    [324] = { use = "hits", cd = 3.4 },       -- Lightning Shield, every 3.5 seconds
+    [588] = { use = "physical", cd = 0 },     -- Inner Fire, every hit
+    [18137] = { use = "absorbed", cd = 3.9 }, -- Shadowguard, every 4 seconds
+}
 -- how a group shows its time left, "default" follows the Options tab
 local TIMERS = { default = "Default", text = "Text", swipe = "Swipe", both = "Text and swipe", none = "None" }
 local TIMER_ORDER = { "default", "text", "swipe", "both", "none" }
@@ -122,6 +131,13 @@ local OVERLAY_COLORS = {
     blue = { 0.2, 0.4, 1 }, purple = { 0.7, 0.2, 1 }, black = { 0, 0, 0 },
 }
 local OVERLAY_ALPHA = 0.45
+-- game sounds an alert can play as its aura is put on. The game plays them itself, which takes
+-- sound files, not sound kits: these are file ids.
+local ALERT_SOUNDS = {
+    { "Rubber Ducky", 566121 }, { "Cartoon FX", 566543 }, { "Shing!", 566240 }, { "Wham!", 566946 },
+    { "Simon Chime", 566076 }, { "War Drums", 567275 }, { "Cheer", 567283 }, { "Humm", 569518 },
+    { "Short Circuit", 568975 }, { "Explosion", 566982 }, { "Fel Nova", 568582 },
+}
 
 -- time text and swipe for a group, or the global setting for default ones
 local function TimerStyle(group)
@@ -297,18 +313,92 @@ function BR.ScanAuras()
             BR.groupState[g] = { present = false }
         end
     end
+    -- an alert's icon and the ids of its aura's ranks, for following it in combat
+    for aura, alert in pairs(OpcowsBuffReminderDB.Alerts) do
+        local e = found[BuffKey(aura)]
+        if e then
+            alert.icon = e.icon or alert.icon
+            if type(e.spellId) == "number" then alert.ids[e.spellId] = true end
+        end
+    end
     BR.needScan = false
+    BR.auraScans = (BR.auraScans or 0) + 1
+    BR.ComparePredictedCharges()
     return true
+end
+
+-- a number that isn't secret, or nil
+local function Num(v)
+    if not issecretvalue(v) and type(v) == "number" then return v end
+end
+
+local function SpellName(id)
+    if not (C_Spell and C_Spell.GetSpellName) then return nil end
+    local ok, name = pcall(C_Spell.GetSpellName, id)
+    if ok and type(name) == "string" and not issecretvalue(name) then return name end
+end
+
+-- CHARGE_BUFFS by name, so every rank matches, once all the names could be read
+local chargeBuffNames
+local function ChargeBuff(buff)
+    if not chargeBuffNames then
+        local names = {}
+        for id, rule in pairs(CHARGE_BUFFS) do
+            local name = SpellName(id)
+            if not name then names = nil break end
+            names[name] = rule
+        end
+        if not names then return nil end
+        chargeBuffNames = names
+    end
+    return chargeBuffNames[tonumber(buff) and SpellName(tonumber(buff)) or buff]
+end
+
+-- which hits use a buff group's charges and their cooldown, "auto" looked up from its buffs
+function BR.HitUse(group)
+    if group.hituse ~= "auto" then return group.hituse, group.hitcd end
+    for b in pairs(group.buffs) do
+        local rule = ChargeBuff(b)
+        if rule then return rule.use, rule.cd end
+    end
+    return "off", 0
+end
+
+-- /obr debug, after a fight the charges counted by hits against the real count, for tuning a
+-- buff group's Cooldown
+local predictedCharges
+function BR.NotePredictedCharges()
+    if not BR.debug then return end
+    predictedCharges = {}
+    for g, group in pairs(OpcowsBuffReminderDB.BuffGroups) do
+        local st = BR.groupState[g]
+        if BR.HitUse(group) ~= "off" and st then
+            predictedCharges[g] = st.present and (Num(st.applications) or "?") or 0
+        end
+    end
+end
+
+function BR.ComparePredictedCharges()
+    if not predictedCharges then return end
+    for g, n in pairs(predictedCharges) do
+        local st = BR.groupState[g]
+        local real = st and st.present and (st.applications or 0) or 0
+        local group = OpcowsBuffReminderDB.BuffGroups[g]
+        local hint = ""
+        if type(n) == "number" and n < real then
+            hint = ", counted too many hits: raise its Cooldown"
+        elseif type(n) == "number" and n > real then
+            hint = group and select(2, BR.HitUse(group)) > 0 and ", missed hits: lower its Cooldown" or ", missed hits"
+        end
+        Debug(("after combat, %s: counted %s charges, really %d%s"):format(g, tostring(n), real, hint))
+    end
+    predictedCharges = nil
 end
 
 -- in-combat reads --------------------------------------------------------------------------
 -- The buff list can't be walked in combat, but a single spell can still be looked up. The
 -- answer is trusted for spells the game flags as never secret. Everything else falls back to
 -- the Cooldown Manager's buff frames, then to the prediction from the last snapshot.
-local function Num(v)
-    if not issecretvalue(v) and type(v) == "number" then return v end
-end
-
 local function NeverSecret(id)
     if not (C_Secrets and C_Secrets.GetSpellAuraSecrecy and Enum and Enum.SecrecyLevel) then return false end
     local ok, level = pcall(C_Secrets.GetSpellAuraSecrecy, id)
@@ -486,8 +576,6 @@ local function LiveEntry(aura, prev)
         expires = Num(aura.expirationTime) or (was and prev.expires) or 0,
         duration = Num(aura.duration) or (was and prev.duration) or 0,
         applications = stacks or (was and prev.applications) or nil,
-        -- when hits last used a charge, kept while the count is still predicted
-        chargeAt = not stacks and was and prev.chargeAt or nil,
     }
 end
 
@@ -679,7 +767,10 @@ local function CDMLookup(frames, buff, prev)
     return nil
 end
 
--- update the groups whose state can be read in combat, the rest keep their prediction
+-- update the groups whose state can be read in combat, the rest keep their prediction. Right
+-- after you cast one of a group's buffs the Cooldown Manager still shows it gone, which would
+-- undo the cast, and its charges with it
+local CAST_SETTLE = 1
 function BR.LiveScan()
     if not C_UnitAuras.GetUnitAuraBySpellID then return end
     local frames
@@ -700,6 +791,8 @@ function BR.LiveScan()
         end
         if best then
             BR.groupState[g] = best
+        elseif sure and GetTime() - (BR.castAt[g] or 0) < CAST_SETTLE then
+            -- just cast, the reads haven't caught up yet
         elseif sure then
             if prev and prev.present then
                 Debug(("combat read: %s is gone (%s)"):format(g, frames and "cooldown manager" or "direct lookup"))
@@ -810,7 +903,7 @@ function BR.OnCast(id)
         local prev = BR.groupState[g]
         if not (prev and prev.present and prev.expires and Outlasts(prev, e)) then
             -- hits count down from full charges
-            local charges = OpcowsBuffReminderDB.BuffGroups[g].hituse ~= "off" and Num(seen.charges) or nil
+            local charges = BR.HitUse(OpcowsBuffReminderDB.BuffGroups[g]) ~= "off" and Num(seen.charges) or nil
             BR.groupState[g] = { present = true, expires = e.expires, duration = e.duration,
                 applications = charges }
             Debug(("cast %s, %s is up for %ds%s"):format(name, g, dur,
@@ -822,37 +915,70 @@ end
 
 -- UNIT_COMBAT on you. In combat, a buff group whose charges are used by hits loses one for each
 -- hit that lands at least its cooldown after the last charge was used: any hit (hituse "hits",
--- ex: Lightning Shield, every 3 seconds) or physical ones ("physical", ex: Inner Fire, every
+-- ex: Lightning Shield, every 3.5 seconds) or physical ones ("physical", ex: Inner Fire, every
 -- hit). Dodges, parries and misses don't count, and neither do hits a shield fully absorbs, ex:
--- Power Word: Shield, which come as a WOUND of 0. Out of combat the aura read is exact.
+-- Power Word: Shield, which come as a WOUND of 0, except for "absorbed" (ex: Shadowguard, every
+-- 4 seconds). The cooldown runs on through a recast, so when a charge was last used is kept
+-- apart from the buff's state.
+-- Out of combat the aura read is exact, but the hit that starts a fight can come just before
+-- PLAYER_REGEN_DISABLED, with its charge gone only once the auras are secret. That hit is
+-- counted when combat starts unless an aura read came after it.
 local SCHOOL_PHYSICAL = 1
-function BR.OnHit(action, descriptor, amount, school)
-    if not BR.status.combat or issecretvalue(action) or action ~= "WOUND" then return end
-    if BR.debug then
-        local function show(v) return issecretvalue(v) and "secret" or tostring(v) end
-        Debug(("hit for %s (%s), school %s"):format(show(amount), show(descriptor), show(school)))
-    end
-    if Num(amount) == 0 then
-        Debug("hit fully absorbed, no charge used")
-        return
-    end
-    local physical = Num(school) == SCHOOL_PHYSICAL
+local HIT_BEFORE_COMBAT = 1
+local hitBeforeCombat
+local chargeAt = {}
+local function CountHit(absorbed, physical)
     local now, changed = GetTime(), false
     for g, group in pairs(OpcowsBuffReminderDB.BuffGroups) do
         local st = BR.groupState[g]
-        local counts = group.hituse == "hits" or group.hituse == "physical" and physical
+        local use, cd = BR.HitUse(group)
+        local counts = use == "absorbed"
+            or not absorbed and (use == "hits" or use == "physical" and physical)
         local n = counts and st and st.present and Num(st.applications)
-        if n and n > 0 and now - (st.chargeAt or 0) >= group.hitcd then
+        if n and n > 0 and now - (chargeAt[g] or 0) >= cd then
+            chargeAt[g] = now
             if n == 1 then
                 BR.groupState[g] = { present = false }
             else
-                st.applications, st.chargeAt = n - 1, now
+                st.applications = n - 1
             end
             Debug(("hit, %s down to %d charges"):format(g, n - 1))
             changed = true
         end
     end
     if changed then BR.Refresh() end
+end
+
+local lastHitAt
+function BR.OnHit(action, descriptor, amount, school)
+    if issecretvalue(action) or action ~= "WOUND" then return end
+    local absorbed = Num(amount) == 0
+    local physical = Num(school) == SCHOOL_PHYSICAL
+    if BR.debug then
+        local function show(v) return issecretvalue(v) and "secret" or tostring(v) end
+        local now = GetTime()
+        local since = lastHitAt and now - lastHitAt < 60 and (", %.1fs after the last"):format(now - lastHitAt) or ""
+        lastHitAt = now
+        Debug(("hit for %s (%s), school %s%s%s%s"):format(show(amount), show(descriptor), show(school),
+            absorbed and ", fully absorbed" or "", BR.status.combat and "" or ", out of combat", since))
+    end
+    if BR.status.combat then
+        CountHit(absorbed, physical)
+    else
+        hitBeforeCombat = { at = GetTime(), scans = BR.auraScans, absorbed = absorbed, physical = physical }
+    end
+end
+
+function BR.OnCombatStart()
+    local hit = hitBeforeCombat
+    hitBeforeCombat = nil
+    if not hit or GetTime() - hit.at > HIT_BEFORE_COMBAT then return end
+    if hit.scans ~= BR.auraScans then
+        Debug("hit just before combat, already read")
+        return
+    end
+    Debug("hit just before combat, counting it")
+    CountHit(hit.absorbed, hit.physical)
 end
 
 -- a hand's temporary enchant or imbue from C_Item.GetWeaponEnchantInfo, ignoring permanent enchants.
@@ -1097,6 +1223,10 @@ function BR.CompileScripts()
     for slot, e in pairs(OpcowsBuffReminderDB.Enchants) do
         BR.enchantScripts[slot] = Compile(e.script, ENCHANT_NAMES[slot])
     end
+    BR.alertScripts = {}
+    for aura, alert in pairs(OpcowsBuffReminderDB.Alerts) do
+        BR.alertScripts[aura] = Compile(alert.script, aura)
+    end
 end
 
 function BR.RunScripts()
@@ -1105,6 +1235,9 @@ function BR.RunScripts()
     end
     for slot in pairs(OpcowsBuffReminderDB.Enchants) do
         BR.enchantScriptRes[slot] = RunScript(BR.enchantScripts[slot], BR.enchantScriptRes[slot])
+    end
+    for aura in pairs(OpcowsBuffReminderDB.Alerts) do
+        BR.alertScriptRes[aura] = RunScript(BR.alertScripts[aura], BR.alertScriptRes[aura])
     end
 end
 
@@ -1183,6 +1316,34 @@ end
 -- and while auras are secret, so they're made, filtered and styled only outside both.
 local live = {}     -- [group] = { holder, container, button, cd, count, ids, style, err }
 local LIVE_SLOT = "buff"
+-- alerts use the same, with fx their glow and colour, see the alerts section
+local alertFrames = {}  -- [alert] = { holder, container, button, cd, count, fx, ids, style, err }
+
+-- a holder for l, hidden until it's placed, with a container whose one slot Blizzard fills while
+-- one of ids is on you. init(l, button) sets up the button. False with l.err if the client can't.
+local function MakeContainer(l, slot, ids, init)
+    local size = OpcowsBuffReminderDB.Options.size
+    l.holder = CreateFrame("Frame", nil, frame)
+    l.holder:SetSize(size, size)
+    l.holder:SetPoint("CENTER")
+    l.holder:SetFrameLevel(frame:GetFrameLevel() + 10)
+    l.holder:SetAlpha(0)
+    local ok, err = pcall(function()
+        local c = CreateFrame("AuraContainer", nil, l.holder, "CustomAuraContainerTemplate")
+        c:SetPoint("CENTER")
+        c:SetSize(size, size)
+        c:SetFrameLevel(l.holder:GetFrameLevel() + 1)
+        c:SetUnit("player")
+        pcall(c.EnableMouse, c, false)
+        l.container = c
+        c:AddAuraSlot(slot, "HELPFUL", {
+            candidateFilters = { includeSpellIDs = ids },
+            initializeFrame = function(button) init(l, button) end,
+        })
+    end)
+    if not ok then l.err = tostring(err) end
+    return ok
+end
 
 local function LiveIds(group)
     local ids, list = {}, {}
@@ -1198,13 +1359,13 @@ local function LiveIds(group)
     return ids, table.concat(list, ",")
 end
 
--- count text from 1 up, red at or under the low stack warning, and none at 0 for buffs without
--- stacks, ex: Mark of the Wild. Without one Blizzard doesn't print a count of 1.
+-- count text from 2 up, like Blizzard's, none at 0 or 1 for auras without stacks, ex: Mark of the
+-- Wild or Clearcasting. With a low stack warning, from 1 up and red at or under it.
 local function CountFormatter(warn)
     if not (C_StringUtil and C_StringUtil.CreateNumericRuleFormatter) then return nil end
     local ok, fm = pcall(function()
         local fm = C_StringUtil.CreateNumericRuleFormatter()
-        local points = { { threshold = 0, format = "" }, { threshold = 1, format = "%d" } }
+        local points = { { threshold = 0, format = "" }, { threshold = 2, format = "%d" } }
         if warn > 0 then
             points = { { threshold = 0, format = "" }, { threshold = 1, format = "|cffff3030%d|r" },
                 { threshold = warn + 1, format = "%d" } }
@@ -1213,7 +1374,8 @@ local function CountFormatter(warn)
         -- Blizzard formats inside its aura update, make sure it can't fail there
         for n = 0, warn + 1 do
             local text = fm:FormatNumber(n)
-            if type(text) ~= "string" or issecretvalue(text) or (n == 0 and text ~= "") then
+            if type(text) ~= "string" or issecretvalue(text) or (n == 0 and text ~= "")
+                or (warn == 0 and n == 1 and text ~= "") then
                 error("formatted " .. n .. " as " .. tostring(text))
             end
         end
@@ -1252,8 +1414,9 @@ local function InitLiveButton(l, button)
     l.cd, l.button = cd, button
 end
 
--- size, text and count colour, when they changed
-local function StyleLive(l, group)
+-- size, text and count colour, when they changed. warn is the low stack warning, extra(size) styles
+-- anything more, with extraKey changing when it would.
+local function StyleLive(l, group, warn, extraKey, extra)
     local opts = OpcowsBuffReminderDB.Options
     local size = type(group.size) == "number" and group.size or opts.size
     local t = opts.icontext
@@ -1261,7 +1424,7 @@ local function StyleLive(l, group)
     local showTime = time and t.priority ~= "stacks"
     local showStacks = t.stacks and t.priority ~= "time"
     local key = table.concat({ size, tostring(showTime), tostring(showStacks), tostring(swipe),
-        group.warnstacks }, ":")
+        warn, extraKey or "" }, ":")
     if key == l.style then return end
     local ok = pcall(function()
         l.container:SetSize(size, size)
@@ -1278,8 +1441,9 @@ local function StyleLive(l, group)
         end
         ScaleFont(l.count, size)
         l.count:SetAlpha(showStacks and 1 or 0)
-        local fm = CountFormatter(group.warnstacks)
+        local fm = CountFormatter(warn)
         l.button:SetApplicationCount(l.count, fm and { formatter = fm } or nil)
+        if extra then extra(size) end
     end)
     if ok then l.style = key end
 end
@@ -1292,36 +1456,15 @@ function BR.UpdateLive()
         if group.combat == "blizzard" and not (l and l.err) then
             local ids, key = LiveIds(group)
             if not l and key ~= "" then
-                l = { holder = CreateFrame("Frame", nil, frame) }
+                l = {}
                 live[g] = l
-                l.holder:SetSize(OpcowsBuffReminderDB.Options.size, OpcowsBuffReminderDB.Options.size)
-                l.holder:SetPoint("CENTER")
-                l.holder:SetFrameLevel(frame:GetFrameLevel() + 10)
-                l.holder:SetAlpha(0)
-                local ok, err = pcall(function()
-                    local c = CreateFrame("AuraContainer", nil, l.holder, "CustomAuraContainerTemplate")
-                    c:SetPoint("CENTER")
-                    c:SetSize(OpcowsBuffReminderDB.Options.size, OpcowsBuffReminderDB.Options.size)
-                    c:SetFrameLevel(l.holder:GetFrameLevel() + 1)
-                    c:SetUnit("player")
-                    pcall(c.EnableMouse, c, false)
-                    l.container = c
-                    c:AddAuraSlot(LIVE_SLOT, "HELPFUL", {
-                        candidateFilters = { includeSpellIDs = ids },
-                        initializeFrame = function(button) InitLiveButton(l, button) end,
-                    })
-                end)
-                if ok then
-                    l.ids = key
-                else
-                    l.err = tostring(err)
-                end
+                if MakeContainer(l, LIVE_SLOT, ids, InitLiveButton) then l.ids = key end
             elseif l and l.container and key ~= "" and key ~= l.ids then
                 if pcall(l.container.SetAuraSlotCandidateFilters, l.container, LIVE_SLOT, { includeSpellIDs = ids }) then
                     l.ids = key
                 end
             end
-            if l and l.button then StyleLive(l, group) end
+            if l and l.button then StyleLive(l, group, group.warnstacks) end
         end
     end
 end
@@ -1378,7 +1521,7 @@ function BR.CombatStatus(g)
         return "Blizzard's aura button shows it all fight, with exact time and stacks.", false
     end
     local text, warn = CDMStatus(group)
-    if warn and group.hituse ~= "off" then
+    if warn and BR.HitUse(group) ~= "off" then
         return "Predicted in combat, with a charge used by each hit you take.", false
     end
     return text, warn
@@ -1428,9 +1571,11 @@ local function Pitch()
     return OpcowsBuffReminderDB.Options.size + ICON_SPACING * 2
 end
 
--- the group behind an icon, a buff group or an enchant group
+-- the group behind an icon, a buff group, an enchant group or an alert
 local function KeyGroup(key)
-    if key:sub(1, 1) == "1" then return OpcowsBuffReminderDB.BuffGroups[key:sub(2)] end
+    local kind = key:sub(1, 1)
+    if kind == "1" then return OpcowsBuffReminderDB.BuffGroups[key:sub(2)] end
+    if kind == "3" then return OpcowsBuffReminderDB.Alerts[key:sub(2)] end
     return OpcowsBuffReminderDB.Enchants[key:sub(2)]
 end
 
@@ -1445,10 +1590,11 @@ local function KeyPitch(key)
     return KeySize(key) + ICON_SPACING * 2
 end
 
--- every icon that can show: the buff groups and the enchant groups that aren't turned off
+-- every icon that can show: the buff groups, the alerts and the enchant groups that aren't turned off
 local function PlaceableKeys()
     local keys = {}
     for g in pairs(OpcowsBuffReminderDB.BuffGroups) do keys["1" .. g] = true end
+    for aura in pairs(OpcowsBuffReminderDB.Alerts) do keys["3" .. aura] = true end
     for slot, e in pairs(OpcowsBuffReminderDB.Enchants) do
         if e.conditions.always ~= 1 then keys["2" .. slot] = true end
     end
@@ -1886,6 +2032,8 @@ function BR.IconTooltip(f)
     local name = f.key:sub(2)
     if f.key:sub(1, 1) == "2" then
         name = ENCHANT_NAMES[name]
+    elseif f.key:sub(1, 1) == "3" then
+        name = "Alert: " .. (tonumber(name) and SpellName(tonumber(name)) or name)
     end
     GameTooltip:SetOwner(f, "ANCHOR_TOP")
     GameTooltip:SetText(name)
@@ -2008,6 +2156,21 @@ local function ShowIcon(f, item, now, shown, liveShown)
         -- the spell alert is sized when it's shown
         if f.glowKind == "alert" then SetGlow(f, nil) end
     end
+    if item.alert then
+        -- Blizzard's button is the alert's icon, ours only keeps its place
+        f:SetAlpha(0)
+        SetGlow(f, nil)
+        SetOverlay(f, nil)
+        f:EnableMouse(false)
+        f:Show()
+        local holder = alertFrames[item.alert].holder
+        holder:ClearAllPoints()
+        holder:SetPoint("CENTER", f, "CENTER")
+        holder:SetSize(size, size)
+        holder:SetAlpha(item.group.alpha)
+        liveShown[item.key] = true
+        return
+    end
     -- a Blizzard Auras icon only shows from under Blizzard's button once the buff is gone
     local missing = item.missing or item.placeholder or item.live
     local alpha = IconAlpha(item.group, missing)
@@ -2063,7 +2226,7 @@ local function ShowIcon(f, item, now, shown, liveShown)
         holder:SetPoint("CENTER", f, "CENTER")
         holder:SetSize(size, size)
         holder:SetAlpha(IconAlpha(item.group, false))
-        liveShown[item.live] = true
+        liveShown[item.key] = true
     end
 end
 
@@ -2122,6 +2285,157 @@ function BR.DrawIcon(f, group, missing, texture, size, expires, duration, now)
     f.text:SetText(time and expires and FormatTime(expires - now) or "")
     f.count:SetText("")
     f:Show()
+end
+
+-- alerts -----------------------------------------------------------------------------------
+-- An alert shows an icon while an aura is on you, ex: Clearcasting. It's Blizzard Auras turned
+-- round: Blizzard's button is the icon, shown by the game while the aura is up, in combat too,
+-- and nothing is drawn while it's gone. The glow and colour are on a frame of ours over the
+-- button, so they show and hide with it, and the sound is the game's own, played as the aura is
+-- put on. Like the Blizzard Auras buttons they're made and styled only out of combat.
+-- OpcowsBuffReminderDB.Alerts is keyed by the aura, a name (every rank) or a spell id.
+local ALERT_SLOT = "aura"
+local alertSounds = {}  -- [alert] = { key, ids = the game's sound registrations }
+
+-- the spell ids an alert follows, as a set and as a key: the ones SpellIds finds, the ones seen on
+-- it and the one the Seen list has for its name
+local function AlertIds(aura, alert)
+    local ids, list = {}, {}
+    local function add(id)
+        if id and not ids[id] then
+            ids[id] = true
+            table.insert(list, id)
+        end
+    end
+    for _, id in ipairs(SpellIds(aura)) do add(id) end
+    if not tonumber(aura) then
+        for id in pairs(alert.ids) do add(id) end
+        local seen = OpcowsBuffReminderDB.Seen[aura:lower()]
+        add(seen and Num(seen.id))
+    end
+    table.sort(list)
+    return ids, table.concat(list, ",")
+end
+
+-- whether the game can play a sound as an aura is put on
+local function AuraSounds()
+    return C_UnitAuras ~= nil and C_UnitAuras.AddAuraSound ~= nil and C_UnitAuras.RemoveAuraSound ~= nil
+        and Enum ~= nil and Enum.UnitAuraSoundTrigger ~= nil and Enum.UnitAuraSoundTrigger.Added ~= nil
+end
+
+-- register the alert's sound with the game for each of its spell ids, again when either changed.
+-- No alert or no sound takes it off.
+local function SetAlertSound(aura, alert, ids, idKey)
+    local s = alertSounds[aura] or { ids = {} }
+    alertSounds[aura] = s
+    local key = alert and alert.sound and (tostring(alert.sound) .. ":" .. idKey) or ""
+    if key == s.key then return end
+    for _, id in ipairs(s.ids) do pcall(C_UnitAuras.RemoveAuraSound, id) end
+    s.ids, s.key = {}, key
+    if key == "" or not AuraSounds() then return end
+    local sound = alert.sound
+    for id in pairs(ids) do
+        local ok, reg = pcall(C_UnitAuras.AddAuraSound, Enum.UnitAuraSoundTrigger.Added, {
+            unitToken = "player",
+            spellID = id,
+            soundFileName = type(sound) == "string" and sound or nil,
+            soundFileID = type(sound) == "number" and sound or nil,
+            outputChannel = "Master",
+        })
+        if ok and reg then table.insert(s.ids, reg) end
+    end
+    Debug(("alert %s: sound on %d of its spell ids"):format(aura, #s.ids))
+end
+
+-- called by Blizzard once, when it makes the slot's button: the live button and our glow frame,
+-- over the swipe and under the texts. The game won't let scripts be set on frames in the button,
+-- so there's no OnShow to start a pulse again, KeepPulses does it.
+local function InitAlertButton(a, button)
+    InitLiveButton(a, button)
+    local fx = NewIcon(button)
+    fx:SetAllPoints()
+    fx:SetFrameLevel(a.cd:GetFrameLevel() + 1)
+    fx.texture:Hide()
+    fx.cooldown:Hide()
+    a.fx = fx
+end
+
+-- hiding stops a pulse, and the button hides each time the aura goes, so play it again while it's
+-- stopped. In combat too, it's our own frame; a failure is remembered so it isn't tried again.
+local function KeepPulses()
+    for _, a in pairs(alertFrames) do
+        local fx = a.fx
+        local kind = fx and fx.glowKind
+        if kind and kind ~= "steady" and kind ~= "alert" and fx.pulse and not a.pulseErr then
+            local ok, playing = pcall(fx.pulse.IsPlaying, fx.pulse)
+            if not ok then
+                a.pulseErr = true
+                Debug("alert glow can't be read: " .. tostring(playing))
+            elseif not playing then
+                local played, err = pcall(fx.pulse.Play, fx.pulse)
+                if not played then
+                    a.pulseErr = true
+                    Debug("alert glow can't be started: " .. tostring(err))
+                end
+            end
+        end
+    end
+end
+
+-- make, refilter and restyle the alerts' containers and sounds, out of combat only
+function BR.UpdateAlerts()
+    KeepPulses()
+    if InCombatLockdown() or AurasSecret() then return end
+    local alerts = OpcowsBuffReminderDB.Alerts
+    for aura in pairs(alertSounds) do
+        if not alerts[aura] then SetAlertSound(aura, nil) end
+    end
+    for aura, alert in pairs(alerts) do
+        local ids, key = AlertIds(aura, alert)
+        SetAlertSound(aura, alert, ids, key)
+        local a = alertFrames[aura]
+        if not (a and a.err) and key ~= "" then
+            if not a then
+                a = {}
+                alertFrames[aura] = a
+                if MakeContainer(a, ALERT_SLOT, ids, InitAlertButton) then a.ids = key end
+            elseif a.container and key ~= a.ids then
+                if pcall(a.container.SetAuraSlotCandidateFilters, a.container, ALERT_SLOT, { includeSpellIDs = ids }) then
+                    a.ids = key
+                end
+            end
+            if a.button and a.fx then
+                StyleLive(a, alert, 0, alert.glow .. ":" .. alert.overlay, function(size)
+                    a.fx.glow:SetSize(size * 64 / 36, size * 64 / 36)
+                    SetGlow(a.fx, nil)
+                    SetGlow(a.fx, alert.glow)
+                    SetOverlay(a.fx, alert.overlay)
+                end)
+            end
+        end
+    end
+end
+
+local function AlertReady(aura)
+    local a = alertFrames[aura]
+    return a ~= nil and a.container ~= nil and not a.err
+end
+
+-- how an alert works, and whether that's worth a warning
+function BR.AlertStatus(aura)
+    local alert = OpcowsBuffReminderDB.Alerts[aura]
+    local a = alertFrames[aura]
+    if a and a.err then return "Blizzard's aura buttons don't work on this client, so alerts can't show.", true end
+    local _, key = AlertIds(aura, alert)
+    if key == "" then
+        return "Spell id not known yet. Have the aura once out of combat, or add it by spell id.", true
+    end
+    local text = "Shows while it's on you, in combat too (spell " .. key:gsub(",", ", ") .. ")."
+    if not AlertReady(aura) then text = "Set up once you're out of combat." end
+    if alert.sound and not AuraSounds() then
+        return text .. " This client can't play a sound for it.", true
+    end
+    return text, false
 end
 
 -- click to cast ----------------------------------------------------------------------------
@@ -2302,7 +2616,7 @@ end
 -- the state a buff group or weapon enchant icon shows, { present, expires }
 local function KeyState(key)
     if key:sub(1, 1) == "1" then return BR.groupState[key:sub(2)] end
-    return BR.enchants[key:sub(2)]
+    if key:sub(1, 1) == "2" then return BR.enchants[key:sub(2)] end
 end
 
 function BR.DismissIcon(key)
@@ -2383,6 +2697,15 @@ function BR.Refresh()
                 end
             end
         end
+
+        -- an alert holds its place whether or not its aura is up, nothing tells the addon in combat.
+        -- Unlocked it's a placeholder like the others.
+        for aura, alert in pairs(OpcowsBuffReminderDB.Alerts) do
+            if BR.locked and AlertReady(aura) and not IsSuppressed(alert.conditions)
+                and not BR.alertScriptRes[aura] then
+                table.insert(list, { key = "3" .. aura, icon = alert.icon, alert = aura, group = alert })
+            end
+        end
     end
 
     -- every dismissed icon, shown or not, so a recast is seen while the buff is up and not showing
@@ -2399,6 +2722,8 @@ function BR.Refresh()
                 local icon
                 if k:sub(1, 1) == "1" then
                     icon = OpcowsBuffReminderDB.BuffGroups[k:sub(2)].icon
+                elseif k:sub(1, 1) == "3" then
+                    icon = OpcowsBuffReminderDB.Alerts[k:sub(2)].icon
                 else
                     icon = GetInventoryItemTexture("player", ENCHANT_SLOTS[k:sub(2)])
                 end
@@ -2422,7 +2747,7 @@ function BR.Refresh()
             f:SetPoint("CENTER", anchors[bi], "CENTER", p.x, p.y)
             ShowIcon(f, item, now, shown, liveShown)
             -- unlocked icons are for dragging
-            if BR.locked and not item.placeholder and not item.live and f:GetAlpha() > 0 then
+            if BR.locked and not item.placeholder and not item.live and not item.alert and f:GetAlpha() > 0 then
                 if item.key:sub(1, 1) == "1" then
                     local spell = BR.ClickSpell(item.group)
                     if spell then table.insert(clicks, { f = f, spell = spell }) end
@@ -2436,8 +2761,8 @@ function BR.Refresh()
                     end
                 end
             end
-            if not item.live and not item.placeholder and not BR.shown[item.key] then
-                -- a Blizzard Auras icon shows all fight, no sound for that
+            if not item.live and not item.alert and not item.placeholder and not BR.shown[item.key] then
+                -- a Blizzard Auras icon shows all fight, no sound for that, and an alert has its own
                 newIcon = true
             end
         end
@@ -2446,7 +2771,10 @@ function BR.Refresh()
         BR.icons[k]:Hide()
     end
     for g, l in pairs(live) do
-        if not liveShown[g] then l.holder:SetAlpha(0) end
+        if not liveShown["1" .. g] then l.holder:SetAlpha(0) end
+    end
+    for aura, a in pairs(alertFrames) do
+        if not liveShown["3" .. aura] then a.holder:SetAlpha(0) end
     end
     -- the party panel adds its icons' clicks, true when one is new
     if BR.RefreshParty and BR.RefreshParty(clicks, now) then newIcon = true end
@@ -2477,7 +2805,7 @@ function BR.NewGroup(g)
         ["warntime"] = opts.warntime,
         ["warnstacks"] = 0,
         ["combat"] = "cdm",
-        ["hituse"] = "off",
+        ["hituse"] = "auto",
         ["hitcd"] = 0,
         ["timer"] = "default",
         ["glow"] = "default",
@@ -2528,6 +2856,71 @@ function BR.SetEnchantScript(slot, code)
     BR.enchantScriptRes[slot] = false
 end
 
+-- an alert for an aura, a name or a spell id, nothing if there's one for it already
+function BR.NewAlert(aura)
+    local alerts = OpcowsBuffReminderDB.Alerts
+    if alerts[aura] then return end
+    alerts[aura] = {
+        ["conditions"] = DeepCopy(OpcowsBuffReminderDB.Options.conditions),
+        ["timer"] = "default",
+        ["glow"] = "none",
+        ["overlay"] = "none",
+        ["alpha"] = 1,
+        ["icon"] = SpellTexture(aura) or QUESTION_MARK,
+        ["ids"] = {},
+        ["script"] = "",
+    }
+    local seen = not tonumber(aura) and OpcowsBuffReminderDB.Seen[aura:lower()]
+    if seen and seen.icon then alerts[aura].icon = seen.icon end
+    BR.alertScripts[aura] = nil
+    BR.alertScriptRes[aura] = false
+    BR.UpdateAlerts()
+end
+
+function BR.RemoveAlert(aura)
+    OpcowsBuffReminderDB.Alerts[aura] = nil
+    BR.alertScripts[aura] = nil
+    BR.alertScriptRes[aura] = nil
+    BR.UpdateAlerts()
+end
+
+function BR.SetAlertScript(aura, code)
+    OpcowsBuffReminderDB.Alerts[aura].script = code
+    BR.alertScripts[aura] = Compile(code, aura)
+    BR.alertScriptRes[aura] = false
+end
+
+-- an alert's sound: a name from ALERT_SOUNDS, a sound file id or path, or nil / "none" for none.
+-- Returns false for a name that isn't known.
+function BR.SetAlertSoundChoice(aura, v)
+    local alert = OpcowsBuffReminderDB.Alerts[aura]
+    if v == nil or v == "" or tostring(v):lower() == "none" then
+        alert.sound = nil
+    elseif tonumber(v) then
+        alert.sound = tonumber(v)
+    elseif tostring(v):find("[\\/]") then
+        alert.sound = v
+    else
+        local found
+        for _, s in ipairs(ALERT_SOUNDS) do
+            if s[1]:lower() == tostring(v):lower() then found = s[2] end
+        end
+        if not found then return false end
+        alert.sound = found
+    end
+    if alert.sound then pcall(PlaySoundFile, alert.sound, "Master") end
+    BR.UpdateAlerts()
+    return true
+end
+
+-- the name of an alert sound, or its file id or path
+function BR.AlertSoundName(sound)
+    for _, s in ipairs(ALERT_SOUNDS) do
+        if s[2] == sound then return s[1] end
+    end
+    return sound and tostring(sound)
+end
+
 -- an enchant group, turned off until it's wanted
 local function NewEnchant()
     local opts = OpcowsBuffReminderDB.Options
@@ -2569,12 +2962,15 @@ function BR.Reset()
     OpcowsBuffReminderDB.BuffGroups = {}
     OpcowsBuffReminderDB.Options = DeepCopy(BR.DefaultOptions)
     OpcowsBuffReminderDB.Enchants = { main = NewEnchant(), off = NewEnchant() }
+    OpcowsBuffReminderDB.Alerts = {}
     BR.groupState = {}
     BR.scriptRes = {}
+    BR.alertScriptRes = {}
     BR.CompileScripts()
     BR.ApplyLayout()
     BR.PlaceParty()
     BR.UpdateMinimap()
+    BR.UpdateAlerts()
     BR.RememberCharacter()
 end
 
@@ -2593,6 +2989,7 @@ function BR.RememberCharacter()
         BuffGroups = OpcowsBuffReminderDB.BuffGroups,
         Options = OpcowsBuffReminderDB.Options,
         Enchants = OpcowsBuffReminderDB.Enchants,
+        Alerts = OpcowsBuffReminderDB.Alerts,
     }
 end
 
@@ -2619,15 +3016,19 @@ local function LoadSettings(c)
     OpcowsBuffReminderDB.BuffGroups = DeepCopy(c.BuffGroups)
     OpcowsBuffReminderDB.Options = DeepCopy(c.Options)
     OpcowsBuffReminderDB.Enchants = DeepCopy(c.Enchants)
+    -- saves from before 2.6 have no alerts
+    OpcowsBuffReminderDB.Alerts = DeepCopy(type(c.Alerts) == "table" and c.Alerts or {})
     BR.SanityCheck()
     BR.groupState = {}
     BR.scriptRes = {}
+    BR.alertScriptRes = {}
     BR.castAt = {}
     BR.CompileScripts()
     BR.ApplyLayout()
     BR.PlaceParty()
     BR.UpdateMinimap()
     BR.UpdateLive()
+    BR.UpdateAlerts()
     BR.RememberCharacter()
 end
 
@@ -2649,6 +3050,7 @@ function BR.SaveSettings(name)
         BuffGroups = DeepCopy(OpcowsBuffReminderDB.BuffGroups),
         Options = DeepCopy(OpcowsBuffReminderDB.Options),
         Enchants = DeepCopy(OpcowsBuffReminderDB.Enchants),
+        Alerts = DeepCopy(OpcowsBuffReminderDB.Alerts),
     }
 end
 
@@ -2776,6 +3178,7 @@ BR.HIT_USES, BR.HIT_USE_ORDER = HIT_USES, HIT_USE_ORDER
 BR.TIMERS, BR.TIMER_ORDER = TIMERS, TIMER_ORDER
 BR.GLOWS, BR.GLOW_ORDER, BR.OVERLAYS, BR.OVERLAY_ORDER = GLOWS, GLOW_ORDER, OVERLAYS, OVERLAY_ORDER
 BR.ENCHANT_SLOTS, BR.ENCHANT_NAMES = ENCHANT_SLOTS, ENCHANT_NAMES
+BR.ALERT_SOUNDS = ALERT_SOUNDS
 BR.Print = Print
 BR.SpellTexture = SpellTexture
 -- and Party.lua
@@ -2964,6 +3367,7 @@ function BR.SanityCheck()
         end
         if type(group.script) ~= "string" then group.script = "" end
     end
+    local before26 = (tonumber(opts.version) or 0) < 2.6
     for g, group in pairs(OpcowsBuffReminderDB.BuffGroups) do
         if type(group) ~= "table" then
             OpcowsBuffReminderDB.BuffGroups[g] = nil
@@ -2977,7 +3381,9 @@ function BR.SanityCheck()
             if type(group.party) ~= "boolean" then group.party = true end
             if type(group.hitcd) ~= "number" or group.hitcd < 0 then group.hitcd = 0 end
             -- 2.4 had only the cooldown, set meant any hit
-            if not HIT_USES[group.hituse] then group.hituse = group.hitcd > 0 and "hits" or "off" end
+            if not HIT_USES[group.hituse] then group.hituse = group.hitcd > 0 and "hits" or "auto" end
+            -- before 2.6 off was the default, auto changes nothing for buffs without charges
+            if before26 and group.hituse == "off" then group.hituse = "auto" end
             if group.icon == nil then group.icon = QUESTION_MARK end
         end
     end
@@ -2994,6 +3400,27 @@ function BR.SanityCheck()
         local last = eg.last
         if type(last) ~= "table" or not (Num(last.item) or Num(last.spell)) then eg.last = nil end
     end
+    -- alerts, new in 2.6
+    if type(OpcowsBuffReminderDB.Alerts) ~= "table" then OpcowsBuffReminderDB.Alerts = {} end
+    local alerts = OpcowsBuffReminderDB.Alerts
+    for aura, alert in pairs(alerts) do
+        if type(aura) ~= "string" or aura == "" or type(alert) ~= "table" then
+            alerts[aura] = nil
+        else
+            CheckGroup(alert)
+            -- what CheckGroup adds that alerts don't use
+            alert.warntime, alert.warnstacks, alert.warnglow, alert.warnoverlay, alert.warnalpha = nil, nil, nil, nil, nil
+            if alert.glow == "default" then alert.glow = "none" end
+            if alert.overlay == "default" then alert.overlay = "none" end
+            if type(alert.alpha) ~= "number" then alert.alpha = 1 end
+            if type(alert.ids) ~= "table" then alert.ids = {} end
+            for id in pairs(alert.ids) do
+                if type(id) ~= "number" then alert.ids[id] = nil else alert.ids[id] = true end
+            end
+            if type(alert.sound) ~= "number" and type(alert.sound) ~= "string" then alert.sound = nil end
+            if alert.icon == nil then alert.icon = QUESTION_MARK end
+        end
+    end
     opts.version = BR.DefaultOptions.version
 end
 
@@ -3006,6 +3433,7 @@ local function OnUpdate(self, elapsed)
     -- in combat this is the live lookup, a buff can drop without an aura event we can use
     if BR.needScan or AurasSecret() then BR.ScanAuras() end
     BR.UpdateLive()
+    BR.UpdateAlerts()
     BR.ScanEnchants()
     BR.RunScripts()
     BR.Refresh()
@@ -3072,8 +3500,10 @@ frame:SetScript("OnEvent", function(self, event, arg1, arg2, arg3, arg4, arg5)
     elseif event == "PLAYER_REGEN_DISABLED" then
         BR.status.combat = true
         BR.HideClickers()
+        BR.OnCombatStart()
     elseif event == "PLAYER_REGEN_ENABLED" then
         BR.status.combat = false
+        BR.NotePredictedCharges()
         BR.needScan = true
         BR.ScanAuras()
     elseif event == "SPELLS_CHANGED" then
