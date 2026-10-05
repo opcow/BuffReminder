@@ -81,7 +81,7 @@ Buffs already in a buff group are greyed out with the buff group's name.
 
 The **Alerts** tab adds and sets up alerts (see Alerts above).
 
-The **Options** tab has the defaults new buff groups start with, the default icon size, the opacity of icons whose buff is missing and of ones warning it's running out or low on stacks (buff groups can have their own), how icons whose buff is missing or running out are marked, the warning sound and a reset button. "Browse..." beside the warning sound lists the game's sounds, click one to use it and hear it.
+The **Options** tab has the defaults new buff groups start with, the default icon size, the opacity of icons whose buff is missing and of ones warning it's running out or low on stacks (buff groups can have their own), how icons whose buff is missing or running out are marked, whether the time left text shows on the icon or just above or below it, a combat badge (crossed swords on the icons while you're in combat), the warning sound and a reset button. "Browse..." beside the warning sound lists the game's sounds, click one to use it and hear it.
 
 "Save / load..." on the Options tab shares settings (buff groups, weapon enchants, options and icon placement) between characters:
 - Type a name at the top and click Save to keep a copy of this character's settings under that name. Saves belong to the account, so every character can load them. Saving under a name already in use replaces that save, after asking.

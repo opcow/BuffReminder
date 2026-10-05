@@ -1,5 +1,20 @@
 # Changelog
 
+## Unreleased
+
+### Added
+
+- "Time left text" on the Options tab puts the time left on the icon, as before, or just above or below it. It applies to every icon, Blizzard Auras and alerts included, but not party reminders.
+- "Combat badge" on the Options tab puts crossed swords in the bottom left corner of every icon while you're in combat, alerts included. Off by default.
+
+### Fixed
+
+- An alert set to the Spell alert glow caused a "blocked by secret aspects" error. The game's spell alert can't be shown on Blizzard's aura button, so alerts no longer offer it, and ones set to it now Pulse.
+
+### Changed
+
+- An alert's swipe now darkens the icon as the aura runs out, instead of starting dark and lighting up.
+
 ## 2.6
 
 ### Added

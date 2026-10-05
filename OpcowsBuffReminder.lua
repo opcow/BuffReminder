@@ -67,6 +67,7 @@ BR.DefaultOptions = {
     ["clickbutton"] = "1",  -- with this click, see ParseClick, "1" is a plain left click
     ["dismiss"] = true,     -- clicking an icon with dismissbutton hides it until the buff is put on again
     ["dismissbutton"] = "2", -- a plain right click
+    ["combatbadge"] = false, -- crossed swords on the icons while you're in combat
     ["party"] = true,       -- party reminders, see Party.lua
     ["partywarn"] = false,  -- and their early warnings, using each group's warning time
     ["partydock"] = "auto", -- on the panel, or "right" / "left" / "above" / "below" Blizzard's party
@@ -83,6 +84,8 @@ BR.DefaultOptions = {
         ["swipe"] = true,
         ["stacks"] = true,
         ["priority"] = "both",
+        -- "on", "above" or "below" the icon
+        ["timepos"] = "on",
     },
     -- 0 = ignored, 1 = hide the icon while true, 2 = hide the icon while false
     -- always: 0 = use the other conditions, 1 = never show, 2 = always show
@@ -149,6 +152,29 @@ local function TimerStyle(group)
     end
     local t = OpcowsBuffReminderDB.Options.icontext
     return t.time, t.swipe
+end
+
+-- where the time left text goes: at the top of the icon, or just above or below it
+local TIME_POSITIONS = { on = "On the icon", above = "Above the icon", below = "Below the icon" }
+local TIME_POSITION_ORDER = { "on", "above", "below" }
+local function PlaceTime(fs, icon)
+    local pos = OpcowsBuffReminderDB.Options.icontext.timepos
+    -- centred in a box a little wider than the icon on both sides, so the text stays centred however
+    -- the game sizes it (the cooldown's countdown drifted as it went from 2 digits to 1)
+    local PAD = 20
+    fs:SetJustifyH("CENTER")
+    fs:SetWordWrap(false)
+    fs:ClearAllPoints()
+    if pos == "above" then
+        fs:SetPoint("BOTTOMLEFT", icon, "TOPLEFT", -PAD, 2)
+        fs:SetPoint("BOTTOMRIGHT", icon, "TOPRIGHT", PAD, 2)
+    elseif pos == "below" then
+        fs:SetPoint("TOPLEFT", icon, "BOTTOMLEFT", -PAD, -2)
+        fs:SetPoint("TOPRIGHT", icon, "BOTTOMRIGHT", PAD, -2)
+    else
+        fs:SetPoint("TOPLEFT", icon, "TOPLEFT", -PAD, -2)
+        fs:SetPoint("TOPRIGHT", icon, "TOPRIGHT", PAD, -2)
+    end
 end
 
 -- util functions ---------------------------------------------------------------------------
@@ -1280,6 +1306,7 @@ local function NewIcon(parent)
     f.overlay:Hide()
     f.text = f:CreateFontString(nil, "OVERLAY", "NumberFontNormal")
     f.text:SetPoint("TOP", 0, -2)
+    f.text:SetJustifyH("CENTER")
     -- stack count where the default buff frame puts it
     f.count = f:CreateFontString(nil, "OVERLAY", "NumberFontNormal")
     f.count:SetPoint("BOTTOMRIGHT", -2, 2)
@@ -1302,6 +1329,18 @@ local function AcquireIcon(i)
         end)
         f:SetScript("OnEnter", function(self) BR.IconTooltip(self) end)
         f:SetScript("OnLeave", function() GameTooltip:Hide() end)
+        -- the combat badge, beside the icon rather than in it so it stays over Blizzard's button and
+        -- keeps its own opacity, hidden with the icon
+        f.badge = CreateFrame("Frame", nil, frame)
+        f.badge:SetFrameLevel(frame:GetFrameLevel() + 40)
+        f.badge:SetPoint("BOTTOMLEFT", f, "BOTTOMLEFT", 1, 1)
+        f.badge:EnableMouse(false)
+        f.badge:Hide()
+        local swords = f.badge:CreateTexture(nil, "OVERLAY")
+        swords:SetAllPoints()
+        swords:SetTexture("Interface\\CharacterFrame\\UI-StateIcon")
+        swords:SetTexCoord(0.5, 1, 0, 0.484375)
+        f:HookScript("OnHide", function(self) self.badge:Hide() end)
         BR.icons[i] = f
     end
     return f
@@ -1424,20 +1463,19 @@ local function StyleLive(l, group, warn, extraKey, extra)
     local showTime = time and t.priority ~= "stacks"
     local showStacks = t.stacks and t.priority ~= "time"
     local key = table.concat({ size, tostring(showTime), tostring(showStacks), tostring(swipe),
-        warn, extraKey or "" }, ":")
+        warn, t.timepos, extraKey or "" }, ":")
     if key == l.style then return end
     local ok = pcall(function()
         l.container:SetSize(size, size)
         l.button:SetSize(size, size)
         l.cd:SetHideCountdownNumbers(not showTime)
         l.cd:SetDrawSwipe(swipe)
-        -- the cooldown's countdown at the top, like the time text on our icons, clear of the count
+        -- the cooldown's countdown placed like the time text on our icons, clear of the count
         local fs = l.cd.GetCountdownFontString and l.cd:GetCountdownFontString()
         if fs then
             fs:SetFontObject("NumberFontNormal")
             ScaleFont(fs, size)
-            fs:ClearAllPoints()
-            fs:SetPoint("TOP", l.button, "TOP", 0, -2)
+            PlaceTime(fs, l.button)
         end
         ScaleFont(l.count, size)
         l.count:SetAlpha(showStacks and 1 or 0)
@@ -2111,6 +2149,8 @@ end
 -- glow kind from GLOWS, nil for none
 local function SetGlow(f, kind)
     if kind == "none" then kind = nil end
+    -- the spell alert sets scripts on f, which a frame inside an aura button can't have
+    if kind == "alert" and f.noSpellAlert then kind = "pulse" end
     if f.glowKind == kind then return end
     if f.glowKind == "alert" then SpellAlert(f, false) end
     f.glowKind = kind
@@ -2138,6 +2178,19 @@ local function SetOverlay(f, key)
         f.overlay:Show()
     else
         f.overlay:Hide()
+    end
+end
+
+-- crossed swords in the icon's corner while you're in combat, at alpha
+local function ShowBadge(f, item, size, alpha)
+    if not f.badge then return end
+    if OpcowsBuffReminderDB.Options.combatbadge and BR.status.combat and not item.placeholder and alpha > 0 then
+        local s = math.max(10, math.floor(size * 0.4 + 0.5))
+        f.badge:SetSize(s, s)
+        f.badge:SetAlpha(alpha)
+        f.badge:Show()
+    else
+        f.badge:Hide()
     end
 end
 
@@ -2169,6 +2222,9 @@ local function ShowIcon(f, item, now, shown, liveShown)
         holder:SetSize(size, size)
         holder:SetAlpha(item.group.alpha)
         liveShown[item.key] = true
+        -- nothing tells the addon whether the alert's aura is up, so its badge is on Blizzard's
+        -- button instead, see AlertBadges
+        if f.badge then f.badge:Hide() end
         return
     end
     -- a Blizzard Auras icon only shows from under Blizzard's button once the buff is gone
@@ -2200,6 +2256,10 @@ local function ShowIcon(f, item, now, shown, liveShown)
         if opts.icontext.priority == "time" then stackText = "" end
         if opts.icontext.priority == "stacks" then timeText = "" end
     end
+    if f.timePos ~= opts.icontext.timepos then
+        f.timePos = opts.icontext.timepos
+        PlaceTime(f.text, f)
+    end
     f.text:SetText(timeText)
     f.count:SetText(stackText)
     -- how many of what a weapon enchant icon puts on are left
@@ -2228,6 +2288,8 @@ local function ShowIcon(f, item, now, shown, liveShown)
         holder:SetAlpha(IconAlpha(item.group, false))
         liveShown[item.key] = true
     end
+    -- a Blizzard Auras badge shows over Blizzard's button or ours, whichever is showing
+    ShowBadge(f, item, size, item.live and math.max(alpha, IconAlpha(item.group, false)) or alpha)
 end
 
 -- an icon on the options window showing how a missing buff or a warning will look. It sits on a
@@ -2352,12 +2414,45 @@ end
 -- so there's no OnShow to start a pulse again, KeepPulses does it.
 local function InitAlertButton(a, button)
     InitLiveButton(a, button)
+    -- the aura is what's wanted, so it darkens as it runs out instead of lighting up
+    pcall(a.cd.SetReverse, a.cd, true)
     local fx = NewIcon(button)
     fx:SetAllPoints()
     fx:SetFrameLevel(a.cd:GetFrameLevel() + 1)
     fx.texture:Hide()
     fx.cooldown:Hide()
+    fx.noSpellAlert = true
+    -- the combat badge, on Blizzard's button so it shows only while the aura is up
+    fx.badge = fx:CreateTexture(nil, "OVERLAY", nil, 7)
+    fx.badge:SetPoint("BOTTOMLEFT", 1, 1)
+    fx.badge:SetTexture("Interface\\CharacterFrame\\UI-StateIcon")
+    fx.badge:SetTexCoord(0.5, 1, 0, 0.484375)
+    fx.badge:Hide()
     a.fx = fx
+end
+
+-- show or hide the alerts' combat badges, in combat too like KeepPulses
+local function AlertBadges()
+    local opts = OpcowsBuffReminderDB.Options
+    local on = opts.combatbadge and BR.status.combat and BR.locked
+    for aura, a in pairs(alertFrames) do
+        local alert = OpcowsBuffReminderDB.Alerts[aura]
+        local badge = a.fx and a.fx.badge
+        if badge and alert and not a.badgeErr and (on and true or false) ~= (a.badgeOn or false) then
+            local size = type(alert.size) == "number" and alert.size or opts.size
+            local s = math.max(10, math.floor(size * 0.4 + 0.5))
+            local ok, err = pcall(function()
+                badge:SetSize(s, s)
+                badge:SetShown(on)
+            end)
+            if ok then
+                a.badgeOn = on and true or false
+            else
+                a.badgeErr = true
+                Debug("alert combat badge can't be changed: " .. tostring(err))
+            end
+        end
+    end
 end
 
 -- hiding stops a pulse, and the button hides each time the aura goes, so play it again while it's
@@ -2385,6 +2480,7 @@ end
 -- make, refilter and restyle the alerts' containers and sounds, out of combat only
 function BR.UpdateAlerts()
     KeepPulses()
+    AlertBadges()
     if InCombatLockdown() or AurasSecret() then return end
     local alerts = OpcowsBuffReminderDB.Alerts
     for aura in pairs(alertSounds) do
@@ -3176,6 +3272,7 @@ BR.CONDITIONS = CONDITIONS
 BR.COMBAT_MODES = COMBAT_MODES
 BR.HIT_USES, BR.HIT_USE_ORDER = HIT_USES, HIT_USE_ORDER
 BR.TIMERS, BR.TIMER_ORDER = TIMERS, TIMER_ORDER
+BR.TIME_POSITIONS, BR.TIME_POSITION_ORDER = TIME_POSITIONS, TIME_POSITION_ORDER
 BR.GLOWS, BR.GLOW_ORDER, BR.OVERLAYS, BR.OVERLAY_ORDER = GLOWS, GLOW_ORDER, OVERLAYS, OVERLAY_ORDER
 BR.ENCHANT_SLOTS, BR.ENCHANT_NAMES = ENCHANT_SLOTS, ENCHANT_NAMES
 BR.ALERT_SOUNDS = ALERT_SOUNDS
@@ -3193,7 +3290,11 @@ SlashCmdList.OpcowsBuffReminder = function(msg)
     if msg and msg:lower():match("^%s*debug%s*$") then
         BR.debug = not BR.debug
         Print("debug " .. (BR.debug and "on" or "off") .. ", auras secret now: " .. tostring(AurasSecret()))
-        if BR.debug then BR.ClearCoolDebug() end
+        if BR.debug then
+            BR.ClearCoolDebug()
+            -- probe: can an alert mute the game's own sound for its aura
+            Debug(("MuteSoundFile: %s, UnmuteSoundFile: %s"):format(type(MuteSoundFile), type(UnmuteSoundFile)))
+        end
         return
     end
     if msg and msg:lower():match("^%s*cdm%s*$") then
@@ -3324,6 +3425,7 @@ function BR.SanityCheck()
     opts.bars = bars
     opts.position = nil
     if not TEXT_PRIORITIES[opts.icontext.priority] then opts.icontext.priority = "both" end
+    if not TIME_POSITIONS[opts.icontext.timepos] then opts.icontext.timepos = "on" end
     if not GLOWS[opts.glow] or opts.glow == "default" then opts.glow = "none" end
     if not OVERLAYS[opts.overlay] or opts.overlay == "default" then opts.overlay = "none" end
     if not GLOWS[opts.warnglow] or opts.warnglow == "default" then opts.warnglow = "none" end
@@ -3335,6 +3437,7 @@ function BR.SanityCheck()
     if type(opts.clicktocast) ~= "boolean" then opts.clicktocast = true end
     if not ParseClick(opts.clickbutton) then opts.clickbutton = "1" end
     if type(opts.dismiss) ~= "boolean" then opts.dismiss = true end
+    if type(opts.combatbadge) ~= "boolean" then opts.combatbadge = false end
     if not ParseClick(opts.dismissbutton) then opts.dismissbutton = "2" end
     -- one click can't do both, casting keeps it
     if opts.dismissbutton == opts.clickbutton then
@@ -3411,6 +3514,8 @@ function BR.SanityCheck()
             -- what CheckGroup adds that alerts don't use
             alert.warntime, alert.warnstacks, alert.warnglow, alert.warnoverlay, alert.warnalpha = nil, nil, nil, nil, nil
             if alert.glow == "default" then alert.glow = "none" end
+            -- the spell alert can't be shown on an alert, see SetGlow
+            if alert.glow == "alert" then alert.glow = "pulse" end
             if alert.overlay == "default" then alert.overlay = "none" end
             if type(alert.alpha) ~= "number" then alert.alpha = 1 end
             if type(alert.ids) ~= "table" then alert.ids = {} end

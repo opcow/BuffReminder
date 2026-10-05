@@ -561,10 +561,15 @@ local function StyleRow(parent, when, target, glowKey, overlayKey, isGroup, text
     glowLabel:SetPoint("LEFT", label, "LEFT", 100, 0)
     row.glow = Button(parent, "", 80, function()
         local t = target()
-        t[glowKey] = NextIn(BR.GLOW_ORDER, t[glowKey], not isGroup)
+        local nxt = NextIn(BR.GLOW_ORDER, t[glowKey], not isGroup)
+        -- an alert's glow is inside Blizzard's aura button, where the spell alert can't be shown
+        if when == "alert" and nxt == "alert" then nxt = NextIn(BR.GLOW_ORDER, nxt, true) end
+        t[glowKey] = nxt
         Changed()
     end)
     row.glow:SetPoint("LEFT", glowLabel, "RIGHT", 6, 0)
+    local spellAlert = when == "alert" and ""
+        or "|cffffd100Spell alert:|r the game's proc glow, like an action button's. A pulse if the game won't show it.\n"
     local others = (isGroup or when == "alert") and "\n\n" or " Buff groups can have their own on the Buff groups tab.\n\n"
     local default = isGroup and "|cffffd100Default:|r follows the Options tab.\n" or ""
     Tooltip(row.glow, "Glow when " .. w[2],
@@ -573,7 +578,7 @@ local function StyleRow(parent, when, target, glowKey, overlayKey, isGroup, text
         .. "|cffffd100Pulse:|r a glow that fades in and out.\n"
         .. "|cffffd100Flash:|r the same, fast.\n"
         .. "|cffffd100Steady:|r a glow that stays lit.\n"
-        .. "|cffffd100Spell alert:|r the game's proc glow, like an action button's. A pulse if the game won't show it.\n"
+        .. spellAlert
         .. "|cff808080Click to change.|r")
     local overlayLabel = Label(parent, "Color", "GameFontHighlightSmall")
     overlayLabel:SetPoint("LEFT", row.glow, "RIGHT", 10, 0)
@@ -1461,7 +1466,7 @@ local function CreateOptionsPage(page)
     textLabel:SetPoint("TOPLEFT", 0, -263)
     local showTime = Check(page, "Time left", function(v) OpcowsBuffReminderDB.Options.icontext.time = v; Changed() end)
     showTime:SetPoint("LEFT", textLabel, "RIGHT", 8, -1)
-    Tooltip(showTime, "Time left", "The time left as text at the top of the icon. Buff groups can override this on the Buff groups tab.")
+    Tooltip(showTime, "Time left", "The time left as text, on the icon or above or below it (Time left text, below). Buff groups can override this on the Buff groups tab.")
     local showSwipe = Check(page, "Swipe", function(v) OpcowsBuffReminderDB.Options.icontext.swipe = v; Changed() end)
     showSwipe:SetPoint("LEFT", showTime, "RIGHT", 70, 0)
     Tooltip(showSwipe, "Swipe", "The time left as a clock swipe darkening the icon. Buff groups can override this on the Buff groups tab.")
@@ -1487,6 +1492,20 @@ local function CreateOptionsPage(page)
     missingStyle.label:SetPoint("TOPLEFT", 0, -293)
     local warnStyle = StyleRow(page, "warning", Opts, "warnglow", "warnoverlay", false, SampleIcon)
     warnStyle.label:SetPoint("TOPLEFT", 0, -323)
+
+    -- room to the right of the style rows
+    local timePosLabel = Label(page, "Time left text:")
+    timePosLabel:SetPoint("TOPLEFT", 400, -293)
+    local timePos = Button(page, "", 120, function()
+        local t = OpcowsBuffReminderDB.Options.icontext
+        t.timepos = NextIn(BR.TIME_POSITION_ORDER, t.timepos)
+        Changed()
+    end)
+    timePos:SetPoint("TOPLEFT", timePosLabel, "BOTTOMLEFT", 0, -6)
+    Tooltip(timePos, "Time left text",
+        "Where the time left shows on every icon: at the top of the icon, or just above or below it. "
+        .. "Above or below, it can cover an icon snapped there, so leave a gap or put the icons in a row. "
+        .. "Party reminder icons keep it on the icon.\n|cff808080Click to change.|r")
 
     local clickLabel = Label(page, "Click to cast:")
     clickLabel:SetPoint("TOPLEFT", 0, -355)
@@ -1529,6 +1548,16 @@ local function CreateOptionsPage(page)
         "The click that casts: any mouse button, with Shift, Ctrl or Alt held if you like. "
         .. "One with a key held leaves a plain click free, so an icon can't be cast by accident.\n\n"
         .. "|cff808080Click this, then click it again the way you want to cast.|r")
+
+    -- right of the click to cast row, under Time left text
+    local badge = Check(page, "Combat badge", function(v)
+        OpcowsBuffReminderDB.Options.combatbadge = v
+        Changed()
+    end)
+    badge:SetPoint("TOPLEFT", 400, -352)
+    Tooltip(badge, "Combat badge",
+        "Crossed swords in the bottom left corner of every icon while you're in combat, alerts included, "
+        .. "so you can tell at a glance the icons are being followed through a fight.")
 
     local dismissLabel = Label(page, "Click to dismiss:")
     dismissLabel:SetPoint("TOPLEFT", 0, -385)
@@ -1696,6 +1725,7 @@ local function CreateOptionsPage(page)
         clickButton.listening = nil
         clickButton:SetText(BR.ClickLabel(OpcowsBuffReminderDB.Options.clickbutton))
         dismissOn:SetChecked(OpcowsBuffReminderDB.Options.dismiss)
+        badge:SetChecked(OpcowsBuffReminderDB.Options.combatbadge)
         dismissButton.listening = nil
         dismissButton:SetText(BR.ClickLabel(OpcowsBuffReminderDB.Options.dismissbutton))
         partyOn:SetChecked(OpcowsBuffReminderDB.Options.party)
@@ -1708,6 +1738,7 @@ local function CreateOptionsPage(page)
         showSwipe:SetChecked(t.swipe)
         showStacks:SetChecked(t.stacks)
         priority:SetText(PRIORITY_LABELS[t.priority])
+        timePos:SetText(BR.TIME_POSITIONS[t.timepos])
     end
 end
 
