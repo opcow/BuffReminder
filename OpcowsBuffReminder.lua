@@ -722,7 +722,7 @@ end
 
 -- /obr debug, what a Cooldown Manager frame says about a buff, printed when it changes
 local cdmSaid = {}
-local function CDMDebug(buff, id, list, trusted)
+local function CDMDebug(buff, id, list, why)
     if not BR.debug then return end
     local function show(v)
         if issecretvalue(v) then return "secret" end
@@ -736,7 +736,7 @@ local function CDMDebug(buff, id, list, trusted)
             ok and show(shown) or "?", show(f.cooldownID))
     end
     local msg = ("cooldown manager, %s (spell %d), %d frames%s: %s"):format(tostring(buff), id, #list,
-        trusted and "" or ", not seen up yet so predicted", table.concat(parts, " "))
+        why and (", " .. why .. " so predicted") or "", table.concat(parts, " "))
     if cdmSaid[buff] ~= msg then
         cdmSaid[buff] = msg
         Debug(msg)
@@ -765,14 +765,17 @@ local function CDMFrameLookup(f, prev)
     return nil
 end
 
--- buffs a Cooldown Manager frame has shown as up this session. Until then its frames saying
+-- spell ids a Cooldown Manager frame has shown as up this fight. Until then its frames saying
 -- the buff is gone aren't believed, since the manager doesn't follow every buff it lists,
--- ex: Mark of the Wild while you have it
+-- ex: Mark of the Wild while you have it, and can lose one it followed in an earlier fight,
+-- ex: Power Word: Fortitude
 local cdmSeenUp = {}
 
 -- same answers as LookupBuff, from the Cooldown Manager's buff frames. Any frame showing
--- the buff up wins
+-- the buff up wins. A frame saying gone is believed only for the rank last read on you, since
+-- the manager follows one rank, ex: Fortitude rank 3 while rank 2 from before training is on you
 local function CDMLookup(frames, buff, prev)
+    local learned = BR.learnedIds[BuffKey(buff)]
     for _, id in ipairs(SpellIds(buff)) do
         local list = frames[id]
         if list then
@@ -780,14 +783,20 @@ local function CDMLookup(frames, buff, prev)
             for _, f in ipairs(list) do
                 local e = CDMFrameLookup(f, prev)
                 if e then
-                    cdmSeenUp[buff] = true
-                    CDMDebug(buff, id, list, true)
+                    cdmSeenUp[id] = true
+                    CDMDebug(buff, id, list)
                     return e
                 end
                 if e == false then gone = true end
             end
-            CDMDebug(buff, id, list, cdmSeenUp[buff])
-            if gone and cdmSeenUp[buff] then return false end
+            local why
+            if learned and learned ~= id then
+                why = ("you have spell %d"):format(learned)
+            elseif not cdmSeenUp[id] then
+                why = "not seen up yet"
+            end
+            CDMDebug(buff, id, list, why)
+            if gone and not why then return false end
         end
     end
     return nil
@@ -872,6 +881,32 @@ function BR.OnCastSent(target, id)
         issecretvalue(target) and "hidden" or tostring(target), tostring(onMe)))
 end
 
+-- the rank number from a spell's subtext, ex: "Rank 3", or nil
+local function RankNumber(id)
+    if not (C_Spell and C_Spell.GetSpellSubtext) then return nil end
+    local ok, text = pcall(C_Spell.GetSpellSubtext, id)
+    if not ok or type(text) ~= "string" or issecretvalue(text) then return nil end
+    return tonumber(text:match("(%d+)"))
+end
+
+-- warns once per spell id when a buff group's buff is cast on you at a lower rank than you know,
+-- ex: an action bar still holding the old rank after training. The Cooldown Manager follows only the
+-- highest rank, so the old one can't be followed in combat.
+local oldRankWarned = {}
+local function WarnOldRank(id, name)
+    if oldRankWarned[id] then return end
+    local best = OwnSpellId(name)
+    if not best or best == id then return end
+    local have, know = RankNumber(id), RankNumber(best)
+    local older
+    if have and know then older = have < know else older = id < best end
+    if not older then return end
+    oldRankWarned[id] = true
+    local rank = have and know and (" (rank %d, you know rank %d)"):format(have, know) or ""
+    Print(("You cast an old rank of %s%s. Drag the new rank to your action bar from the spellbook.")
+        :format(SpellName(id) or name, rank))
+end
+
 -- UNIT_SPELLCAST_SUCCEEDED, marks the groups of a buff you cast on yourself as up
 function BR.OnCast(id)
     if not Num(id) then
@@ -905,6 +940,8 @@ function BR.OnCast(id)
         end
     end
     if #groups == 0 then return end
+    -- only on you: the game picks a lower rank by itself for a low level target
+    if onMe or Untargeted(id) then WarnOldRank(id, name) end
 
     -- a buff given to a party member is remembered for their reminders
     if not onMe and target and BR.OnPartyCast then BR.OnPartyCast(groups, target) end
@@ -996,6 +1033,7 @@ function BR.OnHit(action, descriptor, amount, school)
 end
 
 function BR.OnCombatStart()
+    wipe(cdmSeenUp)
     local hit = hitBeforeCombat
     hitBeforeCombat = nil
     if not hit or GetTime() - hit.at > HIT_BEFORE_COMBAT then return end
@@ -2690,6 +2728,24 @@ local function UpdateClickers(list)
         end
     end
     for i = n + 1, #clickers do clickers[i]:Hide() end
+    BR.ShowClickCooldowns()
+end
+
+-- the global cooldown, or the spell's own, on the icons that cast a spell when clicked, like an
+-- action button's. Run on SPELL_UPDATE_COOLDOWN and after each refresh, which redraws the icons'
+-- own swipes. Clickers are only out of combat, when cooldowns can be read.
+function BR.ShowClickCooldowns()
+    if not (C_Spell and C_Spell.GetSpellCooldown) then return end
+    local now = GetTime()
+    for _, b in ipairs(clickers) do
+        local spell = b:IsShown() and b.icon and not b.hand and b:GetAttribute("spell")
+        if spell then
+            local ok, cd = pcall(C_Spell.GetSpellCooldown, spell)
+            local start = ok and type(cd) == "table" and not issecretvalue(cd) and Num(cd.startTime)
+            local dur = start and Num(cd.duration)
+            if dur and dur > 0 and start + dur > now then b.icon.cooldown:SetCooldown(start, dur) end
+        end
+    end
 end
 
 -- as combat starts, the last moment they can be hidden
@@ -3565,6 +3621,8 @@ function BR.Init()
     frame:RegisterEvent("PLAYER_REGEN_DISABLED")
     frame:RegisterEvent("PLAYER_REGEN_ENABLED")
     frame:RegisterEvent("SPELLS_CHANGED")
+    -- the global cooldown on clickable icons
+    frame:RegisterEvent("SPELL_UPDATE_COOLDOWN")
     frame:RegisterEvent("PLAYER_LOGOUT")
     -- a spell's text loaded, for the buff picker. Not every client has it.
     pcall(frame.RegisterEvent, frame, "SPELL_DATA_LOAD_RESULT")
@@ -3593,6 +3651,9 @@ frame:SetScript("OnEvent", function(self, event, arg1, arg2, arg3, arg4, arg5)
     elseif event == "UNIT_COMBAT" then
         -- unit, action, descriptor, amount, school
         BR.OnHit(arg2, arg3, arg4, arg5)
+        return
+    elseif event == "SPELL_UPDATE_COOLDOWN" then
+        BR.ShowClickCooldowns()
         return
     end
 

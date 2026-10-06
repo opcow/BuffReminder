@@ -1,5 +1,16 @@
 # Changelog
 
+## Unreleased
+
+### Added
+
+- Icons that cast a spell when clicked show the global cooldown swipe, like an action button, so you can see when the next one can be clicked. Party reminder icons too.
+- A chat warning when you cast a buff group's spell on yourself at a lower rank than you know (casts on low level players, which the game lowers by itself, don't count), ex: an action bar still holding the old rank after a visit to the trainer. The Cooldown Manager follows only your highest rank, so an old one can't be followed in combat. It warns once per rank each session.
+
+### Fixed
+
+- A Cooldown Manager buff group, ex: Power Word: Fortitude, could show its icon in every fight while the buff was up. The manager's frame for the buff can stop following it, and a "gone" read from it was believed for the rest of the session once it had shown the buff up. Now that frame has to show the buff up in the same fight, and the rank it follows has to be the one last read on you. Otherwise the buff group is predicted.
+
 ## 2.7
 
 ### Added
