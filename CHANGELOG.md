@@ -1,5 +1,11 @@
 # Changelog
 
+## Unreleased
+
+### Fixed
+
+- A weapon enchant icon showing both the bag count and the charges left could read as one number, ex: 15 in your bags and 3 charges looked like "153". When the charges are showing, the bag count is now smaller and tinted blue.
+
 ## 2.8
 
 ### Added

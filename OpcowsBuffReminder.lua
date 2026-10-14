@@ -1462,12 +1462,12 @@ local function CountFormatter(warn)
 end
 
 -- the number font scaled to an icon's size, so bigger icons get bigger text
-local function ScaleFont(fs, size)
+local function ScaleFont(fs, size, scale)
     local font = NumberFontNormal
     if not (font and font.GetFont) then return end
     local file, height, flags = font:GetFont()
     if not file or not height then return end
-    fs:SetFont(file, math.max(6, math.floor(height * size / FONT_ICON_SIZE + 0.5)), flags)
+    fs:SetFont(file, math.max(6, math.floor(height * size * (scale or 1) / FONT_ICON_SIZE + 0.5)), flags)
 end
 
 -- called by Blizzard once, when it makes the slot's button
@@ -2241,7 +2241,7 @@ local function ShowIcon(f, item, now, shown, liveShown)
         f.fontSize = size
         ScaleFont(f.text, size)
         ScaleFont(f.count, size)
-        ScaleFont(f.bag, size)
+        f.bagScale = nil
         -- the border's button fills 36 of its 64 pixels
         f.glow:SetSize(size * 64 / 36, size * 64 / 36)
         -- the spell alert is sized when it's shown
@@ -2307,11 +2307,19 @@ local function ShowIcon(f, item, now, shown, liveShown)
     end
     f.bag:SetText(mark or "")
     if mark then
+        -- the bottom right like an action button, unless the charges are there. Then it's smaller and
+        -- tinted at the bottom left, or on a small icon "15" and "3" read as "153"
+        local beside = stackText ~= ""
+        local scale = beside and 0.75 or 1
+        if f.bagScale ~= scale then
+            f.bagScale = scale
+            ScaleFont(f.bag, size, scale)
+        end
+        if beside and r == 1 and g == 1 and b == 1 then r, g, b = 0.6, 0.85, 1 end
         f.bag:SetTextColor(r, g, b)
-        -- the bottom right like an action button, unless the charges are there
         f.bag:ClearAllPoints()
-        if stackText ~= "" then
-            f.bag:SetPoint("BOTTOMLEFT", 2, 2)
+        if beside then
+            f.bag:SetPoint("BOTTOMLEFT", 1, 2)
         else
             f.bag:SetPoint("BOTTOMRIGHT", -2, 2)
         end
