@@ -1,5 +1,21 @@
 # Changelog
 
+## 2.10
+
+### Added
+
+- Icons can fade in as they show up and fade out as they go, instead of popping. Set the time in seconds with Fade on the Options tab (0, none, to start with), and give a buff group or weapon enchant its own beside Icon size on the Buff groups tab. An icon fading out keeps its place until it's gone. Blizzard Auras icons, alerts and party reminders don't fade.
+
+### Changed
+
+- The Buff groups tab has Icon size on its own row with Fade, and the options window is 30 pixels taller.
+
+### Fixed
+
+- Clicking a weapon enchant icon could do nothing because a hidden game spell, ex: Opening - No Text, had been remembered as what you last put on the hand. Only items in your bags and spells in your spellbook are remembered now. A hand that already remembered one asks you to put the enchant on again.
+- Clicking a weapon enchant icon could cast Stealth or another spell: one cast just after logging in, or just after a poison, was remembered instead of the poison. A poison, oil or stone you used now beats a spell, the enchant has to show up after the cast, and enchants you already had don't count as new after a loading screen or when the hand reads empty for a moment. If an icon casts the wrong thing, put the enchant on that hand again.
+- With more than one of your spells in a buff group, ex: Lightning Shield and Water Shield, clicking the icon on Auto cast the first one, not the one you use. Auto now casts the buff you last had or cast, and the icon shows that buff too, also when you cast it in combat.
+
 ## 2.9
 
 ### Fixed

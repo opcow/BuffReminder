@@ -836,7 +836,7 @@ local function CreateGroupsPage(page)
         .. "0 (invisible) to 1 (solid). Empty uses the Options tab's.")
 
     local sizeLabel = Label(detail, "Icon size:")
-    sizeLabel:SetPoint("LEFT", alphaWarn, "RIGHT", 20, 0)
+    sizeLabel:SetPoint("TOPLEFT", 0, -366)
     local size = ValueBox(detail, 40,
         function() return Current().size end,
         function(text)
@@ -854,13 +854,33 @@ local function CreateGroupsPage(page)
     size:SetPoint("LEFT", sizeLabel, "RIGHT", 10, 0)
     Tooltip(size, "Icon size", "This icon's own size, 10 to 400. Empty uses the size on the Options tab.")
 
+    local fadeLabel = Label(detail, "Fade:")
+    fadeLabel:SetPoint("LEFT", size, "RIGHT", 20, 0)
+    -- the group's own fade time, empty follows the Options tab
+    local fade = ValueBox(detail, 36,
+        function() return Current().fade end,
+        function(text)
+            local n = tonumber(text)
+            if text == "" or text:lower() == "default" then
+                Current().fade = nil
+            elseif n and n >= 0 and n <= BR.MAX_FADE then
+                Current().fade = n
+            end
+        end)
+    fade:SetPoint("LEFT", fadeLabel, "RIGHT", 10, 0)
+    local fadeSec = Label(detail, "sec", "GameFontHighlightSmall")
+    fadeSec:SetPoint("LEFT", fade, "RIGHT", 4, 0)
+    Tooltip(fade, "Fade",
+        "Seconds this icon takes to fade in as it shows up and fade out as it goes, 0 to " .. BR.MAX_FADE
+        .. ", 0 for none. Empty uses the Options tab's. Blizzard Auras icons and party reminders don't fade.")
+
     local function GroupIcon()
         return selectedSlot and EnchantIcon(selectedSlot) or Current().icon
     end
     local missingStyle = StyleRow(detail, "missing", Current, "glow", "overlay", true, GroupIcon)
-    missingStyle.label:SetPoint("TOPLEFT", 0, -366)
+    missingStyle.label:SetPoint("TOPLEFT", 0, -396)
     local warnStyle = StyleRow(detail, "warning", Current, "warnglow", "warnoverlay", true, GroupIcon)
-    warnStyle.label:SetPoint("TOPLEFT", 0, -396)
+    warnStyle.label:SetPoint("TOPLEFT", 0, -426)
 
     -- "auto", "off", or one of the group's spells that's yours, a spell no longer yours is auto
     local function ClickValue(group, spells)
@@ -871,7 +891,7 @@ local function CreateGroupsPage(page)
         return "auto"
     end
     local clickLabel = Label(detail, "Click to cast:")
-    clickLabel:SetPoint("TOPLEFT", 0, -426)
+    clickLabel:SetPoint("TOPLEFT", 0, -456)
     local click = Button(detail, "", 180, function()
         local group = Current()
         -- a hand's enchant uses what you last put on it, or nothing
@@ -898,7 +918,8 @@ local function CreateGroupsPage(page)
                 .. CLICK_LIMITS .. "|cff808080Click to turn it on or off.|r"
         end
         return "Clicking the icon casts this spell on you.\n\n"
-            .. "|cffffd100Auto:|r the first of your own spells in the buff group.\n"
+            .. "|cffffd100Auto:|r the buff of the buff group you last had or cast, if it's your own spell, "
+            .. "ex: Water Shield rather than Lightning Shield. Otherwise the first of your own spells in it.\n"
             .. "|cffffd100Off:|r the icon can't be clicked.\n\n"
             .. CLICK_LIMITS .. "|cff808080Click to change.|r"
     end)
@@ -921,7 +942,7 @@ local function CreateGroupsPage(page)
         .. "Uncheck it for buffs you only keep on yourself.")
 
     local combatLabel = Label(detail, "In combat:")
-    combatLabel:SetPoint("TOPLEFT", 0, -456)
+    combatLabel:SetPoint("TOPLEFT", 0, -486)
     local combat = Button(detail, "", 130, function()
         local group = OpcowsBuffReminderDB.BuffGroups[selected]
         BR.SetCombatMode(selected, group.combat == "cdm" and "blizzard" or "cdm")
@@ -937,7 +958,7 @@ local function CreateGroupsPage(page)
         .. "|cff808080Click to change.|r")
     -- which hits use the buff's charges in combat, and how often one can be used
     local usedLabel = Label(detail, "Charges used by:")
-    usedLabel:SetPoint("TOPLEFT", 0, -486)
+    usedLabel:SetPoint("TOPLEFT", 0, -516)
     local used = Button(detail, "", 140, function()
         local group = Current()
         -- leaving Auto keeps its cooldown to start from
@@ -1037,6 +1058,7 @@ local function CreateGroupsPage(page)
         alphaMissing:Load()
         alphaWarn:Load()
         size:Load()
+        fade:Load()
         if ench then
             icon:SetTexture(EnchantIcon(selectedSlot))
             name:SetText(BR.ENCHANT_NAMES[selectedSlot])
@@ -1079,7 +1101,7 @@ local function CreateGroupsPage(page)
         elseif #spells == 0 then
             click:SetText("None of your spells")
         elseif cv == "auto" then
-            click:SetText("Auto: " .. spells[1])
+            click:SetText("Auto: " .. BR.AutoClickSpell(group, spells))
         else
             click:SetText(cv == "off" and "Off" or cv)
         end
@@ -1391,6 +1413,19 @@ local function CreateOptionsPage(page)
     Tooltip(warnAlpha, "Opacity when warning",
         "Icons whose buff is still up but running out (early warning time) or low on stacks. 0 (invisible) to 1 (solid). "
         .. "Buff groups can have their own on the Buff groups tab.")
+
+    local fadeLabel = Label(page, "Fade:")
+    fadeLabel:SetPoint("LEFT", warnAlpha, "RIGHT", 20, 0)
+    local fade = ValueBox(page, 36,
+        function() return OpcowsBuffReminderDB.Options.fade end,
+        NumberSetter(0, BR.MAX_FADE, function(n) OpcowsBuffReminderDB.Options.fade = n end))
+    fade:SetPoint("LEFT", fadeLabel, "RIGHT", 10, 0)
+    local fadeSec = Label(page, "sec", "GameFontHighlightSmall")
+    fadeSec:SetPoint("LEFT", fade, "RIGHT", 4, 0)
+    Tooltip(fade, "Fade",
+        "Seconds icons take to fade in as they show up and fade out as they go, ex: 0.5. 0 to " .. BR.MAX_FADE
+        .. ", 0 for none. Buff groups and weapon enchants can have their own on the Buff groups tab. "
+        .. "Blizzard Auras icons, alerts and party reminders don't fade.")
 
     local soundLabel = Label(page, "Warning sound:")
     soundLabel:SetPoint("TOPLEFT", 0, -207)
@@ -1715,6 +1750,7 @@ local function CreateOptionsPage(page)
         size:Load()
         alpha:Load()
         warnAlpha:Load()
+        fade:Load()
         missingStyle:Load()
         warnStyle:Load()
         sound:Load()
@@ -1745,7 +1781,7 @@ end
 -- main window ------------------------------------------------------------------------------
 local function CreateConfig()
     local f = CreateFrame("Frame", "OpcowsBuffReminderConfig", UIParent, "BasicFrameTemplateWithInset")
-    f:SetSize(620, 640)
+    f:SetSize(620, 670)
     f:SetPoint("CENTER")
     f:SetFrameStrata("HIGH")
     f:SetToplevel(true)

@@ -59,6 +59,7 @@ BR.DefaultOptions = {
     ["warntime"] = 0,       -- seconds left when the icon starts showing, 0 only when the buff is gone
     ["alpha"] = 1.0,        -- opacity of an icon whose buff is missing
     ["warnalpha"] = 1.0,    -- and of one warning that the buff is running out or low on stacks
+    ["fade"] = 0,           -- seconds icons take to fade in as they show up and out as they go, 0 for none
     ["glow"] = "none",      -- glow around icons whose buff is missing, see GLOWS
     ["overlay"] = "none",   -- colour washed over icons whose buff is missing, see OVERLAYS
     ["warnglow"] = "none",  -- and the same for icons warning it's running out or low on stacks
@@ -224,6 +225,17 @@ local function SpellTexture(buff)
     return nil
 end
 
+-- remembers the buff of a group you last had or cast, ex: Water Shield rather than Lightning Shield,
+-- for its icon and what a click casts
+local function NoteLast(group, buff, icon)
+    if icon and not issecretvalue(icon) then
+        group.icon = icon
+    elseif group.last ~= buff then
+        group.icon = SpellTexture(buff) or group.icon
+    end
+    group.last = buff
+end
+
 -- buff keys are names (matched case-insensitively) or spell ids
 local function BuffKey(buff)
     return tonumber(buff) or buff:lower()
@@ -322,17 +334,17 @@ function BR.ScanAuras()
     RememberSeen(list)
     BR.groupState = {}
     for g, group in pairs(OpcowsBuffReminderDB.BuffGroups) do
-        local best
+        local best, bestBuff
         for buff in pairs(group.buffs) do
             local key = BuffKey(buff)
             local e = found[key]
             if e then
                 BR.learnedIds[key] = e.spellId
-                if best == nil or Outlasts(e, best) then best = e end
+                if best == nil or Outlasts(e, best) then best, bestBuff = e, buff end
             end
         end
         if best then
-            group.icon = best.icon or group.icon
+            NoteLast(group, bestBuff, best.icon)
             BR.groupState[g] = { present = true, expires = best.expires, duration = best.duration,
                 applications = best.applications }
         else
@@ -811,7 +823,7 @@ function BR.LiveScan()
     local frames
     for g, group in pairs(OpcowsBuffReminderDB.BuffGroups) do
         local prev = BR.groupState[g]
-        local best, sure = nil, next(group.buffs) ~= nil
+        local best, bestBuff, sure = nil, nil, next(group.buffs) ~= nil
         for buff in pairs(group.buffs) do
             local e = LookupBuff(buff, prev)
             if e == nil then
@@ -819,12 +831,13 @@ function BR.LiveScan()
                 e = CDMLookup(frames, buff, prev)
             end
             if e then
-                if best == nil or Outlasts(e, best) then best = e end
+                if best == nil or Outlasts(e, best) then best, bestBuff = e, buff end
             elseif e == nil then
                 sure = false
             end
         end
         if best then
+            NoteLast(group, bestBuff)
             BR.groupState[g] = best
         elseif sure and GetTime() - (BR.castAt[g] or 0) < CAST_SETTLE then
             -- just cast, the reads haven't caught up yet
@@ -923,7 +936,7 @@ function BR.OnCast(id)
     end
     name = name:lower()
 
-    local groups = {}
+    local groups, castBuff = {}, {}
     for g, group in pairs(OpcowsBuffReminderDB.BuffGroups) do
         for buff in pairs(group.buffs) do
             local key = BuffKey(buff)
@@ -935,6 +948,7 @@ function BR.OnCast(id)
             end
             if match then
                 table.insert(groups, g)
+                castBuff[g] = buff
                 break
             end
         end
@@ -951,7 +965,10 @@ function BR.OnCast(id)
     end
     -- the cast starts the spell's cooldown, whether or not the buff's duration is known
     local now = GetTime()
-    for _, g in ipairs(groups) do BR.castAt[g] = now end
+    for _, g in ipairs(groups) do
+        BR.castAt[g] = now
+        NoteLast(OpcowsBuffReminderDB.BuffGroups[g], castBuff[g], SpellTexture(id))
+    end
     -- without a duration seen before, the time left isn't known
     local seen = OpcowsBuffReminderDB.Seen[name]
     local dur = seen and Num(seen.duration)
@@ -1065,11 +1082,16 @@ end
 -- What you last put on each hand is remembered for clicking its icon, in the hand's
 -- OpcowsBuffReminderDB.Enchants[slot].last as { item = id } for a poison, oil or stone, or
 -- { spell = id } for an imbue. Nothing says which item or spell an enchant came from, so a cast of
--- yours is matched to an enchant that shows up on a hand within a few seconds of it.
-local ENCHANT_MATCH = 3     -- seconds
-local enchantCast           -- { id, item or spell, t } of your last cast that could be one
+-- yours is matched to an enchant that shows up on a hand within a few seconds after it. An item
+-- beats a spell, so Stealth right after a poison doesn't take its place.
+local ENCHANT_MATCH = 3     -- seconds after the cast
+local ENCHANT_EARLY = 0.5   -- seconds the hand may change before the cast's success arrives
+local ENCHANT_QUIET = 5     -- seconds after a loading screen when enchants showing up are ignored
+local enchantCasts = {}     -- [kind] = { id, item or spell, t } of your last item or spell cast
 local enchantSent           -- the same, sent but not yet succeeded
 local enchantAt = {}        -- [slot] = when an enchant last showed up on the hand
+local enchantKnown = {}     -- [slot] = when the enchant last read on the hand runs out
+local enchantQuiet = 0      -- GetTime() until which enchants showing up aren't put on now
 
 -- the spell id an item casts when used
 local function ItemSpellId(item)
@@ -1092,15 +1114,35 @@ end
 
 -- an enchant and a cast close enough together are what you put on that hand
 local function MatchEnchant()
-    if not enchantCast then return end
+    local now = GetTime()
     for slot, at in pairs(enchantAt) do
-        if math.abs(at - enchantCast.t) <= ENCHANT_MATCH then
-            OpcowsBuffReminderDB.Enchants[slot].last = { item = enchantCast.item, spell = enchantCast.spell }
-            Debug(("%s: remembered %s %d"):format(ENCHANT_NAMES[slot], enchantCast.item and "item" or "spell",
-                enchantCast.item or enchantCast.spell))
+        local match
+        for _, kind in ipairs({ "item", "spell" }) do
+            local c = enchantCasts[kind]
+            if not match and c and at - c.t >= -ENCHANT_EARLY and at - c.t <= ENCHANT_MATCH then match = c end
+        end
+        if match then
+            OpcowsBuffReminderDB.Enchants[slot].last = { item = match.item, spell = match.spell }
+            Debug(("%s: remembered %s %d"):format(ENCHANT_NAMES[slot], match.item and "item" or "spell",
+                match.item or match.spell))
+            enchantAt[slot] = nil
+        elseif now - at > ENCHANT_EARLY then
+            -- a later cast can't be what put it on
             enchantAt[slot] = nil
         end
     end
+end
+
+-- an imbue has to be in your spellbook. IsPlayerSpell alone also takes hidden spells every
+-- player has, like Opening - No Text.
+local function BookSpell(id)
+    if not (IsPlayerSpell and IsPlayerSpell(id)) then return false end
+    local ok, name = pcall(C_Spell.GetSpellName, id)
+    if not ok or type(name) ~= "string" or issecretvalue(name) then return false end
+    for _, v in ipairs(BookIds(name)) do
+        if v == id then return true end
+    end
+    return false
 end
 
 -- UNIT_SPELLCAST_SENT, while the item used is still in your bags. Out of combat only, when
@@ -1108,19 +1150,23 @@ end
 local function EnchantCastSent(id)
     enchantSent = nil
     if BR.status.combat then return end
-    if IsPlayerSpell and IsPlayerSpell(id) then
+    local item = BagItemFor(id)
+    if item then
+        enchantSent = { id = id, item = item }
+    elseif BookSpell(id) then
         enchantSent = { id = id, spell = id }
-    else
-        local item = BagItemFor(id)
-        if item then enchantSent = { id = id, item = item } end
     end
+    Debug(("enchant watch: cast %d sent, %s"):format(id, item and ("item " .. item)
+        or enchantSent and "spellbook spell" or "not an item in your bags or a spellbook spell"))
 end
 
 -- UNIT_SPELLCAST_SUCCEEDED
 local function EnchantCastDone(id)
     if not (enchantSent and enchantSent.id == id) then return end
-    enchantCast, enchantSent = enchantSent, nil
-    enchantCast.t = GetTime()
+    local c = enchantSent
+    enchantSent = nil
+    c.t = GetTime()
+    enchantCasts[c.item and "item" or "spell"] = c
     MatchEnchant()
 end
 
@@ -1152,12 +1198,26 @@ function BR.ScanEnchants()
         BR.enchants.main = entry(r[2], r[3], r[4])
         BR.enchants.off = entry(r[6], r[7], r[8])
     end
-    -- one that's new, or put on again with more time
-    for slot, o in pairs(old) do
+    -- one that's new, or put on again with more time. Compared with the last one read rather than
+    -- the last scan, so a hand that reads empty for a moment doesn't count, and not just after a
+    -- loading screen, when enchants you already had show up.
+    for slot in pairs(old) do
         local e = BR.enchants[slot]
-        if e.present and o and (not o.present or e.expires > o.expires + 5) then enchantAt[slot] = now end
+        if e.present then
+            local known = enchantKnown[slot]
+            if now >= enchantQuiet and (not known or known < now or e.expires > known + 5) then
+                enchantAt[slot] = now
+                Debug(("enchant watch: %s put on"):format(ENCHANT_NAMES[slot]))
+            end
+            enchantKnown[slot] = e.expires
+        end
     end
     MatchEnchant()
+end
+
+-- after a loading screen
+function BR.StartEnchantQuiet()
+    enchantQuiet = GetTime() + ENCHANT_QUIET
 end
 
 -- the name of what you last put on a hand, nil for nothing remembered
@@ -1196,7 +1256,7 @@ function BR.EnchantMark(slot)
         if count == 0 then return "0", 1, 0.1, 0.1 end
         return tostring(count), 1, 1, 1
     end
-    if click and not (IsPlayerSpell and IsPlayerSpell(last.spell)) then return "?", 1, 0.1, 0.1 end
+    if click and not BookSpell(last.spell) then return "?", 1, 0.1, 0.1 end
     return nil
 end
 
@@ -1212,8 +1272,9 @@ function BR.EnchantClickProblem(slot)
     if last.item then
         local count = (C_Item and C_Item.GetItemCount or GetItemCount)(last.item)
         if not issecretvalue(count) and (count or 0) == 0 then return "None left in your bags." end
-    elseif not (IsPlayerSpell and IsPlayerSpell(last.spell)) then
-        return "That spell isn't one of yours."
+    elseif not BookSpell(last.spell) then
+        return "That spell isn't in your spellbook. Put a poison, oil, stone or imbue on this hand out of combat"
+            .. " to remember it instead."
     end
     if BR.status.combat then return "Icons can't be clicked in combat." end
     return nil
@@ -1231,7 +1292,7 @@ function BR.EnchantAction(slot)
         if issecretvalue(count) or (count or 0) == 0 then return nil end
         return { item = "item:" .. last.item, label = name }
     elseif last.spell then
-        if not (IsPlayerSpell and IsPlayerSpell(last.spell)) or name:find("^spell ") then return nil end
+        if not BookSpell(last.spell) or name:find("^spell ") then return nil end
         return { spell = name, label = name }
     end
 end
@@ -2172,6 +2233,90 @@ local function IconAlpha(group, missing)
     return missing and opts.alpha or opts.warnalpha
 end
 
+-- Icons can fade in as they show up and out as they go, an icon going is still drawn where it was
+-- until it's faded. Not Blizzard Auras icons or alerts, which are Blizzard's buttons, or party icons.
+local MAX_FADE = 5          -- seconds
+BR.MAX_FADE = MAX_FADE
+local fades = {}            -- [key] = { t, from, dir (1 in, -1 out), time, item (one going) }
+local fadeItems = {}        -- [key] = each icon shown at the last refresh, to fade out if it goes
+
+-- a group's own fade time in seconds, or the Options tab's, 0 for none
+local function FadeTime(group)
+    local own = group and group.fade
+    if type(own) == "number" then return own end
+    return OpcowsBuffReminderDB.Options.fade
+end
+
+-- how far a fade has got, 0 (invisible) to 1
+local function FadeLevel(fd, now)
+    return math.max(0, math.min(1, fd.from + fd.dir * (now - fd.t) / fd.time))
+end
+
+local function KeyFade(key, now)
+    local fd = fades[key]
+    return fd and FadeLevel(fd, now) or 1
+end
+
+-- start fades for the icons that showed up or went since the last refresh, and add the ones still
+-- fading out to byKey so they keep their place
+local function UpdateFades(byKey, now)
+    for key, item in pairs(byKey) do
+        local time = FadeTime(item.group)
+        local fd = fades[key]
+        if item.live or item.alert or time <= 0 then
+            fades[key] = nil
+        elseif fd and fd.dir < 0 then
+            -- back while fading out, fade in from where it got to
+            fades[key] = { t = now, from = FadeLevel(fd, now), dir = 1, time = time }
+        elseif not fd and not fadeItems[key] then
+            fades[key] = { t = now, from = 0, dir = 1, time = time }
+        end
+    end
+    for key, item in pairs(fadeItems) do
+        local time = FadeTime(item.group)
+        if not byKey[key] and time > 0 and not item.live and not item.alert then
+            local fd = fades[key]
+            if not (fd and fd.dir < 0) then
+                fades[key] = { t = now, from = fd and FadeLevel(fd, now) or 1, dir = -1, time = time, item = item }
+            end
+        end
+    end
+    fadeItems = {}
+    for key, item in pairs(byKey) do fadeItems[key] = item end
+    for key, fd in pairs(fades) do
+        local level = FadeLevel(fd, now)
+        if fd.dir > 0 and (level >= 1 or not byKey[key]) then
+            fades[key] = nil
+        elseif fd.dir < 0 then
+            if level <= 0 or byKey[key] then
+                fades[key] = nil
+            else
+                local ghost = {}
+                for k, v in pairs(fd.item) do ghost[k] = v end
+                ghost.fading = true
+                byKey[key] = ghost
+            end
+        end
+    end
+end
+
+-- the fades between refreshes, every frame while any are running
+function BR.AnimateFades()
+    if not next(fades) then return end
+    local now, done = GetTime(), false
+    for _, f in ipairs(BR.icons) do
+        local fd = f:IsShown() and f.key and fades[f.key]
+        if fd then
+            local level = FadeLevel(fd, now)
+            f:SetAlpha((f.baseAlpha or 1) * level)
+            if f.badge and f.badge:IsShown() then f.badge:SetAlpha((f.badgeAlpha or 1) * level) end
+            if fd.dir < 0 and level <= 0 then done = true end
+        end
+    end
+    -- a faded out icon's place can go to the others now
+    if done then BR.Refresh() end
+end
+
 -- the game's spell alert, the glow on an action button when a spell procs. It's made for action
 -- buttons, so it's only tried, returns false when this client doesn't have it or it failed.
 local function SpellAlert(f, show)
@@ -2225,7 +2370,8 @@ local function ShowBadge(f, item, size, alpha)
     if OpcowsBuffReminderDB.Options.combatbadge and BR.status.combat and not item.placeholder and alpha > 0 then
         local s = math.max(10, math.floor(size * 0.4 + 0.5))
         f.badge:SetSize(s, s)
-        f.badge:SetAlpha(alpha)
+        f.badgeAlpha = alpha
+        f.badge:SetAlpha(alpha * KeyFade(item.key, GetTime()))
         f.badge:Show()
     else
         f.badge:Hide()
@@ -2268,7 +2414,8 @@ local function ShowIcon(f, item, now, shown, liveShown)
     -- a Blizzard Auras icon only shows from under Blizzard's button once the buff is gone
     local missing = item.missing or item.placeholder or item.live
     local alpha = IconAlpha(item.group, missing)
-    f:SetAlpha(alpha)
+    f.baseAlpha = alpha
+    f:SetAlpha(alpha * KeyFade(item.key, now))
     -- a Blizzard Auras icon is mostly under Blizzard's button, and a placeholder only for placing
     if item.missing or not (item.placeholder or item.live) then
         local glow, overlay = IconStyle(item.group, item.missing)
@@ -2279,7 +2426,7 @@ local function ShowIcon(f, item, now, shown, liveShown)
         SetOverlay(f, nil)
     end
     -- an invisible icon mustn't catch clicks meant for the world under it
-    f:EnableMouse(not BR.locked or (opts.dismiss and not item.placeholder and alpha > 0))
+    f:EnableMouse(not BR.locked or (opts.dismiss and not item.placeholder and not item.fading and alpha > 0))
     f.texture:SetTexture(item.icon or QUESTION_MARK)
     f.texture:SetDesaturated(item.placeholder or false)
     local time, swipe = TimerStyle(item.group)
@@ -2325,7 +2472,8 @@ local function ShowIcon(f, item, now, shown, liveShown)
         end
     end
     f:Show()
-    if not item.placeholder then shown[item.key] = true end
+    -- one fading out has gone already, back is new
+    if not item.placeholder and not item.fading then shown[item.key] = true end
     if item.live then
         local holder = live[item.live].holder
         holder:ClearAllPoints()
@@ -2644,8 +2792,22 @@ function BR.ClickSpells(group)
     return list
 end
 
--- the spell a click on the group's icon casts, nil for none. group.click is "auto" for the first
--- of your spells, "off", or a spell's name. A name that's no longer yours counts as auto. The
+-- what auto casts: the group's buff you last had or cast if it's your spell, else the first of yours
+function BR.AutoClickSpell(group, list)
+    list = list or BR.ClickSpells(group)
+    local id = group.last and OwnSpellId(group.last)
+    local ok, last = false, nil
+    if id then ok, last = pcall(C_Spell.GetSpellName, id) end
+    if ok and type(last) == "string" and not issecretvalue(last) then
+        for _, name in ipairs(list) do
+            if name == last then return name end
+        end
+    end
+    return list[1]
+end
+
+-- the spell a click on the group's icon casts, nil for none. group.click is "auto" (see
+-- AutoClickSpell), "off", or a spell's name. A name that's no longer yours counts as auto. The
 -- Options tab turns it off for every group.
 function BR.ClickSpell(group)
     if not OpcowsBuffReminderDB.Options.clicktocast or group.click == "off" then return nil end
@@ -2653,7 +2815,7 @@ function BR.ClickSpell(group)
     for _, name in ipairs(list) do
         if name == group.click then return name end
     end
-    return list[1]
+    return BR.AutoClickSpell(group, list)
 end
 
 local function AcquireClicker(i)
@@ -2875,6 +3037,12 @@ function BR.Refresh()
     for _, item in ipairs(list) do
         if not hidden[item.key] then byKey[item.key] = item end
     end
+    -- unlocked, icons are for placing, so they don't fade
+    if BR.locked then
+        UpdateFades(byKey, now)
+    else
+        fades, fadeItems = {}, {}
+    end
     if not BR.locked and not BR.hideAll then
         -- unlocked, the icons that aren't needed show grey so they can be placed too
         for k in pairs(PlaceableKeys()) do
@@ -2907,7 +3075,8 @@ function BR.Refresh()
             f:SetPoint("CENTER", anchors[bi], "CENTER", p.x, p.y)
             ShowIcon(f, item, now, shown, liveShown)
             -- unlocked icons are for dragging
-            if BR.locked and not item.placeholder and not item.live and not item.alert and f:GetAlpha() > 0 then
+            if BR.locked and not item.placeholder and not item.live and not item.alert and not item.fading
+                and f.baseAlpha > 0 then
                 if item.key:sub(1, 1) == "1" then
                     local spell = BR.ClickSpell(item.group)
                     if spell then table.insert(clicks, { f = f, spell = spell }) end
@@ -2921,7 +3090,8 @@ function BR.Refresh()
                     end
                 end
             end
-            if not item.live and not item.alert and not item.placeholder and not BR.shown[item.key] then
+            if not item.live and not item.alert and not item.placeholder and not item.fading
+                and not BR.shown[item.key] then
                 -- a Blizzard Auras icon shows all fight, no sound for that, and an alert has its own
                 newIcon = true
             end
@@ -3403,6 +3573,7 @@ function BR.SanityCheck()
             opts[k] = v
         end
     end
+    if opts.fade < 0 or opts.fade > MAX_FADE then opts.fade = BR.DefaultOptions.fade end
     -- [spell id] = its cooldown in seconds, last read out of combat
     if type(OpcowsBuffReminderDB.Cooldowns) ~= "table" then OpcowsBuffReminderDB.Cooldowns = {} end
     for k, v in pairs(OpcowsBuffReminderDB.Cooldowns) do
@@ -3532,6 +3703,8 @@ function BR.SanityCheck()
         for _, k in ipairs({ "alpha", "warnalpha" }) do
             if type(group[k]) ~= "number" or group[k] < 0 or group[k] > 1 then group[k] = nil end
         end
+        -- and fade time
+        if type(group.fade) ~= "number" or group.fade < 0 or group.fade > MAX_FADE then group.fade = nil end
         if type(group.script) ~= "string" then group.script = "" end
     end
     local before26 = (tonumber(opts.version) or 0) < 2.6
@@ -3552,6 +3725,7 @@ function BR.SanityCheck()
             -- before 2.6 off was the default, auto changes nothing for buffs without charges
             if before26 and group.hituse == "off" then group.hituse = "auto" end
             if group.icon == nil then group.icon = QUESTION_MARK end
+            if group.last ~= nil and not group.buffs[group.last] then group.last = nil end
         end
     end
     for k in pairs(OpcowsBuffReminderDB.Enchants) do
@@ -3595,6 +3769,7 @@ end
 
 -- events -----------------------------------------------------------------------------------
 local function OnUpdate(self, elapsed)
+    BR.AnimateFades()
     BR.elapsed = BR.elapsed + elapsed
     if BR.elapsed < TICK then return end
     BR.elapsed = 0
@@ -3700,6 +3875,7 @@ frame:SetScript("OnEvent", function(self, event, arg1, arg2, arg3, arg4, arg5)
         BR.status.combat = InCombatLockdown() and true or false
         BR.needScan = true
         BR.ScanAuras()
+        BR.StartEnchantQuiet()
         BR.ScanEnchants()
         -- once the Cooldown Manager has made its frames
         if not BR.noticesDue and C_Timer then
