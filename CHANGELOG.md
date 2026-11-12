@@ -1,5 +1,11 @@
 # Changelog
 
+## 2.11
+
+### Added
+
+- A key binding that casts the next missing buff. Set it with Escape → Options → Keybindings → AddOns → Opcow's Buff Reminder → "Cast the next missing buff", or put `/click OpcowsBuffReminderNext` in a macro. Each press casts what clicking the first clickable icon would, so pressing it again and again buffs you, then your party. Out of combat only, like clicking.
+
 ## 2.10
 
 ### Added

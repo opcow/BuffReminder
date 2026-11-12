@@ -30,6 +30,14 @@ A buff group can warn when its buff is down to a number of stacks or charges, ex
 Click a buff group's icon to cast its spell on yourself. **Click to cast** on the Options tab turns it on or off and sets which click does it: click the button beside it, then click it again with the mouse button you want, holding Shift, Ctrl or Alt if you like, ex: Shift-Right click. A click with a key held leaves a plain click free, so an icon can't be cast by accident. **Click to cast** on the Buff groups tab picks the spell: **Auto** uses the buff you last had or cast from the buff group (ex: Water Shield rather than Lightning Shield), or the first of your own spells in it, or pick one of them, or turn it **Off**. Buff groups with none of your spells, like food, can't be clicked. Weapon enchant icons put on what you last used on that hand, see Weapon enchants.
 The game doesn't let addons move or hide clickable buttons during combat, while Buff Reminder's icons come and go all fight. So icons can only be clicked out of combat; when a fight starts they stop taking clicks and they're clickable again once it ends. Unlocked icons can't be clicked either, so they can be dragged. An icon with its opacity set to 0 isn't clickable.
 
+**Next buff key.** A key can cast the next missing buff, so you can buff up without reaching for the icons. To set it:
+
+1. Press Escape and click **Options**.
+2. Open the **Keybindings** tab and scroll down to the **AddOns** section.
+3. Under **Opcow's Buff Reminder**, click the box beside **Cast the next missing buff**, then press the key you want.
+
+Or put a macro on an action bar: `/click OpcowsBuffReminderNext`. Each press casts what clicking the first clickable icon would: your own buffs first, then weapon enchants and party members' buffs, in the order the icons show. Once the buff is up, the next press moves on. Like clicking, it uses Click to cast and works out of combat only, and it says so in chat when there's nothing to cast.
+
 ## Click to dismiss
 Right click an icon to hide it until the buff is put on again, ex: a buff you can't get right now. It works on your own icons, weapon enchants and party members' icons, in combat too. **Click to dismiss** on the Options tab turns it off or changes the click, the same way as Click to cast; the two can't use the same click. While it's on, icons take mouse clicks even when they can't be cast, so a click on one doesn't reach the game world behind it. Dismissed icons come back after a reload, and show as usual while the icons are unlocked.
 

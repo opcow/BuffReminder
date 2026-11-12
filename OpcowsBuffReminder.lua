@@ -2857,11 +2857,52 @@ local function AcquireClicker(i)
     return b
 end
 
+-- the key binding's button: it casts what a click on the first clickable icon would, so each press
+-- puts on the next missing buff. Bindings.xml binds a key to it, and a macro can /click it. It can
+-- only be changed out of combat, so it's emptied as combat starts and does nothing until it ends.
+BINDING_HEADER_OPCOWSBUFFREMINDER = "Opcow's Buff Reminder"
+_G["BINDING_NAME_CLICK OpcowsBuffReminderNext:LeftButton"] = "Cast the next missing buff"
+
+local nextButton = CreateFrame("Button", "OpcowsBuffReminderNext", UIParent, "SecureActionButtonTemplate")
+nextButton:SetSize(1, 1)
+nextButton:SetAlpha(0)
+nextButton:EnableMouse(false)
+-- the template casts on the press or the release, whichever the game is set to
+nextButton:RegisterForClicks("AnyUp", "AnyDown")
+nextButton:SetScript("PostClick", function(self, button, down)
+    if down then return end
+    if self.spell then
+        Debug(("key: casting %s on %s"):format(self.spell, self.who or "you"))
+    elseif InCombatLockdown() or BR.status.combat then
+        Print("the next buff key works out of combat only.")
+    elseif not BR.locked then
+        Print("the next buff key works only while the icons are locked.")
+    elseif not OpcowsBuffReminderDB.Options.clicktocast then
+        Print("the next buff key casts what clicking an icon would. Turn on Click to cast on the Options tab.")
+    else
+        Print("no missing buff to cast.")
+    end
+end)
+
+-- point the key at c, an entry of UpdateClickers' list, or at nothing
+local function SetNext(c)
+    local b = nextButton
+    b:SetAttribute("type", c and (c.item and "item" or "spell") or nil)
+    b:SetAttribute("spell", c and c.spell or nil)
+    b:SetAttribute("item", c and c.item or nil)
+    b:SetAttribute("target-slot", c and c.slot or nil)
+    b:SetAttribute("unit", c and c.unit or "player")
+    b.spell = c and (c.label or c.spell) or nil
+    b.who = c and c.who or nil
+end
+
 -- lay the secure buttons over the icons that can be clicked, list = { { f, spell, unit, who }, ... },
 -- unit and who for a party member's icon
 local function UpdateClickers(list)
     -- combat is set as it starts, before the lockdown
     if InCombatLockdown() or BR.status.combat then return end
+    -- your own icons come first in the list, then party members'
+    SetNext(list[1])
     local left, bottom = UIParent:GetLeft() or 0, UIParent:GetBottom() or 0
     local opts = OpcowsBuffReminderDB.Options
     local click = opts.clickbutton
@@ -2922,6 +2963,7 @@ end
 function BR.HideClickers()
     if InCombatLockdown() then return end
     for _, b in ipairs(clickers) do b:Hide() end
+    SetNext(nil)
 end
 
 -- click to dismiss -------------------------------------------------------------------------

@@ -1552,7 +1552,9 @@ local function CreateOptionsPage(page)
     clickOn:SetPoint("LEFT", clickLabel, "RIGHT", 6, -1)
     Tooltip(clickOn, "Click to cast",
         "Clicking a buff group's icon casts its spell on you, out of combat. "
-        .. "Each buff group picks its spell or turns it off on the Buff groups tab. Unchecked, no icon can be clicked.")
+        .. "Each buff group picks its spell or turns it off on the Buff groups tab. Unchecked, no icon can be clicked.\n\n"
+        .. "A key can cast the next missing buff too. Set it with Escape, Options, the Keybindings tab, "
+        .. "then AddOns: Opcow's Buff Reminder, \"Cast the next missing buff\". Or use a macro: /click OpcowsBuffReminderNext")
     -- shows the click saved in Options[key]: click it once, then again with the button and keys to
     -- use. It can't be the click saved in Options[other], which is used to do what.
     local function ClickCapture(key, other, what)
