@@ -1,5 +1,11 @@
 # Changelog
 
+## 2.12
+
+### Fixed
+
+- A buff that isn't one of your spells, ex: Intellect from a scroll, showed a question mark in the buff list and on its icon. It now uses the icon it had the last time you had it. Buffs in a group or an alert are no longer dropped from the "Seen before" list, so their icons stay.
+
 ## 2.11
 
 ### Added

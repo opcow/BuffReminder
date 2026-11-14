@@ -217,11 +217,16 @@ local function ResolveSound(v)
     return nil
 end
 
+-- a buff's icon. A name only finds spells in your spellbook, so for the rest, ex: a scroll's
+-- Intellect, it's the icon from when you last had the buff (see RememberSeen).
 local function SpellTexture(buff)
     if C_Spell and C_Spell.GetSpellTexture then
         local ok, tex = pcall(C_Spell.GetSpellTexture, tonumber(buff) or buff)
         if ok and tex and not issecretvalue(tex) then return tex end
     end
+    local seen = type(buff) == "string" and not tonumber(buff) and OpcowsBuffReminderDB
+        and OpcowsBuffReminderDB.Seen and OpcowsBuffReminderDB.Seen[buff:lower()]
+    if seen and seen.icon and not issecretvalue(seen.icon) then return seen.icon end
     return nil
 end
 
@@ -315,7 +320,15 @@ local function RememberSeen(list)
     for k in pairs(seen) do table.insert(keys, k) end
     if #keys <= SEEN_MAX then return end
     table.sort(keys, function(a, b) return seen[a].t > seen[b].t end)
-    for i = SEEN_MAX + 1, #keys do seen[keys[i]] = nil end
+    -- a buff in a group or an alert keeps its entry: it's where its icon comes from (see SpellTexture)
+    local keep = {}
+    for _, group in pairs(OpcowsBuffReminderDB.BuffGroups or {}) do
+        for b in pairs(group.buffs or {}) do keep[tostring(b):lower()] = true end
+    end
+    for a in pairs(OpcowsBuffReminderDB.Alerts or {}) do keep[tostring(a):lower()] = true end
+    for i = SEEN_MAX + 1, #keys do
+        if not keep[keys[i]] then seen[keys[i]] = nil end
+    end
 end
 
 -- snapshot the state of every group, returns false if auras couldn't be read
