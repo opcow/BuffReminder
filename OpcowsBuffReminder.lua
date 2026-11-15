@@ -1677,21 +1677,37 @@ function BR.CombatStatus(g)
     return text, warn
 end
 
--- tell the user once about groups that are only predicted in combat
+-- tell the user once about groups that are only predicted in combat. Groups with the same reason
+-- share one line, and the how-to-fix hint is given once.
 local noticed = {}
 function BR.CombatNotices(only)
+    local byText, order, hint = {}, {}, false
     for g, group in pairs(OpcowsBuffReminderDB.BuffGroups) do
         if (only == nil or only == g) and group.conditions.always ~= 1 then
             local text, warn = BR.CombatStatus(g)
             if warn and noticed[g] ~= text then
                 noticed[g] = text
-                local hint = ""
-                if group.combat == "cdm" and not text:find("Blizzard Auras can", 1, true) then
-                    hint = " Add it to the Cooldown Manager's buffs, or switch the buff group to Blizzard Auras on the Buff groups tab (/obr)."
+                -- the reason without its ", it's predicted in combat" tail, said once up front
+                local reason = text:gsub(", it's predicted in combat%.?", "."):gsub("%(spell %d+, yours is %d+%)", "")
+                    :gsub("  +", " "):gsub(" %.", ".")
+                if not byText[reason] then
+                    byText[reason] = {}
+                    order[#order + 1] = reason
                 end
-                Print(('"%s": %s%s'):format(g, text, hint))
+                table.insert(byText[reason], g)
+                if group.combat == "cdm" and not text:find("Blizzard Auras can", 1, true) then hint = true end
             end
         end
+    end
+    if #order == 0 then return end
+    table.sort(order)
+    for _, reason in ipairs(order) do
+        local names = byText[reason]
+        table.sort(names)
+        Print(("predicted in combat: %s. %s"):format(table.concat(names, ", "), reason))
+    end
+    if hint then
+        Print("to read these live, add them to the Cooldown Manager's buffs or switch them to Blizzard Auras on the Buff groups tab (/obr).")
     end
 end
 

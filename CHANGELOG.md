@@ -1,5 +1,11 @@
 # Changelog
 
+## 2.13
+
+### Changed
+
+- Fewer chat lines on load: buff groups that are only predicted in combat for the same reason share one line, and how to fix it is said once instead of on every line.
+
 ## 2.12
 
 ### Fixed
