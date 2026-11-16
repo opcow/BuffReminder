@@ -1,5 +1,12 @@
 # Changelog
 
+## 2.14
+
+### Fixed
+
+- Slice and Dice cast in combat showed as gone too early: it was predicted to last as long as the last one read, whatever its combo points. A finisher buff now lasts what its combo points give it, from the spell's description.
+- A buff cast on yourself with an enemy targeted, ex: Slice and Dice, wasn't always counted as on you, so in combat its icon stayed up.
+
 ## 2.13
 
 ### Changed

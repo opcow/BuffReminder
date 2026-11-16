@@ -869,6 +869,25 @@ end
 -- Out of combat the aura read that follows the cast replaces this with the exact state.
 BR.sentSelf = {}        -- [spell id] = true when the last cast of it was on you, false when on someone else
 BR.sentTarget = {}      -- [spell id] = the name the last cast of it was aimed at, when readable
+BR.sentCP = {}          -- [spell id] = your combo points when it was cast, for finishers like Slice and Dice
+
+-- your combo points on the target, nil when they can't be read
+local function ComboPoints()
+    if not GetComboPoints then return nil end
+    local ok, n = pcall(GetComboPoints, "player", "target")
+    return ok and Num(n) or nil
+end
+
+-- how long a buff cast with cp combo points lasts, from its spell's description, ex: Slice and
+-- Dice's "1 point: 9 seconds ... 5 points: 21 seconds". nil when it doesn't scale with them.
+local function ComboDuration(id, cp)
+    if not (cp and cp > 0 and C_Spell and C_Spell.GetSpellDescription) then return nil end
+    local ok, d = pcall(C_Spell.GetSpellDescription, id)
+    if not ok or type(d) ~= "string" or issecretvalue(d) then return nil end
+    local per = {}
+    for n, sec in d:gmatch("(%d) points?%s*:%s*(%d+)%s*sec") do per[tonumber(n)] = tonumber(sec) end
+    return per[cp]
+end
 
 local function Bool(v)
     if not issecretvalue(v) then return v and true or false end
@@ -886,6 +905,8 @@ end
 function BR.OnCastSent(target, id)
     id = Num(id)
     if not id then return end
+    -- spent by the time the cast lands
+    BR.sentCP[id] = ComboPoints()
     local onMe
     if type(target) == "string" and not issecretvalue(target) then
         -- nothing aimed at, or you. Forever gives your surname as UnitName's second value and
@@ -893,7 +914,17 @@ function BR.OnCastSent(target, id)
         local name, surname = UnitName("player")
         local full = type(surname) == "string" and surname ~= "" and name .. " " .. surname or name
         onMe = target == "" or target == name or target == full
-        BR.sentTarget[id] = target
+        if not onMe then
+            -- your enemy target: a buff can't land on it, so a self-only one like Slice and Dice
+            -- that the game names the target for is on you
+            local ok1, tname = pcall(UnitName, "target")
+            local ok2, enemy = pcall(UnitCanAttack, "player", "target")
+            if ok1 and ok2 and type(tname) == "string" and not issecretvalue(tname) and tname == target
+                and Bool(enemy) then
+                onMe = true
+            end
+        end
+        BR.sentTarget[id] = onMe and "" or target
     else
         BR.sentTarget[id] = nil
         -- the target is hidden: a helpful spell lands on you unless someone friendly is selected
@@ -939,8 +970,8 @@ function BR.OnCast(id)
         Debug("cast with a hidden spell id")
         return
     end
-    local onMe, target = BR.sentSelf[id], BR.sentTarget[id]
-    BR.sentSelf[id], BR.sentTarget[id] = nil, nil
+    local onMe, target, cp = BR.sentSelf[id], BR.sentTarget[id], BR.sentCP[id]
+    BR.sentSelf[id], BR.sentTarget[id], BR.sentCP[id] = nil, nil, nil
     if not (C_Spell and C_Spell.GetSpellName) then return end
     local ok, name = pcall(C_Spell.GetSpellName, id)
     if not ok or type(name) ~= "string" or issecretvalue(name) then
@@ -982,9 +1013,10 @@ function BR.OnCast(id)
         BR.castAt[g] = now
         NoteLast(OpcowsBuffReminderDB.BuffGroups[g], castBuff[g], SpellTexture(id))
     end
-    -- without a duration seen before, the time left isn't known
+    -- a finisher lasts as long as its combo points make it, else as long as it did when last
+    -- read. Without either the time left isn't known.
     local seen = OpcowsBuffReminderDB.Seen[name]
-    local dur = seen and Num(seen.duration)
+    local dur = ComboDuration(id, cp) or seen and Num(seen.duration)
     if not dur then
         Debug(("cast %s, its duration hasn't been seen yet"):format(name))
         return
@@ -996,10 +1028,11 @@ function BR.OnCast(id)
         local prev = BR.groupState[g]
         if not (prev and prev.present and prev.expires and Outlasts(prev, e)) then
             -- hits count down from full charges
-            local charges = BR.HitUse(OpcowsBuffReminderDB.BuffGroups[g]) ~= "off" and Num(seen.charges) or nil
+            local charges = seen and BR.HitUse(OpcowsBuffReminderDB.BuffGroups[g]) ~= "off" and Num(seen.charges) or nil
             BR.groupState[g] = { present = true, expires = e.expires, duration = e.duration,
                 applications = charges }
-            Debug(("cast %s, %s is up for %ds%s"):format(name, g, dur,
+            Debug(("cast %s%s, %s is up for %ds%s"):format(name,
+                cp and cp > 0 and (" with " .. cp .. " combo points") or "", g, dur,
                 charges and (" with " .. charges .. " charges") or ""))
         end
     end
