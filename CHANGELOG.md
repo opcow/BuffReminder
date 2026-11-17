@@ -1,5 +1,11 @@
 # Changelog
 
+## 2.15
+
+### Fixed
+
+- Clicking a weapon enchant icon could cast a spell that wasn't an imbue, ex: Distract for a rogue's main hand. Any spellbook spell cast just before an enchant showed up was remembered as what put it on. Only weapon imbues (Flametongue Weapon and the like) are remembered now, and a wrongly remembered spell is forgotten on load.
+
 ## 2.14
 
 ### Fixed

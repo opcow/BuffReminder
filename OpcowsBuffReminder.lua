@@ -1191,6 +1191,14 @@ local function BookSpell(id)
     return false
 end
 
+-- a weapon imbue by its name, like Flametongue Weapon, so a spell like Distract cast just before a
+-- poison goes on isn't taken for what put it on. Works by id whether or not the spell is yours.
+local function ImbueSpell(id)
+    local ok, name = pcall(C_Spell.GetSpellName, id)
+    if not ok or type(name) ~= "string" or issecretvalue(name) then return false end
+    return name:find("Weapon") ~= nil
+end
+
 -- UNIT_SPELLCAST_SENT, while the item used is still in your bags. Out of combat only, when
 -- enchants are put on, since it searches the bags.
 local function EnchantCastSent(id)
@@ -1199,11 +1207,11 @@ local function EnchantCastSent(id)
     local item = BagItemFor(id)
     if item then
         enchantSent = { id = id, item = item }
-    elseif BookSpell(id) then
+    elseif ImbueSpell(id) and BookSpell(id) then
         enchantSent = { id = id, spell = id }
     end
     Debug(("enchant watch: cast %d sent, %s"):format(id, item and ("item " .. item)
-        or enchantSent and "spellbook spell" or "not an item in your bags or a spellbook spell"))
+        or enchantSent and "weapon imbue" or "not an item in your bags or a weapon imbue"))
 end
 
 -- UNIT_SPELLCAST_SUCCEEDED
@@ -3844,6 +3852,8 @@ function BR.SanityCheck()
         if type(eg.showcount) ~= "boolean" then eg.showcount = false end
         local last = eg.last
         if type(last) ~= "table" or not (Num(last.item) or Num(last.spell)) then eg.last = nil end
+        -- before 2.15 any spellbook spell cast just before an enchant showed up was remembered
+        if eg.last and not eg.last.item and not ImbueSpell(eg.last.spell) then eg.last = nil end
     end
     -- alerts, new in 2.6
     if type(OpcowsBuffReminderDB.Alerts) ~= "table" then OpcowsBuffReminderDB.Alerts = {} end
