@@ -920,6 +920,9 @@ local function CreateGroupsPage(page)
         return "Clicking the icon casts this spell on you.\n\n"
             .. "|cffffd100Auto:|r the buff of the buff group you last had or cast, if it's your own spell, "
             .. "ex: Water Shield rather than Lightning Shield. Otherwise the first of your own spells in it.\n"
+            .. "If the buff you last had came from an item, like food, a scroll or an elixir, the icon uses "
+            .. "that item again while you have any in your bags. It's remembered when you use one out of "
+            .. "combat.\n"
             .. "|cffffd100Off:|r the icon can't be clicked.\n\n"
             .. CLICK_LIMITS .. "|cff808080Click to change.|r"
     end)
@@ -1095,13 +1098,16 @@ local function CreateGroupsPage(page)
         party:SetChecked(group.party)
         local spells = BR.ClickSpells(group)
         local cv = ClickValue(group, spells)
-        click:SetEnabled(clickOn and #spells > 0)
+        -- the item that last gave you the buff, see BR.ClickItem
+        local useItem = BR.ClickItem(group, spells, true)
+        local hasItem = type(group.item) == "table" and group.buffs[group.item.buff]
+        click:SetEnabled(clickOn and (#spells > 0 or hasItem))
         if not clickOn then
             click:SetText("Off on Options tab")
-        elseif #spells == 0 then
+        elseif #spells == 0 and not hasItem then
             click:SetText("None of your spells")
         elseif cv == "auto" then
-            click:SetText("Auto: " .. BR.AutoClickSpell(group, spells))
+            click:SetText("Auto: " .. (useItem and useItem.label or BR.AutoClickSpell(group, spells)))
         else
             click:SetText(cv == "off" and "Off" or cv)
         end

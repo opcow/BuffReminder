@@ -1,5 +1,11 @@
 # Changelog
 
+## 2.16
+
+### Added
+
+- Buff groups remember the item that last gave you their buff, like food, a scroll or an elixir, and clicking the icon uses it again, the way weapon enchant icons do. It's remembered when you use one out of combat: food when Well Fed shows up while you eat, other items when their buff shows up right after. The icon shows how many are left in your bags. With your own spell in the group, the item is used only when its buff is the one you last had.
+
 ## 2.15
 
 ### Fixed

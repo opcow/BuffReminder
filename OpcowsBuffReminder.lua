@@ -345,6 +345,7 @@ function BR.ScanAuras()
     end
     BR.readFailed = nil
     RememberSeen(list)
+    local prev = BR.groupState or {}
     BR.groupState = {}
     for g, group in pairs(OpcowsBuffReminderDB.BuffGroups) do
         local best, bestBuff
@@ -357,6 +358,11 @@ function BR.ScanAuras()
             end
         end
         if best then
+            -- new, or put on again with more time: maybe from an item you just used
+            local p = prev[g]
+            if not (p and p.present) or (best.expires > 0 and type(p.expires) == "number" and best.expires > p.expires + 5) then
+                BR.NoteItemBuff(group, bestBuff, best)
+            end
             NoteLast(group, bestBuff, best.icon)
             BR.groupState[g] = { present = true, expires = best.expires, duration = best.duration,
                 applications = best.applications }
@@ -1221,7 +1227,99 @@ local function EnchantCastDone(id)
     enchantSent = nil
     c.t = GetTime()
     enchantCasts[c.item and "item" or "spell"] = c
+    if c.item then BR.NoteItemUse(c.item, c.id, c.t) end
     MatchEnchant()
+end
+
+-- Buffs from items, like food, a scroll or an elixir: the item that last gave you a group's buff is
+-- remembered in group.item = { id = item id, buff = the group's buff }, for clicking its icon. As with
+-- enchants nothing says where a buff came from, so an item you used is matched to a buff that shows up
+-- soon after: any time within FOOD_MATCH when the item casts the buff's own spell, or for food (its
+-- description says you become well fed) since Well Fed comes after eating a while, else within
+-- ITEM_MATCH.
+local ITEM_MATCH = 3
+local FOOD_MATCH = 45
+local ITEM_USES = 5
+local itemUses = {}         -- your last items used out of combat, { item, spell, t, food }
+
+local function FoodSpell(id)
+    if not (C_Spell and C_Spell.GetSpellDescription) then return false end
+    local ok, desc = pcall(C_Spell.GetSpellDescription, id)
+    if not ok or type(desc) ~= "string" or issecretvalue(desc) then return false end
+    return desc:lower():find("well fed") ~= nil
+end
+
+function BR.NoteItemUse(item, spell, t)
+    table.insert(itemUses, { item = item, spell = spell, t = t, food = FoodSpell(spell) })
+    if #itemUses > ITEM_USES then table.remove(itemUses, 1) end
+end
+
+-- the item that gave a buff, entry e from ReadPlayerBuffs, that just showed up, nil for none known
+local function ItemForBuff(buff, e)
+    local now = GetTime()
+    local function find(test)
+        for i = #itemUses, 1, -1 do
+            local u = itemUses[i]
+            local age = now - u.t
+            if age >= -ENCHANT_EARLY and test(u, age) then return u.item end
+        end
+    end
+    return find(function(u, age) return age <= FOOD_MATCH and u.spell == e.spellId end)
+        or find(function(u, age) return age <= FOOD_MATCH and u.food end)
+        -- your own spell's buff came from the spell
+        or (not OwnSpellId(buff) and find(function(u, age) return age <= ITEM_MATCH and not u.food end) or nil)
+end
+
+-- ScanAuras, for a group whose buff just showed up or was put on again
+function BR.NoteItemBuff(group, buff, e)
+    local item = ItemForBuff(buff, e)
+    if not item then return end
+    group.item = { id = item, buff = buff }
+    Debug(("%s: remembered item %d"):format(tostring(buff), item))
+end
+
+local function ItemName(id)
+    local get = C_Item and C_Item.GetItemNameByID or GetItemInfo
+    local ok, name = pcall(get, id)
+    if not ok or type(name) ~= "string" or issecretvalue(name) then return "item " .. id end
+    return name
+end
+
+local function ItemCount(id)
+    local count = (C_Item and C_Item.GetItemCount or GetItemCount)(id)
+    if issecretvalue(count) then return nil end
+    return count or 0
+end
+
+-- what clicking a group's icon uses instead of a spell: the item that last gave you its buff, when
+-- click is auto and that's the buff you last had or none of the group's spells are yours. Returns
+-- { item = "item:id", label = name, count }, nil for none or none left in your bags, unless anyCount.
+-- list is BR.ClickSpells(group).
+function BR.ClickItem(group, list, anyCount)
+    local it = group.item
+    if not OpcowsBuffReminderDB.Options.clicktocast or group.click ~= "auto" or type(it) ~= "table"
+        or not group.buffs[it.buff] then
+        return nil
+    end
+    list = list or BR.ClickSpells(group)
+    if #list > 0 and group.last ~= it.buff then return nil end
+    local count = ItemCount(it.id)
+    if not anyCount and (count or 0) == 0 then return nil end
+    return { item = "item:" .. it.id, label = ItemName(it.id), count = count }
+end
+
+-- the bag count mark on a group's icon that uses an item when clicked, like an enchant's (see
+-- BR.EnchantMark): red at none when nothing else is cast instead
+function BR.GroupMark(group)
+    if BR.status.combat then return nil end
+    local list = BR.ClickSpells(group)
+    local a = BR.ClickItem(group, list, true)
+    if not a or not a.count then return nil end
+    if a.count == 0 then
+        if #list > 0 then return nil end
+        return "0", 1, 0.1, 0.1
+    end
+    return tostring(a.count), 1, 1, 1
 end
 
 function BR.ScanEnchants()
@@ -2521,6 +2619,8 @@ local function ShowIcon(f, item, now, shown, liveShown)
     local mark, r, g, b
     if BR.locked and not item.placeholder and item.key:sub(1, 1) == "2" then
         mark, r, g, b = BR.EnchantMark(item.key:sub(2))
+    elseif BR.locked and not item.placeholder and item.key:sub(1, 1) == "1" and item.group then
+        mark, r, g, b = BR.GroupMark(item.group)
     end
     f.bag:SetText(mark or "")
     if mark then
@@ -2903,6 +3003,8 @@ local function AcquireClicker(i)
             if self.hand then
                 GameTooltip:AddLine(BR.ClickLabel(self.click) .. " to put it on your "
                     .. (self.hand == "main" and "main hand" or "off hand") .. ".", 1, 1, 1)
+            elseif self.useItem then
+                GameTooltip:AddLine(BR.ClickLabel(self.click) .. " to use it.", 1, 1, 1)
             else
                 GameTooltip:AddLine(BR.ClickLabel(self.click) .. " to cast it on " .. (self.who or "yourself") .. ".",
                     1, 1, 1)
@@ -3005,6 +3107,7 @@ local function UpdateClickers(list)
             b:SetAttribute("target-slot", c.slot)
             b:SetAttribute("unit", c.unit or "player")
             b.spell, b.who, b.hand, b.icon = c.label or c.spell, c.who, c.hand, c.f
+            b.useItem = c.item ~= nil
             b:Show()
         end
     end
@@ -3190,8 +3293,14 @@ function BR.Refresh()
             if BR.locked and not item.placeholder and not item.live and not item.alert and not item.fading
                 and f.baseAlpha > 0 then
                 if item.key:sub(1, 1) == "1" then
-                    local spell = BR.ClickSpell(item.group)
-                    if spell then table.insert(clicks, { f = f, spell = spell }) end
+                    -- the item that last gave you the buff, else a spell
+                    local a = BR.ClickItem(item.group)
+                    local spell = not a and BR.ClickSpell(item.group)
+                    if a then
+                        table.insert(clicks, { f = f, item = a.item, label = a.label })
+                    elseif spell then
+                        table.insert(clicks, { f = f, spell = spell })
+                    end
                 else
                     -- what you last put on the hand, used on it
                     local hand = item.key:sub(2)
@@ -3838,6 +3947,10 @@ function BR.SanityCheck()
             if before26 and group.hituse == "off" then group.hituse = "auto" end
             if group.icon == nil then group.icon = QUESTION_MARK end
             if group.last ~= nil and not group.buffs[group.last] then group.last = nil end
+            local it = group.item
+            if it ~= nil and (type(it) ~= "table" or not Num(it.id) or it.buff == nil or not group.buffs[it.buff]) then
+                group.item = nil
+            end
         end
     end
     for k in pairs(OpcowsBuffReminderDB.Enchants) do
