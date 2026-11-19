@@ -1,5 +1,11 @@
 # Changelog
 
+## 2.17
+
+### Added
+
+- While you eat buff food, the food icon shows a swipe and a countdown until you'll be Well Fed. The time comes from the food's tooltip ("at least 10 seconds eating"). If the tooltip doesn't say, as with Forever's plain "Food" aura, it's how long Well Fed took to show up during your last meal, or 10 seconds before the first one. It shows on groups with Well Fed or a remembered food.
+
 ## 2.16
 
 ### Added

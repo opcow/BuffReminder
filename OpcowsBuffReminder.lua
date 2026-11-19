@@ -345,6 +345,7 @@ function BR.ScanAuras()
     end
     BR.readFailed = nil
     RememberSeen(list)
+    BR.NoteEating(list)
     local prev = BR.groupState or {}
     BR.groupState = {}
     for g, group in pairs(OpcowsBuffReminderDB.BuffGroups) do
@@ -362,6 +363,7 @@ function BR.ScanAuras()
             local p = prev[g]
             if not (p and p.present) or (best.expires > 0 and type(p.expires) == "number" and best.expires > p.expires + 5) then
                 BR.NoteItemBuff(group, bestBuff, best)
+                BR.NoteWellFed(group, best)
             end
             NoteLast(group, bestBuff, best.icon)
             BR.groupState[g] = { present = true, expires = best.expires, duration = best.duration,
@@ -1242,11 +1244,97 @@ local FOOD_MATCH = 45
 local ITEM_USES = 5
 local itemUses = {}         -- your last items used out of combat, { item, spell, t, food }
 
-local function FoodSpell(id)
-    if not (C_Spell and C_Spell.GetSpellDescription) then return false end
+-- in a do block: the main chunk is at Lua's 200 locals limit
+local FoodSpell
+do
+-- a spell's description, cached once it has loaded
+local descs = {}
+local function Description(id)
+    if descs[id] then return descs[id] end
+    if not (C_Spell and C_Spell.GetSpellDescription) then return nil end
     local ok, desc = pcall(C_Spell.GetSpellDescription, id)
-    if not ok or type(desc) ~= "string" or issecretvalue(desc) then return false end
-    return desc:lower():find("well fed") ~= nil
+    if not ok or type(desc) ~= "string" or issecretvalue(desc) or desc == "" then return nil end
+    descs[id] = desc
+    return desc
+end
+
+function FoodSpell(id)
+    local desc = Description(id)
+    return desc ~= nil and desc:lower():find("well fed") ~= nil
+end
+
+-- While you eat buff food, the icons of the groups with Well Fed or a remembered food show a swipe
+-- until you're well fed: BR.eating[g] = { expires, duration }. The time comes from the food's
+-- description ("at least 10 seconds eating"), else how long Well Fed took last time
+-- (OpcowsBuffReminderDB.WellFedAfter), else 10 seconds.
+BR.eating = {}
+local EAT_DEFAULT = 10
+-- a learned time shorter than this is a mistake
+local EAT_MIN = 3
+local function EatSeconds(id)
+    local desc = Description(id)
+    return desc and tonumber(desc:lower():match("at least (%d+) sec"))
+end
+
+local function FoodGroup(group)
+    for b in pairs(group.buffs) do
+        if tostring(b):lower() == "well fed" then return true end
+    end
+    local spell = type(group.item) == "table" and ItemSpellId(group.item.id)
+    return spell and FoodSpell(spell) or false
+end
+
+-- ScanAuras, with the list of your buffs
+function BR.NoteEating(list)
+    BR.eating = {}
+    -- Forever's eating aura is the plain "Food" spell for any food, whose description doesn't say
+    -- well fed, as Forever makes all food give it: so the aura's name, or a remembered food's spell
+    local items = {}
+    for _, group in pairs(OpcowsBuffReminderDB.BuffGroups) do
+        local spell = type(group.item) == "table" and ItemSpellId(group.item.id)
+        if spell then items[spell] = true end
+    end
+    local eat
+    for _, e in ipairs(list) do
+        local name = type(e.name) == "string" and e.name:lower()
+        if Num(e.spellId) and Num(e.duration) and e.duration > 0 and (name == "food" or name == "food & drink"
+            or items[e.spellId] or FoodSpell(e.spellId)) then
+            eat = e
+            break
+        end
+    end
+    if not eat then return end
+    local start = eat.expires - eat.duration
+    -- for learning how long Well Fed takes, see BR.NoteWellFed
+    if not (BR.lastEat and BR.lastEat.start == start) then
+        Debug(("eating %s (%d), %.1f s meal, started %.1f s ago"):format(tostring(eat.name), eat.spellId,
+            eat.duration, GetTime() - start))
+    end
+    BR.lastEat = { start = start, ends = eat.expires }
+    local learned = OpcowsBuffReminderDB.WellFedAfter
+    local len = EatSeconds(eat.spellId) or (type(learned) == "number" and learned >= EAT_MIN and learned) or EAT_DEFAULT
+    len = math.min(len, eat.duration)
+    for g, group in pairs(OpcowsBuffReminderDB.BuffGroups) do
+        if FoodGroup(group) then BR.eating[g] = { expires = start + len, duration = len } end
+    end
+end
+
+-- ScanAuras, when a group's buff is new or put on again: if it's Well Fed during a meal, how long
+-- the meal took to give it, for the next meal's swipe
+function BR.NoteWellFed(group, e)
+    local meal = BR.lastEat
+    if not (meal and FoodGroup(group)) then return end
+    -- timed from when it's seen: Forever's Well Fed has an odd duration (1503.001), so its
+    -- expires - duration may not be when it came on
+    local at = GetTime() - meal.start
+    BR.lastEat = nil
+    if at >= EAT_MIN and at <= meal.ends - meal.start + 1 then
+        OpcowsBuffReminderDB.WellFedAfter = math.floor(at * 10 + 0.5) / 10
+        Debug(("well fed %.1f s into the meal"):format(at))
+    else
+        Debug(("well fed %.1f s into the meal, not kept"):format(at))
+    end
+end
 end
 
 function BR.NoteItemUse(item, spell, t)
@@ -3203,7 +3291,11 @@ function BR.Refresh()
             elseif st then
                 -- no state means auras haven't been readable yet, don't guess
                 if not st.present or (st.expires > 0 and st.expires <= now) then
-                    table.insert(list, { key = "1" .. g, icon = group.icon, group = group, missing = true })
+                    -- eating, the time until you're well fed
+                    local eat = BR.eating[g]
+                    if eat and eat.expires <= now then eat = nil end
+                    table.insert(list, { key = "1" .. g, icon = group.icon, group = group, missing = true,
+                        expires = eat and eat.expires, duration = eat and eat.duration })
                 else
                     local expiring = st.expires > 0 and st.expires - now <= group.warntime
                     local stacks = st.applications
