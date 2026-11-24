@@ -1265,12 +1265,11 @@ end
 
 -- While you eat buff food, the icons of the groups with Well Fed or a remembered food show a swipe
 -- until you're well fed: BR.eating[g] = { expires, duration }. The time comes from the food's
--- description ("at least 10 seconds eating"), else how long Well Fed took last time
--- (OpcowsBuffReminderDB.WellFedAfter), else 10 seconds.
+-- description ("at least 10 seconds eating"), else 10 seconds, which is what Forever's plain "Food"
+-- aura takes. (2.17 learned it from the last meal, but a Well Fed seen late made the next swipe run
+-- the whole meal.)
 BR.eating = {}
 local EAT_DEFAULT = 10
--- a learned time shorter than this is a mistake
-local EAT_MIN = 3
 local function EatSeconds(id)
     local desc = Description(id)
     return desc and tonumber(desc:lower():match("at least (%d+) sec"))
@@ -1305,35 +1304,25 @@ function BR.NoteEating(list)
     end
     if not eat then return end
     local start = eat.expires - eat.duration
-    -- for learning how long Well Fed takes, see BR.NoteWellFed
+    -- for timing Well Fed in /obr debug, see BR.NoteWellFed
     if not (BR.lastEat and BR.lastEat.start == start) then
         Debug(("eating %s (%d), %.1f s meal, started %.1f s ago"):format(tostring(eat.name), eat.spellId,
             eat.duration, GetTime() - start))
     end
     BR.lastEat = { start = start, ends = eat.expires }
-    local learned = OpcowsBuffReminderDB.WellFedAfter
-    local len = EatSeconds(eat.spellId) or (type(learned) == "number" and learned >= EAT_MIN and learned) or EAT_DEFAULT
-    len = math.min(len, eat.duration)
+    local len = math.min(EatSeconds(eat.spellId) or EAT_DEFAULT, eat.duration)
     for g, group in pairs(OpcowsBuffReminderDB.BuffGroups) do
         if FoodGroup(group) then BR.eating[g] = { expires = start + len, duration = len } end
     end
 end
 
--- ScanAuras, when a group's buff is new or put on again: if it's Well Fed during a meal, how long
--- the meal took to give it, for the next meal's swipe
+-- ScanAuras, when a group's buff is new or put on again: if it's Well Fed during a meal, /obr debug
+-- says how long the meal took to give it
 function BR.NoteWellFed(group, e)
     local meal = BR.lastEat
     if not (meal and FoodGroup(group)) then return end
-    -- timed from when it's seen: Forever's Well Fed has an odd duration (1503.001), so its
-    -- expires - duration may not be when it came on
-    local at = GetTime() - meal.start
     BR.lastEat = nil
-    if at >= EAT_MIN and at <= meal.ends - meal.start + 1 then
-        OpcowsBuffReminderDB.WellFedAfter = math.floor(at * 10 + 0.5) / 10
-        Debug(("well fed %.1f s into the meal"):format(at))
-    else
-        Debug(("well fed %.1f s into the meal, not kept"):format(at))
-    end
+    Debug(("well fed %.1f s into the meal"):format(GetTime() - meal.start))
 end
 end
 
@@ -4106,6 +4095,8 @@ function BR.Init()
     if type(OpcowsBuffReminderDB) ~= "table" then OpcowsBuffReminderDB = {} end
     if type(OpcowsBuffReminderDB.BuffGroups) ~= "table" then OpcowsBuffReminderDB.BuffGroups = {} end
     if type(OpcowsBuffReminderDB.Options) ~= "table" then OpcowsBuffReminderDB.Options = DeepCopy(BR.DefaultOptions) end
+    -- 2.17's learned eating time, no longer used
+    OpcowsBuffReminderDB.WellFedAfter = nil
     BR.SanityCheck()
     BR.RememberCharacter()
     BR.CompileScripts()

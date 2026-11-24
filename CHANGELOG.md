@@ -1,5 +1,11 @@
 # Changelog
 
+## 2.18
+
+### Fixed
+
+- The eating swipe sometimes ran for the whole meal instead of until Well Fed. It no longer learns the time from your last meal, which went wrong when Well Fed was noticed late; it's always 10 seconds, unless the food's tooltip says otherwise.
+
 ## 2.17
 
 ### Added
