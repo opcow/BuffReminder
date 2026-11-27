@@ -291,6 +291,8 @@ local function ReadPlayerBuffs()
             duration = aura.duration or 0,
             expires = aura.expirationTime or 0,
             applications = not issecretvalue(aura.applications) and aura.applications or 0,
+            -- who cast it, when readable (an item's buff is your own)
+            source = type(aura.sourceUnit) == "string" and not issecretvalue(aura.sourceUnit) and aura.sourceUnit or nil,
         }
         table.insert(list, entry)
         keep(aura.name and aura.name:lower(), entry)
@@ -1332,7 +1334,13 @@ function BR.NoteItemUse(item, spell, t)
 end
 
 -- the item that gave a buff, entry e from ReadPlayerBuffs, that just showed up, nil for none known
+function BR.WellFed(name)
+    return type(name) == "string" and name:lower():find("well fed") ~= nil
+end
+
 local function ItemForBuff(buff, e)
+    -- someone else's buff (ex: a paladin's blessing) didn't come from your item
+    if e.source and not UnitIsUnit(e.source, "player") then return nil end
     local now = GetTime()
     local function find(test)
         for i = #itemUses, 1, -1 do
@@ -1342,13 +1350,24 @@ local function ItemForBuff(buff, e)
         end
     end
     return find(function(u, age) return age <= FOOD_MATCH and u.spell == e.spellId end)
-        or find(function(u, age) return age <= FOOD_MATCH and u.food end)
-        -- your own spell's buff came from the spell
-        or (not OwnSpellId(buff) and find(function(u, age) return age <= ITEM_MATCH and not u.food end) or nil)
+        -- food gives Well Fed, nothing else
+        or (BR.WellFed(e.name) and find(function(u, age) return age <= FOOD_MATCH and u.food end) or nil)
+        -- only timing says this one came from the item, so it must be known to be cast by you (a
+        -- stranger's buff has no caster), and not by your own spell
+        or (e.source and not OwnSpellId(buff)
+            and find(function(u, age) return age <= ITEM_MATCH and not u.food end) or nil)
 end
 
 -- ScanAuras, for a group whose buff just showed up or was put on again
 function BR.NoteItemBuff(group, buff, e)
+    Debug(("%s on you, cast by %s"):format(tostring(buff), tostring(e.source or "unknown")))
+    -- another player gave it: a remembered item for it was a wrong match
+    local it = group.item
+    if e.source and not UnitIsUnit(e.source, "player") and type(it) == "table" and it.buff == buff then
+        group.item = nil
+        Debug(("%s: forgot item %s, %s cast it"):format(tostring(buff), tostring(it.id), e.source))
+        return
+    end
     local item = ItemForBuff(buff, e)
     if not item then return end
     group.item = { id = item, buff = buff }
@@ -1376,6 +1395,17 @@ function BR.ClickItem(group, list, anyCount)
     local it = group.item
     if not OpcowsBuffReminderDB.Options.clicktocast or group.click ~= "auto" or type(it) ~= "table"
         or not group.buffs[it.buff] then
+        return nil
+    end
+    -- before 2.19 food was remembered for any buff that came within 45 s of eating
+    local spell = ItemSpellId(it.id)
+    local buffName = it.buff
+    if type(buffName) == "number" then
+        local ok, n = pcall(C_Spell.GetSpellName, buffName)
+        buffName = ok and type(n) == "string" and not issecretvalue(n) and n or nil
+    end
+    if spell and buffName and FoodSpell(spell) and not BR.WellFed(buffName) then
+        group.item = nil
         return nil
     end
     list = list or BR.ClickSpells(group)

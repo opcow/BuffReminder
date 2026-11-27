@@ -1,5 +1,12 @@
 # Changelog
 
+## 2.19
+
+### Fixed
+
+- A buff that came soon after you ate (like a paladin's blessing) could remember the food, so clicking its icon ate instead of casting. Food is now only remembered for Well Fed, and a wrongly remembered food is dropped.
+- Other buffs could be taken for an item used just before them, like a stranger's blessing landing right after you drink an elixir. An item is now only matched by timing to a buff known to be cast by you, and a remembered item is forgotten when another player casts that buff on you.
+
 ## 2.18
 
 ### Fixed
